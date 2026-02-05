@@ -15,16 +15,25 @@ async function seed() {
       port: process.env.DB_PORT || 3306
     });
 
-    // Hash password
+    // Hash passwords
     const adminPassword = await bcrypt.hash('Admin@123', 10);
+    const staffPassword = await bcrypt.hash('Staff@123', 10);
 
-    // Insert ONLY admin user
+    // Insert admin user
     await connection.query(`
       INSERT INTO users (email, password, role, full_name, phone) 
       VALUES (?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE email=email
     `, ['admin@electricity.gov.in', adminPassword, 'admin', 'System Administrator', '9876543210']);
     console.log('✓ Admin user created (admin@electricity.gov.in / Admin@123)');
+
+    // Insert staff user
+    await connection.query(`
+      INSERT INTO users (email, password, role, full_name, phone) 
+      VALUES (?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE email=email
+    `, ['staff@electricity.gov.in', staffPassword, 'staff', 'Staff Member', '9876543211']);
+    console.log('✓ Staff user created (staff@electricity.gov.in / Staff@123)');
 
     // Insert system settings
     const settings = [
@@ -60,6 +69,10 @@ async function seed() {
     console.log('\n🔐 ADMIN LOGIN:');
     console.log('  Email: admin@electricity.gov.in');
     console.log('  Password: Admin@123');
+    console.log('  Admin Panel URL: http://localhost:5174/login');
+    console.log('\n👤 STAFF LOGIN:');
+    console.log('  Email: staff@electricity.gov.in');
+    console.log('  Password: Staff@123');
     console.log('  Admin Panel URL: http://localhost:5174/login\n');
 
   } catch (error) {

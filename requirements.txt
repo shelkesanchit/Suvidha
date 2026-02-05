@@ -1,0 +1,164 @@
+# ============================================================
+# SUVIDHA WATER DEPARTMENT - PROJECT REQUIREMENTS
+# ============================================================
+# This file lists all dependencies required to run the project.
+# Since this is a Node.js project, use "npm install" in each folder.
+# ============================================================
+
+# ====================
+# SYSTEM REQUIREMENTS
+# ====================
+Node.js >= 18.0.0
+npm >= 9.0.0
+MySQL >= 8.0
+
+# ====================
+# BACKEND DEPENDENCIES (Suvidha/backend)
+# Install: cd backend && npm install
+# ====================
+
+# Core Framework
+express==4.18.2          # Web framework
+nodemon==3.0.2           # Development auto-reload (devDep)
+
+# Database
+mysql2==3.6.5            # MySQL driver with promises
+
+# Security
+bcryptjs==2.4.3          # Password hashing
+jsonwebtoken==9.0.2      # JWT authentication
+helmet==7.1.0            # Security headers
+cors==2.8.5              # Cross-Origin Resource Sharing
+express-rate-limit==7.1.5  # Rate limiting
+
+# Utilities
+dotenv==16.3.1           # Environment variables
+uuid==9.0.1              # UUID generation
+multer==1.4.5-lts.1      # File uploads
+morgan==1.10.0           # HTTP logging
+compression==1.7.4       # Response compression
+
+# Validation
+express-validator==7.0.1 # Request validation
+
+# Email (Optional)
+nodemailer==7.0.12       # Email sending
+
+# Payment (Optional)
+razorpay==2.9.2          # Payment gateway
+
+# ====================
+# FRONTEND DEPENDENCIES (Suvidha/frontend)
+# Install: cd frontend && npm install
+# ====================
+
+# Core React
+react==18.2.0            # React library
+react-dom==18.2.0        # React DOM
+react-router-dom==6.21.0 # Client-side routing
+
+# UI Framework
+@mui/material==5.15.0    # Material UI components
+@mui/icons-material==5.15.0  # Material UI icons
+@mui/x-data-grid==6.18.7     # Data grid component
+@emotion/react==11.11.1      # CSS-in-JS (MUI peer dep)
+@emotion/styled==11.11.0     # Styled components (MUI peer dep)
+
+# Data & Forms
+axios==1.6.2             # HTTP client
+react-hook-form==7.49.2  # Form handling
+date-fns==3.0.6          # Date utilities
+
+# Visualization
+recharts==2.10.3         # Charts library
+
+# UI Utilities
+react-hot-toast==2.4.1   # Toast notifications
+
+# Development
+vite==7.3.1              # Build tool (devDep)
+@vitejs/plugin-react==4.2.1  # Vite React plugin (devDep)
+eslint==8.55.0           # Linting (devDep)
+
+# ====================
+# WATER ADMIN DEPENDENCIES (Suvidha/water-admin)
+# Install: cd water-admin && npm install
+# ====================
+
+# Same as frontend dependencies (see above)
+# Additional packages if any are listed below:
+# (none - same stack as frontend)
+
+# ====================
+# QUICK INSTALL COMMANDS
+# ====================
+# 
+# Terminal 1 - Backend:
+#   cd Suvidha/backend
+#   npm install
+#
+# Terminal 2 - Frontend:
+#   cd Suvidha/frontend
+#   npm install
+#
+# Terminal 3 - Water Admin:
+#   cd Suvidha/water-admin
+#   npm install
+#
+# ====================
+
+# ====================
+# DATABASE SETUP
+# ====================
+#
+# 1. Install MySQL 8.0
+# 2. Create database:
+#    mysql -u root -p
+#    CREATE DATABASE suvidha;
+#    EXIT;
+#
+# 3. Run migration:
+#    cd Suvidha/backend
+#    node scripts/water-migrate.js
+#
+# 4. Seed data:
+#    node scripts/water-seed.js
+#
+# ====================
+
+# ====================
+# ENVIRONMENT VARIABLES
+# ====================
+#
+# Create .env file in Suvidha/backend/:
+#
+# PORT=5000
+# NODE_ENV=development
+# DB_HOST=localhost
+# DB_USER=root
+# DB_PASSWORD=your_mysql_password
+# DB_NAME=suvidha
+# DB_PORT=3306
+# JWT_SECRET=your_secret_key
+# JWT_EXPIRE=24h
+#
+# ====================
+
+# ====================
+# RUN COMMANDS
+# ====================
+#
+# Backend:   cd Suvidha/backend && npm run dev
+# Frontend:  cd Suvidha/frontend && npm run dev
+# Admin:     cd Suvidha/water-admin && npm run dev
+#
+# URLs:
+#   Backend API:  http://localhost:5000
+#   Frontend:     http://localhost:5173
+#   Admin Panel:  http://localhost:5176
+#
+# Admin Login:
+#   Username: water_admin
+#   Password: admin123
+#
+# ====================

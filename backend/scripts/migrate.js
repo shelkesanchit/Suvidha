@@ -232,7 +232,7 @@ const migrations = [
     -- Applicant Details
     full_name VARCHAR(255) NOT NULL,
     father_husband_name VARCHAR(255) NOT NULL,
-    date_of_birth DATE NOT NULL,
+    date_of_birth DATE,
     gender ENUM('male', 'female', 'other') NOT NULL,
     identity_type ENUM('aadhar', 'pan', 'passport', 'voter_id', 'driving_license') NOT NULL,
     identity_number VARCHAR(50) NOT NULL,
