@@ -162,7 +162,7 @@ router.post('/submit', [
       application_id: applicationId
     });
   } catch (error) {
-    await connection.rollback();
+    await connection.rollback();-
     console.error('Submit application error:', error);
     res.status(500).json({ error: 'Failed to submit application' });
   } finally {
