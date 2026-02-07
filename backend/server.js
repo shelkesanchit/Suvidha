@@ -4,14 +4,15 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5174'],
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177', 'http://localhost:5178', 'http://localhost:5179', 'http://localhost:5180'],
   credentials: true
 }));
 
@@ -58,6 +59,12 @@ app.use('/api/complaints', require('./routes/complaints'));
 app.use('/api/consumer', require('./routes/consumer'));
 app.use('/api/admin', require('./admin/routes/index')); // Updated to use new admin structure
 app.use('/api/settings', require('./routes/settings'));
+
+// Water Department Routes (Separate)
+app.use('/api/water', require('./routes/water/index'));
+
+// Gas Distribution Routes (Separate)
+app.use('/api/gas', require('./routes/gas/index'));
 
 // 404 handler
 app.use((req, res) => {

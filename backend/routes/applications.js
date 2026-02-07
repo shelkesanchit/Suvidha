@@ -100,6 +100,18 @@ router.post('/submit', [
 
     // For new connection applications, insert into detailed table
     if (application_type === 'new_connection') {
+      // Validate required fields
+      const requiredFields = ['full_name', 'father_husband_name', 'date_of_birth', 'gender', 'identity_type', 'identity_number', 'email', 'mobile', 'premises_address', 'plot_number', 'district', 'city', 'state', 'pincode', 'ownership_type', 'category', 'load_type', 'required_load', 'purpose', 'supply_voltage', 'phases', 'number_of_floors', 'built_up_area'];
+      const missingFields = requiredFields.filter(field => !application_data[field] || application_data[field] === '');
+      
+      if (missingFields.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({ 
+          success: false,
+          message: `Missing required fields: ${missingFields.join(', ')}` 
+        });
+      }
+      
       await connection.query(
         `INSERT INTO new_connection_applications 
         (application_id, full_name, father_husband_name, date_of_birth, gender, 
@@ -112,7 +124,7 @@ router.post('/submit', [
           applicationId,
           application_data.full_name,
           application_data.father_husband_name,
-          application_data.date_of_birth,
+          application_data.date_of_birth || null,
           application_data.gender,
           application_data.identity_type,
           application_data.identity_number,
@@ -162,9 +174,10 @@ router.post('/submit', [
       application_id: applicationId
     });
   } catch (error) {
-    await connection.rollback();-
-    console.error('Submit application error:', error);
-    res.status(500).json({ error: 'Failed to submit application' });
+    await connection.rollback();
+    console.error('Submit application error:', error.message);
+    console.error('Full error:', error);
+    res.status(500).json({ error: 'Failed to submit application', details: error.message });
   } finally {
     connection.release();
   }

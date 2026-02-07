@@ -1,0 +1,691 @@
+import React, { useState } from 'react';
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  Grid,
+  MenuItem,
+  Stepper,
+  Step,
+  StepLabel,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  Divider,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
+  FormLabel,
+  Chip,
+  CircularProgress,
+} from '@mui/material';
+import { CheckCircle as SuccessIcon, CloudUpload } from '@mui/icons-material';
+import toast from 'react-hot-toast';
+import api from '../../utils/api';
+
+const steps = ['Gas Type', 'Applicant Details', 'Property Details', 'Documents', 'Review & Submit'];
+
+const gasTypes = [
+  { value: 'png', label: 'PNG (Piped Natural Gas) / पाइप्ड नेचुरल गैस', description: 'Direct pipeline supply to your premises' },
+  { value: 'lpg', label: 'LPG (Cylinder) / एलपीजी सिलेंडर', description: 'Traditional cylinder-based supply' },
+];
+
+const applicantCategories = [
+  { value: 'individual', label: 'Individual / व्यक्तिगत' },
+  { value: 'housing_society', label: 'Co-operative Housing Society' },
+  { value: 'firm', label: 'Firm / Partnership' },
+  { value: 'private_company', label: 'Private Ltd Company' },
+  { value: 'trust', label: 'Trust / न्यास' },
+  { value: 'government', label: 'Government Department' },
+];
+
+const propertyTypes = [
+  { value: 'domestic', label: 'Domestic / घरेलू' },
+  { value: 'commercial', label: 'Commercial / व्यावसायिक' },
+  { value: 'industrial', label: 'Industrial / औद्योगिक' },
+  { value: 'institutional', label: 'Institutional / संस्थागत' },
+];
+
+const connectionPurposes = [
+  { value: 'cooking', label: 'Cooking / खाना पकाना' },
+  { value: 'heating', label: 'Water Heating' },
+  { value: 'commercial', label: 'Commercial Kitchen' },
+  { value: 'industrial', label: 'Industrial Process' },
+];
+
+const ownershipTypes = [
+  { value: 'owner', label: 'Owner / मालिक' },
+  { value: 'tenant', label: 'Tenant / किरायेदार' },
+  { value: 'leaseholder', label: 'Leaseholder / पट्टाधारी' },
+];
+
+const cylinderTypes = [
+  { value: 'domestic_14.2kg', label: 'Domestic 14.2 kg' },
+  { value: 'domestic_5kg', label: 'Domestic 5 kg' },
+  { value: 'commercial_19kg', label: 'Commercial 19 kg' },
+  { value: 'commercial_47.5kg', label: 'Commercial 47.5 kg' },
+];
+
+const wards = Array.from({ length: 10 }, (_, i) => ({
+  value: String(i + 1),
+  label: `Ward ${i + 1}`,
+}));
+
+const GasNewConnectionForm = ({ onClose }) => {
+  const [activeStep, setActiveStep] = useState(0);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [applicationNumber, setApplicationNumber] = useState('');
+  const [formData, setFormData] = useState({
+    // Gas Type
+    gas_type: '',
+    
+    // Applicant Details
+    applicant_category: 'individual',
+    full_name: '',
+    father_spouse_name: '',
+    aadhaar_number: '',
+    mobile: '',
+    email: '',
+    
+    // Property Details
+    property_id: '',
+    house_flat_no: '',
+    building_name: '',
+    ward: '',
+    landmark: '',
+    property_type: 'domestic',
+    ownership_status: 'owner',
+    
+    // Connection Details
+    connection_purpose: 'cooking',
+    cylinder_type: 'domestic_14.2kg',
+    pipeline_distance: '',
+    
+    // Documents
+    aadhaar_doc: null,
+    property_doc: null,
+    
+    // Declaration
+    agreed_to_terms: false,
+  });
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData({
+      ...formData,
+      [name]: type === 'checkbox' ? checked : value,
+    });
+  };
+
+  const handleFileChange = (e, fieldName) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size should not exceed 5MB');
+        return;
+      }
+      setFormData({ ...formData, [fieldName]: file });
+      toast.success(`${file.name} uploaded`);
+    }
+  };
+
+  const validateStep = () => {
+    switch (activeStep) {
+      case 0: // Gas Type
+        if (!formData.gas_type) {
+          toast.error('Please select gas type');
+          return false;
+        }
+        return true;
+      case 1: // Applicant Details
+        if (!formData.full_name || !formData.mobile || !formData.aadhaar_number) {
+          toast.error('Please fill all mandatory fields');
+          return false;
+        }
+        if (formData.mobile.length !== 10) {
+          toast.error('Enter valid 10-digit mobile number');
+          return false;
+        }
+        if (formData.aadhaar_number.length !== 12) {
+          toast.error('Enter valid 12-digit Aadhaar number');
+          return false;
+        }
+        return true;
+      case 2: // Property Details
+        if (!formData.house_flat_no || !formData.ward || !formData.property_type) {
+          toast.error('Please fill all mandatory fields');
+          return false;
+        }
+        return true;
+      case 3: // Documents
+        if (!formData.aadhaar_doc || !formData.property_doc) {
+          toast.error('Please upload mandatory documents');
+          return false;
+        }
+        return true;
+      case 4: // Review
+        if (!formData.agreed_to_terms) {
+          toast.error('Please accept the declaration');
+          return false;
+        }
+        return true;
+      default:
+        return true;
+    }
+  };
+
+  const handleNext = () => {
+    if (validateStep()) {
+      if (activeStep === steps.length - 1) {
+        handleSubmit();
+      } else {
+        setActiveStep((prev) => prev + 1);
+      }
+    }
+  };
+
+  const handleBack = () => {
+    setActiveStep((prev) => prev - 1);
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setSubmitting(true);
+      
+      const application_data = {
+        gas_type: formData.gas_type,
+        applicant_category: formData.applicant_category,
+        full_name: formData.full_name,
+        father_spouse_name: formData.father_spouse_name,
+        aadhaar_number: formData.aadhaar_number,
+        mobile: formData.mobile,
+        email: formData.email,
+        property_id: formData.property_id,
+        house_flat_no: formData.house_flat_no,
+        building_name: formData.building_name,
+        ward: formData.ward,
+        landmark: formData.landmark,
+        property_type: formData.property_type,
+        ownership_status: formData.ownership_status,
+        connection_purpose: formData.connection_purpose,
+        cylinder_type: formData.gas_type === 'lpg' ? formData.cylinder_type : null,
+        pipeline_distance: formData.gas_type === 'png' ? formData.pipeline_distance : null,
+      };
+      
+      const response = await api.post('/gas/applications/submit', {
+        application_type: 'new_connection',
+        application_data
+      });
+      
+      if (response.data && response.data.data && response.data.data.application_number) {
+        setApplicationNumber(response.data.data.application_number);
+        setSubmitted(true);
+        toast.success('Application submitted successfully!');
+      } else {
+        throw new Error('Failed to get application number');
+      }
+    } catch (error) {
+      console.error('Submit error:', error);
+      toast.error(error.response?.data?.message || 'Failed to submit application. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <Box>
+        <DialogTitle sx={{ bgcolor: '#f57c00', color: 'white' }}>
+          <Typography variant="h5" fontWeight={600}>
+            🔥 New Gas Connection
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ textAlign: 'center', py: 4 }}>
+          <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
+          <Typography variant="h4" color="success.main" gutterBottom>
+            Application Submitted!
+          </Typography>
+          <Typography variant="h6" gutterBottom>
+            Application Number:
+          </Typography>
+          <Chip
+            label={applicationNumber}
+            color="warning"
+            sx={{ fontSize: '1.5rem', py: 3, px: 4, mb: 3 }}
+          />
+          <Alert severity="info" sx={{ mt: 2, textAlign: 'left' }}>
+            <Typography variant="body2">
+              • Save your application number for tracking<br />
+              • Document verification: 3-5 working days<br />
+              • {formData.gas_type === 'png' ? 'Pipeline survey will be scheduled after verification' : 'Cylinder delivery within 7 working days'}<br />
+              • SMS updates on registered mobile: {formData.mobile}
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={onClose} fullWidth color="warning">
+            Close
+          </Button>
+        </DialogActions>
+      </Box>
+    );
+  }
+
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case 0:
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Select Gas Connection Type
+            </Typography>
+            <FormControl component="fieldset">
+              <RadioGroup
+                name="gas_type"
+                value={formData.gas_type}
+                onChange={handleChange}
+              >
+                {gasTypes.map((type) => (
+                  <Box
+                    key={type.value}
+                    sx={{
+                      border: '2px solid',
+                      borderColor: formData.gas_type === type.value ? 'warning.main' : 'grey.300',
+                      borderRadius: 2,
+                      p: 2,
+                      mb: 2,
+                      cursor: 'pointer',
+                      '&:hover': { borderColor: 'warning.light' },
+                    }}
+                    onClick={() => setFormData({ ...formData, gas_type: type.value })}
+                  >
+                    <FormControlLabel
+                      value={type.value}
+                      control={<Radio color="warning" />}
+                      label={
+                        <Box>
+                          <Typography fontWeight="bold">{type.label}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {type.description}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                  </Box>
+                ))}
+              </RadioGroup>
+            </FormControl>
+          </Box>
+        );
+
+      case 1:
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                select
+                fullWidth
+                label="Applicant Category"
+                name="applicant_category"
+                value={formData.applicant_category}
+                onChange={handleChange}
+              >
+                {applicantCategories.map((cat) => (
+                  <MenuItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Full Name / पूरा नाम"
+                name="full_name"
+                value={formData.full_name}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Father/Spouse Name"
+                name="father_spouse_name"
+                value={formData.father_spouse_name}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Aadhaar Number / आधार नंबर"
+                name="aadhaar_number"
+                value={formData.aadhaar_number}
+                onChange={handleChange}
+                inputProps={{ maxLength: 12 }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Mobile Number"
+                name="mobile"
+                value={formData.mobile}
+                onChange={handleChange}
+                inputProps={{ maxLength: 10 }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Email Address"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleChange}
+              />
+            </Grid>
+          </Grid>
+        );
+
+      case 2:
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Property ID (if available)"
+                name="property_id"
+                value={formData.property_id}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="House/Flat No."
+                name="house_flat_no"
+                value={formData.house_flat_no}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Building/Society Name"
+                name="building_name"
+                value={formData.building_name}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                select
+                fullWidth
+                required
+                label="Ward"
+                name="ward"
+                value={formData.ward}
+                onChange={handleChange}
+              >
+                {wards.map((ward) => (
+                  <MenuItem key={ward.value} value={ward.value}>
+                    {ward.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Landmark"
+                name="landmark"
+                value={formData.landmark}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                select
+                fullWidth
+                required
+                label="Property Type"
+                name="property_type"
+                value={formData.property_type}
+                onChange={handleChange}
+              >
+                {propertyTypes.map((type) => (
+                  <MenuItem key={type.value} value={type.value}>
+                    {type.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                select
+                fullWidth
+                label="Ownership Status"
+                name="ownership_status"
+                value={formData.ownership_status}
+                onChange={handleChange}
+              >
+                {ownershipTypes.map((type) => (
+                  <MenuItem key={type.value} value={type.value}>
+                    {type.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                select
+                fullWidth
+                label="Connection Purpose"
+                name="connection_purpose"
+                value={formData.connection_purpose}
+                onChange={handleChange}
+              >
+                {connectionPurposes.map((purpose) => (
+                  <MenuItem key={purpose.value} value={purpose.value}>
+                    {purpose.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            {formData.gas_type === 'lpg' && (
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Cylinder Type"
+                  name="cylinder_type"
+                  value={formData.cylinder_type}
+                  onChange={handleChange}
+                >
+                  {cylinderTypes.map((type) => (
+                    <MenuItem key={type.value} value={type.value}>
+                      {type.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            )}
+          </Grid>
+        );
+
+      case 3:
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Upload Required Documents
+            </Typography>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              Upload clear scanned copies or photos. Max file size: 5MB each.
+            </Alert>
+            
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ border: '2px dashed #ccc', borderRadius: 2, p: 3, textAlign: 'center' }}>
+                  <CloudUpload sx={{ fontSize: 40, color: 'grey.500', mb: 1 }} />
+                  <Typography variant="subtitle1" gutterBottom>
+                    Aadhaar Card *
+                  </Typography>
+                  <input
+                    accept="image/*,.pdf"
+                    type="file"
+                    id="aadhaar-upload"
+                    hidden
+                    onChange={(e) => handleFileChange(e, 'aadhaar_doc')}
+                  />
+                  <label htmlFor="aadhaar-upload">
+                    <Button variant="outlined" component="span" color="warning">
+                      {formData.aadhaar_doc ? formData.aadhaar_doc.name : 'Choose File'}
+                    </Button>
+                  </label>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ border: '2px dashed #ccc', borderRadius: 2, p: 3, textAlign: 'center' }}>
+                  <CloudUpload sx={{ fontSize: 40, color: 'grey.500', mb: 1 }} />
+                  <Typography variant="subtitle1" gutterBottom>
+                    Property Document *
+                  </Typography>
+                  <input
+                    accept="image/*,.pdf"
+                    type="file"
+                    id="property-upload"
+                    hidden
+                    onChange={(e) => handleFileChange(e, 'property_doc')}
+                  />
+                  <label htmlFor="property-upload">
+                    <Button variant="outlined" component="span" color="warning">
+                      {formData.property_doc ? formData.property_doc.name : 'Choose File'}
+                    </Button>
+                  </label>
+                </Box>
+              </Grid>
+            </Grid>
+          </Box>
+        );
+
+      case 4:
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Review Your Application
+            </Typography>
+            
+            <Box sx={{ bgcolor: '#fff3e0', p: 2, borderRadius: 2, mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                Gas Connection Type
+              </Typography>
+              <Typography>
+                {formData.gas_type === 'png' ? '🔥 PNG (Piped Natural Gas)' : '⛽ LPG (Cylinder)'}
+              </Typography>
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+            
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">Full Name</Typography>
+                <Typography fontWeight="bold">{formData.full_name}</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">Mobile</Typography>
+                <Typography fontWeight="bold">{formData.mobile}</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">Aadhaar</Typography>
+                <Typography fontWeight="bold">{formData.aadhaar_number}</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">Property Type</Typography>
+                <Typography fontWeight="bold">{formData.property_type}</Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="body2" color="text.secondary">Address</Typography>
+                <Typography fontWeight="bold">
+                  {formData.house_flat_no}, {formData.building_name}, Ward {formData.ward}
+                </Typography>
+              </Grid>
+            </Grid>
+
+            <Divider sx={{ my: 2 }} />
+
+            <FormControlLabel
+              control={
+                <Radio
+                  checked={formData.agreed_to_terms}
+                  onChange={(e) => setFormData({ ...formData, agreed_to_terms: e.target.checked })}
+                  color="warning"
+                />
+              }
+              label="I hereby declare that all the information provided above is true and correct. I understand that providing false information may result in rejection of my application."
+            />
+          </Box>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Box>
+      <DialogTitle sx={{ bgcolor: '#f57c00', color: 'white' }}>
+        <Typography variant="h5" fontWeight={600}>
+          🔥 New Gas Connection / नया गैस कनेक्शन
+        </Typography>
+      </DialogTitle>
+      
+      <DialogContent sx={{ mt: 2 }}>
+        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+          {steps.map((label) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+
+        {renderStepContent()}
+      </DialogContent>
+
+      <DialogActions sx={{ p: 3 }}>
+        <Button onClick={onClose} disabled={submitting}>
+          Cancel
+        </Button>
+        {activeStep > 0 && (
+          <Button onClick={handleBack} disabled={submitting}>
+            Back
+          </Button>
+        )}
+        <Button
+          variant="contained"
+          onClick={handleNext}
+          disabled={submitting}
+          color="warning"
+        >
+          {submitting ? (
+            <CircularProgress size={24} color="inherit" />
+          ) : activeStep === steps.length - 1 ? (
+            'Submit Application'
+          ) : (
+            'Next'
+          )}
+        </Button>
+      </DialogActions>
+    </Box>
+  );
+};
+
+export default GasNewConnectionForm;
