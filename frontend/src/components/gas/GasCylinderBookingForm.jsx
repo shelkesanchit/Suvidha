@@ -70,38 +70,39 @@ const GasCylinderBookingForm = ({ onClose }) => {
     }
     setLoading(true);
     try {
-      // In production, verify OTP and fetch consumer by mobile
-      // For demo, simulate verification
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Try to fetch consumer by mobile number
-      try {
-        const response = await api.get(`/gas/applications/my-applications/${mobileNumber}`);
-        if (response.data.success && response.data.data?.length > 0) {
-          const app = response.data.data[0];
-          setConsumerData({
-            consumer_number: app.consumer_number || `GC${Date.now()}`,
-            full_name: app.full_name || app.applicant_name,
-            address: app.address,
-            mobile: mobileNumber,
-            connection_active: true,
-          });
-        }
-      } catch {
-        // Fallback demo data
-        setConsumerData({
-          consumer_number: `GC${Date.now()}`,
-          full_name: 'Verified Consumer',
-          address: 'Registered Address',
-          mobile: mobileNumber,
-          connection_active: true,
-        });
+      // For demo, accept OTP 123456
+      if (otp !== '123456') {
+        toast.error('Invalid OTP. Use 123456 for demo.');
+        setLoading(false);
+        return;
       }
       
-      setStep('booking');
-      toast.success('Mobile verified successfully!');
+      // Fetch consumer by mobile number from gas_consumers table
+      const response = await api.get(`/gas/applications/consumer-by-mobile/${mobileNumber}`);
+      
+      if (response.data.success && response.data.data) {
+        const consumer = response.data.data;
+        setConsumerData({
+          consumer_number: consumer.consumer_number,
+          full_name: consumer.full_name,
+          address: consumer.address,
+          mobile: consumer.mobile,
+          gas_type: consumer.gas_type,
+          connection_active: consumer.connection_status === 'active',
+        });
+        setStep('booking');
+        toast.success('Mobile verified successfully!');
+      } else {
+        toast.error('No active connection found for this mobile number');
+      }
     } catch (error) {
-      toast.error('Invalid OTP. Please try again.');
+      console.error('Verification error:', error);
+      const msg = error.response?.data?.message || 'Verification failed';
+      if (msg.includes('No active consumer') || msg.includes('not found')) {
+        toast.error('No active gas connection found for this mobile number. Please check the number or apply for a new connection.');
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -196,9 +197,14 @@ const GasCylinderBookingForm = ({ onClose }) => {
         {/* Step 1: Mobile Number */}
         {step === 'mobile' && (
           <Box>
-            <Alert severity="info" sx={{ mb: 3 }}>
+            <Alert severity="info" sx={{ mb: 2 }}>
               Enter your registered mobile number to book LPG cylinder refill.
               An OTP will be sent for verification.
+            </Alert>
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              <strong>Demo:</strong> Use these registered mobiles: <strong>9812345678</strong> (Rajesh Kumar), 
+              <strong>9812345679</strong> (Priya Sharma), or <strong>9812345681</strong> (Amit Patel - LPG). 
+              OTP is <strong>123456</strong>
             </Alert>
             <TextField
               fullWidth

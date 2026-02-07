@@ -115,7 +115,7 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
     gst_number: '',
     trade_license: '',
     contact_number: '',
-    cylinder_type: '19kg',
+    cylinder_type: 'commercial_19kg',
     
     // Documents
     photo: null,
@@ -301,7 +301,37 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
       
       const response = await api.post('/gas/applications/submit', { application_type: 'new_connection', application_data });
       if (response.data?.data?.application_number) {
-        setApplicationNumber(response.data.data.application_number);
+        const appNumber = response.data.data.application_number;
+        setApplicationNumber(appNumber);
+        
+        // Upload documents after application is submitted
+        const documentsToUpload = [
+          { file: formData.aadhaar_doc, type: 'aadhaar_doc' },
+          { file: formData.property_doc, type: 'property_doc' },
+          { file: formData.ownership_doc, type: 'ownership_doc' },
+          { file: formData.photo, type: 'photo' },
+          { file: formData.fire_noc_doc, type: 'fire_noc_doc' },
+        ].filter(doc => doc.file);
+
+        if (documentsToUpload.length > 0) {
+          try {
+            for (const doc of documentsToUpload) {
+              const formDataUpload = new FormData();
+              formDataUpload.append('document', doc.file);
+              formDataUpload.append('application_number', appNumber);
+              formDataUpload.append('documentType', doc.type);
+              
+              await api.post('/gas/applications/upload-document', formDataUpload, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+              });
+            }
+            toast.success('Documents uploaded successfully!');
+          } catch (docError) {
+            console.error('Document upload error:', docError);
+            toast.error('Application submitted but document upload failed. Please upload documents later.');
+          }
+        }
+        
         setSubmitted(true);
         toast.success('Application submitted successfully!');
       } else { throw new Error('Failed to get application number'); }
@@ -724,8 +754,8 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField select fullWidth label="Cylinder Type" name="cylinder_type"
                     value={formData.cylinder_type} onChange={handleChange}>
-                    <MenuItem value="19kg">19 kg Commercial</MenuItem>
-                    <MenuItem value="47.5kg">47.5 kg Commercial</MenuItem>
+                    <MenuItem value="commercial_19kg">19 kg Commercial</MenuItem>
+                    <MenuItem value="commercial_47.5kg">47.5 kg Commercial</MenuItem>
                   </TextField>
                 </Grid>
               </Grid>

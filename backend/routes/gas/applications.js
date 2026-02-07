@@ -1,6 +1,40 @@
 const express = require('express');
 const router = express.Router();
 const { promisePool } = require('../../config/database');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for gas document uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/gas-documents');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `gas-doc-${uniqueSuffix}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only images (JPEG, PNG) and PDF files are allowed'));
+    }
+  }
+});
 
 // =====================================================
 // GAS APPLICATIONS ROUTES
@@ -179,25 +213,65 @@ router.get('/my-applications/:mobile', async (req, res) => {
   }
 });
 
+// Lookup consumer by mobile number for cylinder booking
+router.get('/consumer-by-mobile/:mobile', async (req, res) => {
+  try {
+    const { mobile } = req.params;
+    
+    const [consumers] = await promisePool.query(
+      `SELECT id, consumer_number, full_name, mobile, address, gas_type, 
+              connection_status, property_type 
+       FROM gas_consumers 
+       WHERE mobile = ? AND connection_status = 'active'`,
+      [mobile]
+    );
+    
+    if (consumers.length === 0) {
+      return res.status(404).json({ success: false, message: 'No active consumer found with this mobile number' });
+    }
+    
+    res.json({ success: true, data: consumers[0] });
+    
+  } catch (error) {
+    console.error('Consumer lookup error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Book LPG cylinder
 router.post('/cylinder-booking', async (req, res) => {
   const connection = await promisePool.getConnection();
   try {
     await connection.beginTransaction();
     
-    const { consumer_number, cylinder_type, quantity, delivery_preference } = req.body;
+    const { consumer_number, mobile, cylinder_type, quantity = 1, delivery_preference } = req.body;
     
-    // Verify consumer
-    const [consumers] = await connection.query(
-      'SELECT * FROM gas_consumers WHERE consumer_number = ?',
-      [consumer_number]
-    );
+    // Find consumer - first try by consumer_number, then by mobile
+    let consumers = [];
+    if (consumer_number) {
+      [consumers] = await connection.query(
+        'SELECT * FROM gas_consumers WHERE consumer_number = ?',
+        [consumer_number]
+      );
+    }
+    
+    // If not found by consumer_number, try by mobile
+    if (consumers.length === 0 && mobile) {
+      [consumers] = await connection.query(
+        'SELECT * FROM gas_consumers WHERE mobile = ? AND connection_status = "active"',
+        [mobile]
+      );
+    }
     
     if (consumers.length === 0) {
-      return res.status(404).json({ success: false, message: 'Consumer not found' });
+      return res.status(404).json({ success: false, message: 'Consumer not found. Please ensure you have an active gas connection.' });
     }
     
     const consumer = consumers[0];
+    
+    // Determine cylinder type based on consumer's property type or use default
+    const actualCylinderType = cylinder_type || 
+      (consumer.property_type === 'commercial' ? 'commercial_19kg' : 'domestic_14.2kg');
     
     // Generate booking number
     const year = new Date().getFullYear();
@@ -214,7 +288,7 @@ router.post('/cylinder-booking', async (req, res) => {
       'commercial_19kg': 2100,
       'commercial_47.5kg': 5200
     };
-    const pricePerUnit = cylinderPrices[cylinder_type] || 850;
+    const pricePerUnit = cylinderPrices[actualCylinderType] || 850;
     const totalAmount = pricePerUnit * quantity;
     
     // Insert booking
@@ -226,8 +300,8 @@ router.post('/cylinder-booking', async (req, res) => {
       [
         bookingNumber,
         consumer.id,
-        consumer_number,
-        cylinder_type,
+        consumer.consumer_number,
+        actualCylinderType,
         quantity,
         pricePerUnit,
         totalAmount,
@@ -255,6 +329,172 @@ router.post('/cylinder-booking', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   } finally {
     connection.release();
+  }
+});
+
+// =====================================================
+// DOCUMENT UPLOAD ROUTES
+// =====================================================
+
+// Upload documents for gas application
+router.post('/upload-documents', upload.array('documents', 5), async (req, res) => {
+  try {
+    const { application_number } = req.body;
+    
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No files uploaded' });
+    }
+
+    // Check if application exists
+    const [apps] = await promisePool.query(
+      'SELECT id, documents FROM gas_applications WHERE application_number = ?',
+      [application_number]
+    );
+
+    if (apps.length === 0) {
+      // Delete uploaded files if application not found
+      req.files.forEach(file => fs.unlinkSync(file.path));
+      return res.status(404).json({ success: false, message: 'Application not found' });
+    }
+
+    // Parse existing documents
+    let existingDocs = [];
+    try {
+      existingDocs = JSON.parse(apps[0].documents || '[]');
+    } catch { existingDocs = []; }
+
+    // Add new documents
+    const newDocs = req.files.map((file, index) => ({
+      id: Date.now() + index,
+      filename: file.filename,
+      originalName: file.originalname,
+      documentType: req.body[`documentType_${index}`] || req.body.documentType || 'other',
+      mimeType: file.mimetype,
+      size: file.size,
+      uploadedAt: new Date().toISOString(),
+      path: `/uploads/gas-documents/${file.filename}`
+    }));
+
+    const allDocs = [...existingDocs, ...newDocs];
+
+    // Update application with document references
+    await promisePool.query(
+      'UPDATE gas_applications SET documents = ? WHERE application_number = ?',
+      [JSON.stringify(allDocs), application_number]
+    );
+
+    res.json({
+      success: true,
+      message: 'Documents uploaded successfully',
+      data: { documents: newDocs }
+    });
+
+  } catch (error) {
+    console.error('Document upload error:', error);
+    // Clean up uploaded files on error
+    if (req.files) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      });
+    }
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Upload single document with type
+router.post('/upload-document', upload.single('document'), async (req, res) => {
+  try {
+    const { application_number, documentType } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    // Check if application exists
+    const [apps] = await promisePool.query(
+      'SELECT id, documents FROM gas_applications WHERE application_number = ?',
+      [application_number]
+    );
+
+    if (apps.length === 0) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ success: false, message: 'Application not found' });
+    }
+
+    // Parse existing documents
+    let existingDocs = [];
+    try {
+      existingDocs = JSON.parse(apps[0].documents || '[]');
+    } catch { existingDocs = []; }
+
+    // Create new document entry
+    const newDoc = {
+      id: Date.now(),
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      documentType: documentType || 'other',
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      uploadedAt: new Date().toISOString(),
+      path: `/uploads/gas-documents/${req.file.filename}`
+    };
+
+    // Replace existing document of same type or add new
+    const existingIndex = existingDocs.findIndex(d => d.documentType === documentType);
+    if (existingIndex >= 0) {
+      // Delete old file
+      const oldPath = path.join(__dirname, '../../uploads/gas-documents', existingDocs[existingIndex].filename);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      existingDocs[existingIndex] = newDoc;
+    } else {
+      existingDocs.push(newDoc);
+    }
+
+    // Update application with document references
+    await promisePool.query(
+      'UPDATE gas_applications SET documents = ? WHERE application_number = ?',
+      [JSON.stringify(existingDocs), application_number]
+    );
+
+    res.json({
+      success: true,
+      message: 'Document uploaded successfully',
+      data: { document: newDoc }
+    });
+
+  } catch (error) {
+    console.error('Document upload error:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get documents for an application
+router.get('/documents/:application_number', async (req, res) => {
+  try {
+    const { application_number } = req.params;
+    
+    const [apps] = await promisePool.query(
+      'SELECT documents FROM gas_applications WHERE application_number = ?',
+      [application_number]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ success: false, message: 'Application not found' });
+    }
+
+    let documents = [];
+    try {
+      documents = JSON.parse(apps[0].documents || '[]');
+    } catch { documents = []; }
+
+    res.json({ success: true, data: documents });
+    
+  } catch (error) {
+    console.error('Get documents error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

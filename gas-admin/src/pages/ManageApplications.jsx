@@ -21,6 +21,14 @@ import {
   Tooltip,
   CircularProgress,
   Alert,
+  Tabs,
+  Tab,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemSecondaryAction,
+  Divider,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -29,6 +37,15 @@ import {
   Cancel,
   Refresh,
   Search,
+  Description,
+  PictureAsPdf,
+  Image,
+  Download,
+  ZoomIn,
+  CreditCard,
+  Home,
+  Person,
+  VerifiedUser,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
@@ -42,6 +59,11 @@ const ManageApplications = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [tabValue, setTabValue] = useState(0);
+  const [documents, setDocuments] = useState([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     fetchApplications();
@@ -61,9 +83,69 @@ const ManageApplications = () => {
     }
   };
 
+  const fetchDocuments = async (applicationNumber) => {
+    try {
+      setLoadingDocs(true);
+      const response = await api.get(`/api/gas/applications/documents/${applicationNumber}`);
+      setDocuments(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch documents:', error);
+      setDocuments([]);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
   const handleViewDetails = (app) => {
     setSelectedApp(app);
+    setTabValue(0);
     setDetailsOpen(true);
+    // Fetch documents for this application
+    fetchDocuments(app.application_number);
+  };
+
+  const handlePreviewDocument = (doc) => {
+    setPreviewDoc(doc);
+    setPreviewOpen(true);
+  };
+
+  const getDocumentIcon = (mimeType) => {
+    if (mimeType?.includes('pdf')) return <PictureAsPdf color="error" />;
+    if (mimeType?.includes('image')) return <Image color="primary" />;
+    return <Description />;
+  };
+
+  const getDocumentTypeLabel = (type) => {
+    const labels = {
+      'aadhaar': 'Aadhaar Card',
+      'aadhaar_doc': 'Aadhaar Card',
+      'pan': 'PAN Card',
+      'pan_doc': 'PAN Card',
+      'photo': 'Passport Photo',
+      'address_proof': 'Address Proof',
+      'property_doc': 'Property Document',
+      'ownership_doc': 'Ownership Proof / NOC',
+      'fire_noc': 'Fire NOC',
+      'fire_noc_doc': 'Fire NOC',
+      'gst': 'GST Certificate',
+      'trade_license': 'Trade License',
+      'other': 'Other Document'
+    };
+    return labels[type] || type?.replace(/_/g, ' ').toUpperCase() || 'Document';
+  };
+
+  const getDocumentTypeIcon = (type) => {
+    if (type?.includes('aadhaar')) return <CreditCard />;
+    if (type?.includes('property') || type?.includes('address')) return <Home />;
+    if (type?.includes('photo')) return <Person />;
+    return <VerifiedUser />;
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return 'N/A';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
   const handleStatusUpdate = async (appId, newStatus, remarks = '') => {
@@ -227,47 +309,241 @@ const ManageApplications = () => {
       <Dialog
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>Application Details</DialogTitle>
+        <DialogTitle>
+          Application Details - {selectedApp?.application_number}
+        </DialogTitle>
         <DialogContent dividers>
           {selectedApp && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Application Number</Typography>
-                <Typography variant="body1" gutterBottom>{selectedApp.application_number}</Typography>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Status</Typography>
-                <Chip label={selectedApp.status} color={selectedApp.status === 'approved' ? 'success' : 'warning'} />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Applicant Name</Typography>
-                <Typography variant="body1" gutterBottom>{selectedApp.applicant_name}</Typography>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Mobile</Typography>
-                <Typography variant="body1" gutterBottom>{selectedApp.mobile}</Typography>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Connection Type</Typography>
-                <Typography variant="body1" gutterBottom>{selectedApp.connection_type}</Typography>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Gas Type</Typography>
-                <Typography variant="body1" gutterBottom>{selectedApp.gas_type}</Typography>
-              </Grid>
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" color="text.secondary">Address</Typography>
-                <Typography variant="body1" gutterBottom>{selectedApp.address}</Typography>
-              </Grid>
-            </Grid>
+            <>
+              <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+                <Tab label="Application Info" />
+                <Tab label={`Documents (${documents.length})`} />
+                <Tab label="Aadhaar Details" />
+              </Tabs>
+
+              {/* Tab 0: Application Info */}
+              {tabValue === 0 && (
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Application Number</Typography>
+                    <Typography variant="body1" gutterBottom fontWeight={500}>{selectedApp.application_number}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Status</Typography>
+                    <Chip label={selectedApp.status?.replace(/_/g, ' ')} color={selectedApp.status === 'approved' ? 'success' : selectedApp.status === 'rejected' ? 'error' : 'warning'} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Applicant Name</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.full_name || selectedApp.applicant_name}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Mobile</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.mobile}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Email</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.email || 'N/A'}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Gas Type</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.gas_type?.toUpperCase()}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Property Type</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.property_type}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Ownership Status</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.ownership_status}</Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary">Address</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.address}</Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Divider sx={{ my: 1 }} />
+                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>Fee Details</Typography>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Application Fee</Typography>
+                    <Typography variant="body1">₹{selectedApp.application_fee || 0}</Typography>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Connection Fee</Typography>
+                    <Typography variant="body1">₹{selectedApp.connection_fee || 0}</Typography>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Security Deposit</Typography>
+                    <Typography variant="body1">₹{selectedApp.security_deposit || 0}</Typography>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Total Fee</Typography>
+                    <Typography variant="body1" fontWeight={600} color="primary">₹{selectedApp.total_fee || 0}</Typography>
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* Tab 1: Documents */}
+              {tabValue === 1 && (
+                <Box>
+                  {loadingDocs ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : documents.length === 0 ? (
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      No documents uploaded for this application yet.
+                    </Alert>
+                  ) : (
+                    <List>
+                      {documents.map((doc, index) => (
+                        <React.Fragment key={doc.id || index}>
+                          <ListItem
+                            sx={{
+                              bgcolor: 'grey.50',
+                              borderRadius: 1,
+                              mb: 1,
+                              '&:hover': { bgcolor: 'grey.100' }
+                            }}
+                          >
+                            <ListItemIcon>
+                              {getDocumentIcon(doc.mimeType)}
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {getDocumentTypeIcon(doc.documentType)}
+                                  <Typography fontWeight={500}>
+                                    {getDocumentTypeLabel(doc.documentType)}
+                                  </Typography>
+                                </Box>
+                              }
+                              secondary={
+                                <Box sx={{ mt: 0.5 }}>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    {doc.originalName}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {formatFileSize(doc.size)} • Uploaded: {doc.uploadedAt ? format(new Date(doc.uploadedAt), 'dd/MM/yyyy HH:mm') : 'N/A'}
+                                  </Typography>
+                                </Box>
+                              }
+                            />
+                            <ListItemSecondaryAction>
+                              <Tooltip title="Preview">
+                                <IconButton
+                                  edge="end"
+                                  onClick={() => handlePreviewDocument(doc)}
+                                  sx={{ mr: 1 }}
+                                >
+                                  <ZoomIn />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Download">
+                                <IconButton
+                                  edge="end"
+                                  component="a"
+                                  href={`http://localhost:5000${doc.path}`}
+                                  download={doc.originalName}
+                                  target="_blank"
+                                >
+                                  <Download />
+                                </IconButton>
+                              </Tooltip>
+                            </ListItemSecondaryAction>
+                          </ListItem>
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+              )}
+
+              {/* Tab 2: Aadhaar Details */}
+              {tabValue === 2 && (
+                <Box>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                          Aadhaar Number
+                        </Typography>
+                        <Typography variant="h6" fontWeight={600}>
+                          {selectedApp.aadhaar_number 
+                            ? `XXXX-XXXX-${selectedApp.aadhaar_number.slice(-4)}` 
+                            : 'Not Provided'}
+                        </Typography>
+                        {selectedApp.aadhaar_number && (
+                          <Button 
+                            size="small" 
+                            sx={{ mt: 1 }}
+                            onClick={() => {
+                              toast.success(`Full Aadhaar: ${selectedApp.aadhaar_number}`);
+                            }}
+                          >
+                            Show Full Number
+                          </Button>
+                        )}
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                          Father/Spouse Name
+                        </Typography>
+                        <Typography variant="h6">
+                          {selectedApp.father_spouse_name || 'Not Provided'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Alert severity="info" icon={<VerifiedUser />}>
+                        <Typography variant="body2">
+                          <strong>Verification Status:</strong> Documents need to be verified manually. 
+                          Check the "Documents" tab to view uploaded Aadhaar card and other ID proofs.
+                        </Typography>
+                      </Alert>
+                    </Grid>
+                    {documents.filter(d => d.documentType?.includes('aadhaar')).length > 0 && (
+                      <Grid item xs={12}>
+                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                          Aadhaar Document Preview
+                        </Typography>
+                        {documents.filter(d => d.documentType?.includes('aadhaar')).map((doc) => (
+                          <Card key={doc.id} sx={{ display: 'inline-block', mr: 2 }}>
+                            <CardContent sx={{ p: 1 }}>
+                              {doc.mimeType?.includes('image') ? (
+                                <img 
+                                  src={`http://localhost:5000${doc.path}`} 
+                                  alt="Aadhaar" 
+                                  style={{ maxWidth: 300, maxHeight: 200, objectFit: 'contain', cursor: 'pointer' }}
+                                  onClick={() => handlePreviewDocument(doc)}
+                                />
+                              ) : (
+                                <Button 
+                                  startIcon={<PictureAsPdf />}
+                                  onClick={() => handlePreviewDocument(doc)}
+                                >
+                                  View Aadhaar PDF
+                                </Button>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </Grid>
+                    )}
+                  </Grid>
+                </Box>
+              )}
+            </>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailsOpen(false)}>Close</Button>
-          {selectedApp?.status === 'pending' && (
+          {(selectedApp?.status === 'pending' || selectedApp?.status === 'submitted') && (
             <>
               <Button
                 onClick={() => handleStatusUpdate(selectedApp.id, 'approved')}
@@ -286,6 +562,58 @@ const ManageApplications = () => {
                 Reject
               </Button>
             </>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Document Preview Dialog */}
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          Document Preview - {previewDoc && getDocumentTypeLabel(previewDoc.documentType)}
+        </DialogTitle>
+        <DialogContent>
+          {previewDoc && (
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              {previewDoc.mimeType?.includes('image') ? (
+                <img 
+                  src={`http://localhost:5000${previewDoc.path}`} 
+                  alt={previewDoc.originalName}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                />
+              ) : previewDoc.mimeType?.includes('pdf') ? (
+                <iframe
+                  src={`http://localhost:5000${previewDoc.path}`}
+                  title={previewDoc.originalName}
+                  width="100%"
+                  height="600px"
+                  style={{ border: 'none' }}
+                />
+              ) : (
+                <Alert severity="info">
+                  Cannot preview this file type. Please download to view.
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewOpen(false)}>Close</Button>
+          {previewDoc && (
+            <Button
+              component="a"
+              href={`http://localhost:5000${previewDoc.path}`}
+              download={previewDoc.originalName}
+              target="_blank"
+              startIcon={<Download />}
+              variant="contained"
+            >
+              Download
+            </Button>
           )}
         </DialogActions>
       </Dialog>

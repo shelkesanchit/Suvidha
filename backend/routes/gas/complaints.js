@@ -19,17 +19,34 @@ router.post('/submit', async (req, res) => {
     );
     const complaintNumber = `GCP${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
     
-    // Check if consumer exists
+    // Check if consumer exists and get their name
     let consumerId = null;
+    let consumerName = complaint_data.contact_name || null;
+    
     if (complaint_data.consumer_number) {
       const [consumers] = await promisePool.query(
-        'SELECT id FROM gas_consumers WHERE consumer_number = ?',
+        'SELECT id, full_name FROM gas_consumers WHERE consumer_number = ?',
         [complaint_data.consumer_number]
       );
       if (consumers.length > 0) {
         consumerId = consumers[0].id;
+        consumerName = consumerName || consumers[0].full_name;
       }
     }
+    
+    // If still no name, try lookup by mobile
+    if (!consumerName && complaint_data.mobile) {
+      const [consumers] = await promisePool.query(
+        'SELECT full_name FROM gas_consumers WHERE mobile = ?',
+        [complaint_data.mobile]
+      );
+      if (consumers.length > 0) {
+        consumerName = consumers[0].full_name;
+      }
+    }
+    
+    // Default name if not found
+    consumerName = consumerName || 'Walk-in Customer';
     
     // Insert complaint
     const [result] = await promisePool.query(
@@ -41,7 +58,7 @@ router.post('/submit', async (req, res) => {
         complaintNumber,
         complaint_data.consumer_number || null,
         consumerId,
-        complaint_data.contact_name,
+        consumerName,
         complaint_data.mobile,
         complaint_data.email || null,
         complaint_data.address || null,

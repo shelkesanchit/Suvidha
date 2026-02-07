@@ -20,24 +20,26 @@ import api from '../../utils/api';
 // COMPLAINT CATEGORIES - Different for PNG vs LPG
 // =============================================================================
 // NOTE: Gas Leak is NOT a form category — show emergency number 1906 only
+// DB ENUM: 'gas-leak', 'no-supply', 'low-pressure', 'meter-issue', 'billing-dispute', 
+//          'cylinder-delivery', 'equipment-malfunction', 'safety-concern', 'other'
 
 // PNG Complaint Categories
 const pngComplaintCategories = [
+  { value: 'no-supply', label: 'No Gas Supply / गैस सप्लाई नहीं', icon: '🚫' },
   { value: 'low-pressure', label: 'Low Gas Pressure / कम गैस प्रेशर', icon: '📉' },
-  { value: 'billing-issue', label: 'Billing Issue / बिलिंग समस्या', icon: '💰' },
+  { value: 'billing-dispute', label: 'Billing Issue / बिलिंग समस्या', icon: '💰' },
   { value: 'meter-issue', label: 'Meter Problem / मीटर समस्या', icon: '🔧' },
-  { value: 'staff-behavior', label: 'Staff Behavior / कर्मचारी व्यवहार', icon: '👤' },
-  { value: 'connection-issue', label: 'Connection Issue / कनेक्शन समस्या', icon: '🔌' },
+  { value: 'equipment-malfunction', label: 'Equipment Issue / उपकरण समस्या', icon: '⚙️' },
+  { value: 'safety-concern', label: 'Safety Concern / सुरक्षा चिंता', icon: '⚠️' },
   { value: 'other', label: 'Other / अन्य', icon: '📝' },
 ];
 
 // LPG Complaint Categories
 const lpgComplaintCategories = [
-  { value: 'delivery-delay', label: 'Delivery Delay / डिलीवरी में देरी', icon: '🚚' },
-  { value: 'overcharging', label: 'Overcharging / अधिक शुल्क', icon: '💰' },
-  { value: 'staff-behavior', label: 'Staff Behavior / कर्मचारी व्यवहार', icon: '👤' },
-  { value: 'cylinder-issues', label: 'Cylinder Issues / सिलेंडर समस्या', icon: '⛽' },
-  { value: 'subsidy-issue', label: 'Subsidy Issue / सब्सिडी समस्या', icon: '🏦' },
+  { value: 'cylinder-delivery', label: 'Delivery Delay / डिलीवरी में देरी', icon: '🚚' },
+  { value: 'billing-dispute', label: 'Overcharging / अधिक शुल्क', icon: '💰' },
+  { value: 'equipment-malfunction', label: 'Cylinder/Regulator Issue / सिलेंडर समस्या', icon: '⛽' },
+  { value: 'safety-concern', label: 'Safety Concern / सुरक्षा चिंता', icon: '⚠️' },
   { value: 'other', label: 'Other / अन्य', icon: '📝' },
 ];
 
@@ -53,6 +55,7 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
   
   const [formData, setFormData] = useState({
     consumer_number: '',
+    contact_name: '',
     mobile: '',
     otp: '',
     complaint_category: '',
@@ -133,6 +136,7 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
         complaint_data: {
           gas_type: gasType,
           consumer_number: formData.consumer_number,
+          contact_name: formData.contact_name,
           mobile: formData.mobile,
           complaint_category: formData.complaint_category,
           description: formData.description,
@@ -254,6 +258,17 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
               onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
               inputProps={{ maxLength: 10 }}
               helperText="Either Consumer No. or Mobile required"
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Your Name / आपका नाम"
+              name="contact_name"
+              value={formData.contact_name}
+              onChange={handleChange}
+              placeholder="Enter your name"
+              helperText="Optional if consumer no. provided"
             />
           </Grid>
           <Grid item xs={12}>
