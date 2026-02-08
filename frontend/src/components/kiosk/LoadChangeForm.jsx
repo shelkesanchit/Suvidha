@@ -956,7 +956,7 @@ const LoadChangeForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           Load Change Request
         </Typography>
         <Typography variant="body2" color="text.secondary">

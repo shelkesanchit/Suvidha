@@ -229,6 +229,8 @@ const WaterTrackingForm = ({ onClose }) => {
           description: data.description,
           urgency: data.urgency,
           // Application specific
+          consumer_id: data.consumer_id,
+          meter_number: data.meter_number,
           pipe_size: data.pipe_size_requested,
           connection_type: data.connection_type_requested,
           property_type: data.property_type,
@@ -264,7 +266,7 @@ const WaterTrackingForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: '#0288d1', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           🔍 Track Request / अनुरोध ट्रैक करें
         </Typography>
       </DialogTitle>
@@ -393,6 +395,23 @@ const WaterTrackingForm = ({ onClose }) => {
                         <Grid item xs={12}>
                           <Alert severity="error" sx={{ mt: 1 }}>
                             <strong>Rejection Reason:</strong> {trackingData.rejection_reason}
+                          </Alert>
+                        </Grid>
+                      )}
+                      {trackingData.consumer_id && (
+                        <Grid item xs={12}>
+                          <Alert severity="success" sx={{ mt: 1 }}>
+                            <Typography variant="body2">
+                              <strong>Consumer ID:</strong> {trackingData.consumer_id}
+                            </Typography>
+                            {trackingData.meter_number && (
+                              <Typography variant="body2">
+                                <strong>Meter Number:</strong> {trackingData.meter_number}
+                              </Typography>
+                            )}
+                            <Typography variant="caption" color="text.secondary">
+                              Use this Consumer ID for bill payments and future services
+                            </Typography>
                           </Alert>
                         </Grid>
                       )}

@@ -7,16 +7,15 @@ const getAllComplaints = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT c.*, ca.consumer_number, u.full_name AS user_full_name, u.email AS user_email, u.phone AS user_phone
+      SELECT c.*, ec.consumer_id
       FROM complaints c
-      LEFT JOIN consumer_accounts ca ON c.consumer_account_id = ca.id
-      LEFT JOIN users u ON c.user_id = u.id
+      LEFT JOIN electricity_customers ec ON c.customer_id = ec.id
       WHERE 1=1
     `;
     const params = [];
 
     if (status) {
-      query += ' AND c.status = ?';
+      query += ' AND c.complaint_status = ?';
       params.push(status);
     }
 
@@ -30,26 +29,14 @@ const getAllComplaints = async (req, res) => {
 
     const [complaints] = await promisePool.query(query, params);
 
-    // Parse JSON fields and handle anonymous submissions
+    // Map complaint data for the response
     const parsedComplaints = complaints.map(complaint => {
-      const stageHistory = complaint.stage_history ? 
-        (typeof complaint.stage_history === 'string' ? JSON.parse(complaint.stage_history) : complaint.stage_history) : [];
-      
-      const complaintData = complaint.complaint_data ? 
-        (typeof complaint.complaint_data === 'string' ? JSON.parse(complaint.complaint_data) : complaint.complaint_data) : {};
-      
-      // Use complaint_data for anonymous submissions (no user_id)
-      const full_name = complaint.user_full_name || complaintData.full_name || 'N/A';
-      const email = complaint.user_email || complaintData.email || '';
-      const phone = complaint.user_phone || complaintData.mobile || '';
-
       return {
         ...complaint,
-        stage_history: stageHistory,
-        complaint_data: complaintData,
-        full_name,
-        email,
-        phone
+        full_name: complaint.customer_name || 'N/A',
+        email: '',
+        phone: complaint.customer_mobile || '',
+        status: complaint.complaint_status
       };
     });
 
@@ -82,69 +69,21 @@ const updateComplaint = async (req, res) => {
     }
 
     const complaint = complaints[0];
-    
-    // Safely parse stage_history
-    let stageHistory = [];
-    try {
-      if (complaint.stage_history) {
-        stageHistory = typeof complaint.stage_history === 'string' 
-          ? JSON.parse(complaint.stage_history) 
-          : complaint.stage_history;
-      }
-    } catch (parseError) {
-      console.error('Failed to parse stage_history:', parseError);
-      stageHistory = [];
-    }
-    
-    // Add new stage to history
-    if (status && status !== complaint.status) {
-      const stageNames = {
-        'open': 'Complaint Registered',
-        'assigned': 'Assigned to Technician',
-        'in_progress': 'Work in Progress',
-        'resolved': 'Issue Resolved',
-        'closed': 'Complaint Closed'
-      };
-      
-      stageHistory.push({
-        stage: stageNames[status] || status,
-        status: status,
-        timestamp: new Date().toISOString(),
-        remarks: resolution_notes || '',
-        updated_by: req.user?.id
-      });
-    }
 
-    // Update complaint
+    // Update complaint using correct column name: complaint_status (not status)
     await connection.query(
       `UPDATE complaints 
-       SET status = ?, resolution_notes = ?, assigned_to = ?, stage_history = ?,
+       SET complaint_status = ?, resolution_notes = ?, assigned_to = ?,
            resolved_at = CASE WHEN ? IN ('resolved', 'closed') THEN NOW() ELSE resolved_at END
        WHERE id = ?`,
-      [status || complaint.status, resolution_notes || null, assigned_to || complaint.assigned_to, 
-       JSON.stringify(stageHistory), status, complaintId]
+      [status || complaint.complaint_status, resolution_notes || null, assigned_to || complaint.assigned_to, 
+       status, complaintId]
     );
-
-    // Create notification if user exists
-    if (status && complaint.user_id) {
-      let message = `Your complaint ${complaint.complaint_number} status has been updated to ${status}.`;
-      if (status === 'resolved' && resolution_notes) {
-        message += ` Resolution: ${resolution_notes}`;
-      }
-
-      await connection.query(
-        `INSERT INTO notifications (user_id, title, message, type) 
-         VALUES (?, ?, ?, ?)`,
-        [complaint.user_id, 'Complaint Update', message, 
-         status === 'resolved' ? 'success' : 'info']
-      );
-    }
 
     await connection.commit();
 
     res.json({ 
-      message: 'Complaint updated successfully',
-      stage_history: stageHistory
+      message: 'Complaint updated successfully'
     });
   } catch (error) {
     await connection.rollback();

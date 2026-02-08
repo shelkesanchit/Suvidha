@@ -142,7 +142,7 @@ const GasMeterReadingForm = ({ onClose }) => {
     return (
       <Box>
         <DialogTitle sx={{ bgcolor: '#2e7d32', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
+          <Typography component="span" variant="body1" fontWeight={600}>
             ✓ Reading Submitted
           </Typography>
         </DialogTitle>
@@ -193,7 +193,7 @@ const GasMeterReadingForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: '#7b1fa2', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           📊 Submit Gas Meter Reading
         </Typography>
       </DialogTitle>

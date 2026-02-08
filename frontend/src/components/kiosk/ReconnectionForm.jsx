@@ -1056,7 +1056,7 @@ const ReconnectionForm = ({ onClose }) => {
       <Dialog open={true} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ textAlign: 'center', bgcolor: 'success.main', color: 'white' }}>
           <CheckCircle sx={{ fontSize: 60, mb: 1 }} />
-          <Typography variant="h5">Reconnection Request Submitted!</Typography>
+          <Typography variant="subtitle1">Reconnection Request Submitted!</Typography>
         </DialogTitle>
         <DialogContent sx={{ mt: 3 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>

@@ -238,4 +238,62 @@ router.post('/prepaid-recharge', verifyToken, async (req, res) => {
   }
 });
 
+// Process electricity bill payment (public endpoint - no auth required)
+router.post('/electricity/process', async (req, res) => {
+  try {
+    const { customer_id, bill_number } = req.body;
+
+    if (!customer_id || !bill_number) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Customer ID and bill number are required' 
+      });
+    }
+
+    // Get bill details
+    const [bills] = await promisePool.query(
+      `SELECT id, customer_id, bill_number, total_amount, bill_status
+       FROM electricity_bills
+       WHERE customer_id = ? AND bill_number = ?`,
+      [customer_id, bill_number]
+    );
+
+    if (bills.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Bill not found' 
+      });
+    }
+
+    const bill = bills[0];
+
+    // Update bill status to paid
+    const transactionId = `ELE${Date.now()}`;
+    const paidDate = new Date().toISOString().split('T')[0];
+
+    await promisePool.query(
+      `UPDATE electricity_bills
+       SET bill_status = 'paid', paid_date = ?, paid_amount = total_amount
+       WHERE id = ?`,
+      [paidDate, bill.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Payment processed successfully',
+      transaction_id: transactionId,
+      bill_number: bill_number,
+      amount_paid: bill.total_amount,
+      payment_date: paidDate,
+      receipt_number: `REC${Date.now()}`
+    });
+  } catch (error) {
+    console.error('Electricity payment error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process payment' 
+    });
+  }
+});
+
 module.exports = router;

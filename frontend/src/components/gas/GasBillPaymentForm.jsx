@@ -85,13 +85,12 @@ const GasBillPaymentForm = ({ onClose, gasType = 'lpg' }) => {
     setLoading(true);
     try {
       const response = await api.post('/gas/payments/process', {
-        consumer_number: consumerNumber,
-        bill_number: billData.bill_number,
-        amount: billData.total_amount,
-        payment_method: paymentMethod,
-        payment_type: 'bill_payment'
+        consumer_id: consumerNumber,
+        booking_number: billData.booking_number || billData.bill_number,
+        amount: billData.amount || billData.total_amount,
+        payment_method: paymentMethod
       });
-      
+
       if (response.data.success) {
         setReceiptData(response.data.data);
         setPaymentSuccess(true);
@@ -110,7 +109,7 @@ const GasBillPaymentForm = ({ onClose, gasType = 'lpg' }) => {
     return (
       <Box>
         <DialogTitle sx={{ bgcolor: '#2e7d32', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
+          <Typography component="span" variant="body1" fontWeight={600}>
             ✓ Payment Successful
           </Typography>
         </DialogTitle>
@@ -157,7 +156,7 @@ const GasBillPaymentForm = ({ onClose, gasType = 'lpg' }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           {isPNG ? '🔵 PNG Bill Payment' : '💳 LPG Bill Payment'}
         </Typography>
       </DialogTitle>
@@ -205,7 +204,7 @@ const GasBillPaymentForm = ({ onClose, gasType = 'lpg' }) => {
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">Consumer No.</Typography>
-                  <Typography fontWeight="bold">{consumerData?.consumer_number}</Typography>
+                  <Typography fontWeight="bold">{consumerData?.consumer_id}</Typography>
                 </Grid>
                 <Grid item xs={12}>
                   <Typography variant="body2" color="text.secondary">Address</Typography>

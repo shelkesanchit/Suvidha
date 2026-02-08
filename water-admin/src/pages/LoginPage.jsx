@@ -216,7 +216,7 @@ const LoginPage = () => {
           <Box sx={{ mt: 3, p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
             <Typography variant="caption" color="text.secondary" display="block" textAlign="center">
               <strong>Demo Credentials:</strong><br />
-              Username: water_admin | Password: admin123
+              Username: water_admin@suvidha.gov.in | Password: admin123
             </Typography>
           </Box>
         </CardContent>

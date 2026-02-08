@@ -247,7 +247,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
     return (
       <Box>
         <DialogTitle sx={{ bgcolor: '#4facfe', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
+          <Typography component="span" variant="body1" fontWeight={600}>
             💧 New Water Connection
           </Typography>
         </DialogTitle>
@@ -285,7 +285,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: '#4facfe', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           💧 New Water Connection / नया जल कनेक्शन
         </Typography>
       </DialogTitle>

@@ -60,70 +60,61 @@ router.post('/submit', async (req, res) => {
     }[application_type] || 'GAPP';
     
     const [countResult] = await connection.query(
-      'SELECT COUNT(*) as count FROM gas_applications WHERE YEAR(submitted_at) = ?',
+      'SELECT COUNT(*) as count FROM gas_applications WHERE YEAR(created_at) = ?',
       [year]
     );
     const applicationNumber = `${typePrefix}${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
     
-    // Calculate fees based on connection type
-    const connectionFees = {
-      'png_domestic': { connection_fee: 5000, security_deposit: 3000 },
-      'png_commercial': { connection_fee: 10000, security_deposit: 5000 },
-      'png_industrial': { connection_fee: 25000, security_deposit: 10000 },
-      'lpg_domestic': { connection_fee: 1500, security_deposit: 2000 },
-      'lpg_commercial': { connection_fee: 3500, security_deposit: 3500 }
+    // Map connection_type to valid ENUM value
+    const connectionTypeMap = {
+      'domestic': 'domestic',
+      'pmuy': 'pmuy',
+      'commercial': 'commercial',
+      'png_domestic': 'domestic',
+      'png_commercial': 'commercial',
+      'lpg_domestic': 'domestic',
+      'lpg_commercial': 'commercial'
     };
-    const connectionType = `${application_data.gas_type || 'png'}_${application_data.property_type || 'domestic'}`;
-    const fees = connectionFees[connectionType] || connectionFees['png_domestic'];
-    const application_fee = 500;
-    const total_fee = application_fee + fees.connection_fee + fees.security_deposit;
+    const connType = connectionTypeMap[application_data.connection_type] || 'domestic';
     
-    // Initialize stage history
-    const stageHistory = [{
-      stage: 'Application Submitted',
-      status: 'submitted',
-      timestamp: new Date().toISOString(),
-      remarks: 'Application submitted successfully'
-    }];
+    // Map cylinder_type to valid ENUM value  
+    const cylinderTypeMap = {
+      'domestic_14.2kg': '14kg',
+      '14kg': '14kg',
+      '19kg': '19kg',
+      'commercial_19kg': 'commercial',
+      'commercial_47.5kg': 'commercial',
+      'commercial': 'commercial'
+    };
+    const cylType = cylinderTypeMap[application_data.cylinder_type] || '14kg';
     
-    // Insert application
+    // Insert application - using ACTUAL gas_applications table columns
     const [result] = await connection.query(
       `INSERT INTO gas_applications 
-      (application_number, application_type, applicant_category, gas_type, full_name, father_spouse_name, 
-       aadhaar_number, mobile, email, property_id, house_flat_no, building_name, ward, 
-       address, landmark, property_type, ownership_status, connection_purpose, 
-       pipeline_distance, cylinder_type, status, current_stage, stage_history,
-       documents, application_fee, connection_fee, security_deposit, total_fee) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (application_number, full_name, mobile, email, aadhar_number, 
+       state, city, pincode, address, plot_number, 
+       cylinder_type, connection_type, gst_number, trade_license, business_name,
+       documents, distributor_name, distributor_code, application_status) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
       [
         applicationNumber,
-        application_type || 'new_connection',
-        application_data.applicant_category || 'individual',
-        application_data.gas_type || 'png',
-        application_data.full_name,
-        application_data.father_spouse_name || null,
-        application_data.aadhaar_number || null,
+        application_data.full_name || application_data.applicant_name || 'Unknown',
         application_data.mobile,
         application_data.email || null,
-        application_data.property_id || null,
-        application_data.house_flat_no || null,
-        application_data.building_name || null,
-        application_data.ward || null,
-        application_data.address || `${application_data.house_flat_no}, ${application_data.building_name}, Ward ${application_data.ward}`,
-        application_data.landmark || null,
-        application_data.property_type || 'domestic',
-        application_data.ownership_status || 'owner',
-        application_data.connection_purpose || 'cooking',
-        application_data.pipeline_distance || null,
-        application_data.cylinder_type || null,
-        'submitted',
-        'Application Submitted',
-        JSON.stringify(stageHistory),
+        application_data.aadhaar_number || null,
+        application_data.state || 'Maharashtra',
+        application_data.city || application_data.property_type || 'NA',
+        application_data.pin_code || application_data.pincode || '000000',
+        application_data.address || 'NA',
+        application_data.plot_number || application_data.property_id || null,
+        cylType,
+        connType,
+        application_data.gst_number || null,
+        application_data.trade_license || null,
+        application_data.business_name || null,
         JSON.stringify(application_data.documents || []),
-        application_fee,
-        fees.connection_fee,
-        fees.security_deposit,
-        total_fee
+        application_data.distributor_name || application_data.lpg_provider_name || application_data.png_provider_name || null,
+        application_data.distributor_id || application_data.distributor_code || null,
       ]
     );
     
@@ -134,13 +125,7 @@ router.post('/submit', async (req, res) => {
       message: 'Gas connection application submitted successfully',
       data: {
         application_number: applicationNumber,
-        application_id: result.insertId,
-        fees: {
-          application_fee,
-          connection_fee: fees.connection_fee,
-          security_deposit: fees.security_deposit,
-          total_fee
-        }
+        application_id: result.insertId
       }
     });
     
@@ -159,13 +144,13 @@ router.get('/track/:applicationNumber', async (req, res) => {
     const { applicationNumber } = req.params;
     
     const [applications] = await promisePool.query(
-      `SELECT application_number, application_type, gas_type, full_name, mobile, email, ward,
-              property_type, house_flat_no, address, landmark, status, 
-              current_stage, stage_history, submitted_at, processed_at, completed_at,
-              cylinder_type, pipeline_distance, total_fee, fee_paid,
-              assigned_engineer, remarks, rejection_reason
-       FROM gas_applications 
-       WHERE application_number = ?`,
+      `SELECT a.application_number, a.full_name, a.mobile, a.email,
+              a.address, a.cylinder_type, a.connection_type, a.application_status,
+              a.distributor_name, a.created_at, a.processed_at,
+              c.id as consumer_id, c.connection_status
+       FROM gas_applications a
+       LEFT JOIN gas_customers c ON c.full_name COLLATE utf8mb4_unicode_ci = a.full_name COLLATE utf8mb4_unicode_ci AND c.mobile COLLATE utf8mb4_unicode_ci = a.mobile COLLATE utf8mb4_unicode_ci
+       WHERE a.application_number = ?`,
       [applicationNumber]
     );
     
@@ -174,14 +159,6 @@ router.get('/track/:applicationNumber', async (req, res) => {
     }
     
     const app = applications[0];
-    // Handle JSON field
-    if (app.stage_history) {
-      if (typeof app.stage_history === 'string') {
-        try { app.stage_history = JSON.parse(app.stage_history); } catch (e) { app.stage_history = []; }
-      }
-    } else {
-      app.stage_history = [];
-    }
     
     res.json({ success: true, data: app });
     
@@ -197,11 +174,11 @@ router.get('/my-applications/:mobile', async (req, res) => {
     const { mobile } = req.params;
     
     const [applications] = await promisePool.query(
-      `SELECT id, application_number, application_type, gas_type, status, current_stage, 
-              submitted_at, total_fee, fee_paid
+      `SELECT id, application_number, connection_type, application_status, 
+              created_at
        FROM gas_applications 
        WHERE mobile = ?
-       ORDER BY submitted_at DESC`,
+       ORDER BY created_at DESC`,
       [mobile]
     );
     
@@ -219,9 +196,9 @@ router.get('/consumer-by-mobile/:mobile', async (req, res) => {
     const { mobile } = req.params;
     
     const [consumers] = await promisePool.query(
-      `SELECT id, consumer_number, full_name, mobile, address, gas_type, 
-              connection_status, property_type 
-       FROM gas_consumers 
+      `SELECT id, consumer_id, full_name, mobile, address, 
+              connection_status, connection_type 
+       FROM gas_customers 
        WHERE mobile = ? AND connection_status = 'active'`,
       [mobile]
     );
@@ -250,7 +227,7 @@ router.post('/cylinder-booking', async (req, res) => {
     let consumers = [];
     if (consumer_number) {
       [consumers] = await connection.query(
-        'SELECT * FROM gas_consumers WHERE consumer_number = ?',
+        'SELECT * FROM gas_customers WHERE consumer_id = ?',
         [consumer_number]
       );
     }
@@ -258,7 +235,7 @@ router.post('/cylinder-booking', async (req, res) => {
     // If not found by consumer_number, try by mobile
     if (consumers.length === 0 && mobile) {
       [consumers] = await connection.query(
-        'SELECT * FROM gas_consumers WHERE mobile = ? AND connection_status = "active"',
+        'SELECT * FROM gas_customers WHERE mobile = ? AND connection_status = "active"',
         [mobile]
       );
     }
@@ -269,9 +246,9 @@ router.post('/cylinder-booking', async (req, res) => {
     
     const consumer = consumers[0];
     
-    // Determine cylinder type based on consumer's property type or use default
+    // Determine cylinder type based on consumer's connection_type or use default
     const actualCylinderType = cylinder_type || 
-      (consumer.property_type === 'commercial' ? 'commercial_19kg' : 'domestic_14.2kg');
+      (consumer.connection_type === 'commercial' ? 'commercial_19kg' : 'domestic_14.2kg');
     
     // Generate booking number
     const year = new Date().getFullYear();
@@ -291,22 +268,31 @@ router.post('/cylinder-booking', async (req, res) => {
     const pricePerUnit = cylinderPrices[actualCylinderType] || 850;
     const totalAmount = pricePerUnit * quantity;
     
+    // Map to valid ENUM values
+    const cylBookingMap = {
+      'domestic_14.2kg': '14kg',
+      'domestic_5kg': '14kg',
+      'commercial_19kg': '19kg',
+      'commercial_47.5kg': 'commercial',
+      '14kg': '14kg',
+      '19kg': '19kg',
+      'commercial': 'commercial'
+    };
+    
     // Insert booking
     const [result] = await connection.query(
       `INSERT INTO gas_cylinder_bookings 
-      (booking_number, consumer_id, consumer_number, cylinder_type, quantity, 
-       unit_price, total_amount, delivery_preference, status) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (booking_number, customer_id, cylinder_type, quantity, 
+       total_amount, delivery_type, booking_status) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         bookingNumber,
         consumer.id,
-        consumer.consumer_number,
-        actualCylinderType,
+        cylBookingMap[actualCylinderType] || '14kg',
         quantity,
-        pricePerUnit,
         totalAmount,
         delivery_preference || 'home_delivery',
-        'booked'
+        'placed'
       ]
     );
     

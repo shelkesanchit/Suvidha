@@ -844,10 +844,10 @@ const ComplaintForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography variant="body1" fontWeight={600}>
           Register Complaint
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
           Electricity Distribution Service - Complaint Registration
         </Typography>
       </DialogTitle>

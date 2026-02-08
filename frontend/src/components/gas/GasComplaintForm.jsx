@@ -165,7 +165,7 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
     return (
       <Box>
         <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>Complaint Registered</Typography>
+          <Typography component="span" variant="body1" fontWeight={600}>Complaint Registered</Typography>
         </DialogTitle>
         <DialogContent sx={{ textAlign: 'center', py: 4 }}>
           <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
@@ -191,7 +191,7 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           {isPNG ? '🔵 Register PNG Complaint' : '🔥 Register LPG Complaint'}
         </Typography>
         <Typography variant="body2" sx={{ opacity: 0.9 }}>Non-emergency complaints only</Typography>

@@ -345,7 +345,7 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
     return (
       <Box>
         <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
+          <Typography component="span" variant="body1" fontWeight={600}>
             {isPNG ? '🔵 PNG Connection Application' : '🔥 LPG Connection Application'}
           </Typography>
         </DialogTitle>
@@ -937,7 +937,7 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           {isPNG ? '🔵 Apply for PNG Connection' : '🔥 Apply for LPG Connection'}
         </Typography>
         <Typography variant="body2" sx={{ opacity: 0.9 }}>

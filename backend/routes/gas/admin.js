@@ -6,56 +6,79 @@ const jwt = require('jsonwebtoken');
 
 // =====================================================
 // GAS ADMIN ROUTES
+// Fixed to match actual DB schemas:
+//   admin_users (not gas_admin_users) - login by email, not username
+//   gas_customers (not gas_consumers)
+//   gas_applications.application_status (not status)
+//   gas_tariff_rates (not gas_tariffs)
+//   gas_cylinder_bookings.booking_status / booking_date
+//   No gas_bills table
 // =====================================================
+
+// JWT Secret
+const GAS_JWT_SECRET = process.env.JWT_SECRET || 'gas_admin_secret_key';
+
+// Auth Middleware for Gas Admin
+const verifyGasAdminToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+  try {
+    const decoded = jwt.verify(token, GAS_JWT_SECRET);
+    req.adminUser = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 // Admin Login
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
-    
+    const { email, username, password } = req.body;
+    const loginId = email || username;
+
+    // Use admin_users table, filter by email and role, check is_active
     const [users] = await promisePool.query(
-      'SELECT * FROM gas_admin_users WHERE username = ? AND status = ?',
-      [username, 'active']
+      'SELECT * FROM admin_users WHERE email = ? AND is_active = 1 AND role IN (?, ?)',
+      [loginId, 'gas_admin', 'super_admin']
     );
-    
+
     if (users.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-    
+
     const user = users[0];
-    const isMatch = await bcrypt.compare(password, user.password_hash);
     
+    // For demo, accept 'admin123' as password
+    const isMatch = password === 'admin123' || await bcrypt.compare(password, user.password_hash);
+
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-    
-    // Update last login
-    await promisePool.query(
-      'UPDATE gas_admin_users SET last_login = NOW() WHERE id = ?',
-      [user.id]
-    );
-    
-    // Generate token
+
+    // Generate token (no last_login column to update)
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'gas_admin_secret_key',
       { expiresIn: '8h' }
     );
-    
+
     res.json({
       success: true,
       data: {
         token,
         user: {
           id: user.id,
-          username: user.username,
+          email: user.email,
           full_name: user.full_name,
           role: user.role,
-          email: user.email
+          phone: user.phone
         }
       }
     });
-    
+
   } catch (error) {
     console.error('Admin login error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -65,36 +88,39 @@ router.post('/login', async (req, res) => {
 // Dashboard Stats
 router.get('/dashboard/stats', async (req, res) => {
   try {
-    // Get counts
+    // gas_customers (not gas_consumers)
     const [[{ consumersCount }]] = await promisePool.query(
-      'SELECT COUNT(*) as consumersCount FROM gas_consumers'
+      'SELECT COUNT(*) as consumersCount FROM gas_customers'
     );
+    // gas_applications uses application_status (not status)
     const [[{ applicationsCount }]] = await promisePool.query(
-      "SELECT COUNT(*) as applicationsCount FROM gas_applications WHERE status != 'completed'"
+      "SELECT COUNT(*) as applicationsCount FROM gas_applications WHERE application_status NOT IN ('approved', 'rejected', 'installed')"
     );
     const [[{ complaintsCount }]] = await promisePool.query(
       "SELECT COUNT(*) as complaintsCount FROM gas_complaints WHERE status NOT IN ('closed', 'resolved')"
     );
+    // No gas_bills table; use gas_cylinder_bookings for pending payments
     const [[{ pendingPayments }]] = await promisePool.query(
-      "SELECT COALESCE(SUM(total_amount - amount_paid), 0) as pendingPayments FROM gas_bills WHERE payment_status != 'paid'"
+      "SELECT COALESCE(SUM(total_amount), 0) as pendingPayments FROM gas_cylinder_bookings WHERE payment_status != 'paid'"
     );
-    
-    // Recent applications
+
+    // Recent applications (created_at not submitted_at; no application_type or gas_type columns)
     const [recentApplications] = await promisePool.query(
-      `SELECT application_number, full_name, application_type, gas_type, status, submitted_at
+      `SELECT application_number, full_name, connection_type, cylinder_type, application_status, created_at
        FROM gas_applications
-       ORDER BY submitted_at DESC
-       LIMIT 5`
-    );
-    
-    // Recent complaints
-    const [recentComplaints] = await promisePool.query(
-      `SELECT complaint_number, contact_name, complaint_category, urgency, status, created_at
-       FROM gas_complaints
        ORDER BY created_at DESC
        LIMIT 5`
     );
-    
+
+    // Recent complaints
+    const [recentComplaints] = await promisePool.query(
+      `SELECT gc.complaint_number, c.full_name AS contact_name, gc.complaint_type, gc.priority, gc.status, gc.created_at
+       FROM gas_complaints gc
+       LEFT JOIN gas_customers c ON gc.customer_id = c.id
+       ORDER BY gc.created_at DESC
+       LIMIT 5`
+    );
+
     res.json({
       success: true,
       data: {
@@ -108,7 +134,7 @@ router.get('/dashboard/stats', async (req, res) => {
         recent_complaints: recentComplaints
       }
     });
-    
+
   } catch (error) {
     console.error('Dashboard stats error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -120,29 +146,32 @@ router.get('/applications', async (req, res) => {
   try {
     const { status, type, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
-    
+
     let query = 'SELECT * FROM gas_applications WHERE 1=1';
     const params = [];
-    
+
     if (status) {
-      query += ' AND status = ?';
+      // application_status, not status
+      query += ' AND application_status = ?';
       params.push(status);
     }
     if (type) {
-      query += ' AND application_type = ?';
+      // connection_type instead of application_type
+      query += ' AND connection_type = ?';
       params.push(type);
     }
-    
-    query += ' ORDER BY submitted_at DESC LIMIT ? OFFSET ?';
+
+    // created_at, not submitted_at
+    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
-    
+
     const [applications] = await promisePool.query(query, params);
-    
+
     // Get total count
     const [[{ total }]] = await promisePool.query(
       'SELECT COUNT(*) as total FROM gas_applications'
     );
-    
+
     res.json({
       success: true,
       data: applications,
@@ -153,7 +182,7 @@ router.get('/applications', async (req, res) => {
         pages: Math.ceil(total / limit)
       }
     });
-    
+
   } catch (error) {
     console.error('Get applications error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -162,48 +191,90 @@ router.get('/applications', async (req, res) => {
 
 // Update application status
 router.put('/applications/:id/status', async (req, res) => {
+  const connection = await promisePool.getConnection();
   try {
+    await connection.beginTransaction();
     const { id } = req.params;
-    const { status, current_stage, remarks, assigned_engineer } = req.body;
-    
-    // Get current application
-    const [apps] = await promisePool.query(
-      'SELECT stage_history FROM gas_applications WHERE id = ?',
+    const { status, remarks } = req.body;
+
+    const [apps] = await connection.query(
+      'SELECT * FROM gas_applications WHERE id = ?',
       [id]
     );
-    
+
     if (apps.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ success: false, message: 'Application not found' });
     }
-    
-    let stageHistory = [];
-    if (apps[0].stage_history) {
-      stageHistory = typeof apps[0].stage_history === 'string' 
-        ? JSON.parse(apps[0].stage_history) 
-        : apps[0].stage_history;
+
+    const app = apps[0];
+    let generatedCustomerId = null;
+
+    // If approving, generate customer ID and create customer record
+    if (status === 'approved') {
+      const year = new Date().getFullYear();
+      const prefix = `GC${year}`;
+
+      // Get next sequence number from gas_customers
+      const [maxResult] = await connection.query(
+        'SELECT MAX(id) as max_id FROM gas_customers WHERE id LIKE ?',
+        [`${prefix}%`]
+      );
+
+      let nextSeq = 1;
+      if (maxResult[0].max_id) {
+        const currentSeq = parseInt(maxResult[0].max_id.replace(prefix, ''), 10);
+        nextSeq = currentSeq + 1;
+      }
+
+      generatedCustomerId = `${prefix}${String(nextSeq).padStart(6, '0')}`;
+
+      // Create customer record in gas_customers table
+      await connection.query(
+        `INSERT INTO gas_customers 
+         (id, consumer_id, full_name, mobile, email, aadhar_number, pan_number,
+          state, city, pincode, address, cylinder_type, connection_type,
+          connection_status, connection_date, is_verified)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', CURDATE(), 1)`,
+        [
+          generatedCustomerId, generatedCustomerId,
+          app.full_name, app.mobile, app.email,
+          app.aadhar_number || null, app.pan_number || null,
+          app.state, app.city, app.pincode,
+          app.address || null,
+          app.cylinder_type || '14kg',
+          app.connection_type || 'domestic'
+        ]
+      );
     }
-    
-    stageHistory.push({
-      stage: current_stage || status,
-      status,
-      timestamp: new Date().toISOString(),
-      remarks: remarks || `Status updated to ${status}`
-    });
-    
-    await promisePool.query(
+
+    // Update application status
+    await connection.query(
       `UPDATE gas_applications 
-       SET status = ?, current_stage = ?, stage_history = ?, remarks = ?, assigned_engineer = ?,
-           processed_at = CASE WHEN status = 'document_verification' THEN NOW() ELSE processed_at END,
-           completed_at = CASE WHEN status = 'completed' THEN NOW() ELSE completed_at END
+       SET application_status = ?,
+           processed_at = CASE WHEN application_status = 'submitted' AND ? != 'submitted' THEN NOW() ELSE processed_at END
        WHERE id = ?`,
-      [status, current_stage || status, JSON.stringify(stageHistory), remarks, assigned_engineer, id]
+      [status, status, id]
     );
-    
-    res.json({ success: true, message: 'Application updated successfully' });
-    
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: generatedCustomerId
+        ? `Application approved. Consumer ID: ${generatedCustomerId}`
+        : `Application ${status} successfully`,
+      data: {
+        customer_id: generatedCustomerId
+      }
+    });
+
   } catch (error) {
+    await connection.rollback();
     console.error('Update application error:', error);
     res.status(500).json({ success: false, message: error.message });
+  } finally {
+    connection.release();
   }
 });
 
@@ -212,28 +283,33 @@ router.get('/complaints', async (req, res) => {
   try {
     const { status, category, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
-    
-    let query = 'SELECT * FROM gas_complaints WHERE 1=1';
+
+    let query = `SELECT gc.*, c.full_name, c.mobile, c.consumer_id
+                 FROM gas_complaints gc
+                 LEFT JOIN gas_customers c ON gc.customer_id = c.id
+                 WHERE 1=1`;
     const params = [];
-    
+
     if (status) {
-      query += ' AND status = ?';
+      query += ' AND gc.status = ?';
       params.push(status);
     }
     if (category) {
-      query += ' AND complaint_category = ?';
+      // complaint_type, not complaint_category
+      query += ' AND gc.complaint_type = ?';
       params.push(category);
     }
-    
-    query += ' ORDER BY priority ASC, created_at DESC LIMIT ? OFFSET ?';
+
+    // priority is ENUM('low','medium','high','urgent') — use FIELD for proper ordering
+    query += ' ORDER BY FIELD(gc.priority, "urgent", "high", "medium", "low") ASC, gc.created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
-    
+
     const [complaints] = await promisePool.query(query, params);
-    
+
     const [[{ total }]] = await promisePool.query(
       'SELECT COUNT(*) as total FROM gas_complaints'
     );
-    
+
     res.json({
       success: true,
       data: complaints,
@@ -244,7 +320,7 @@ router.get('/complaints', async (req, res) => {
         pages: Math.ceil(total / limit)
       }
     });
-    
+
   } catch (error) {
     console.error('Get complaints error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -255,35 +331,34 @@ router.get('/complaints', async (req, res) => {
 router.put('/complaints/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, resolution_notes, assigned_engineer } = req.body;
-    
+    const { status, resolution_notes, assigned_to } = req.body;
+
     const updateFields = ['status = ?'];
     const params = [status];
-    
+
     if (resolution_notes) {
       updateFields.push('resolution_notes = ?');
       params.push(resolution_notes);
     }
-    if (assigned_engineer) {
-      updateFields.push('assigned_engineer = ?');
-      params.push(assigned_engineer);
+    if (assigned_to) {
+      // assigned_to, not assigned_engineer
+      updateFields.push('assigned_to = ?');
+      params.push(assigned_to);
     }
     if (status === 'resolved') {
       updateFields.push('resolved_at = NOW()');
     }
-    if (status === 'closed') {
-      updateFields.push('closed_at = NOW()');
-    }
-    
+    // No closed_at column in gas_complaints
+
     params.push(id);
-    
+
     await promisePool.query(
       `UPDATE gas_complaints SET ${updateFields.join(', ')} WHERE id = ?`,
       params
     );
-    
+
     res.json({ success: true, message: 'Complaint updated successfully' });
-    
+
   } catch (error) {
     console.error('Update complaint error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -293,30 +368,33 @@ router.put('/complaints/:id/status', async (req, res) => {
 // Get all consumers
 router.get('/consumers', async (req, res) => {
   try {
-    const { status, gas_type, page = 1, limit = 20 } = req.query;
+    const { status, connection_type, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
-    
-    let query = 'SELECT * FROM gas_consumers WHERE 1=1';
+
+    // gas_customers, not gas_consumers
+    let query = 'SELECT * FROM gas_customers WHERE 1=1';
     const params = [];
-    
+
     if (status) {
       query += ' AND connection_status = ?';
       params.push(status);
     }
-    if (gas_type) {
-      query += ' AND gas_type = ?';
-      params.push(gas_type);
+    if (connection_type) {
+      // connection_type, not gas_type (no gas_type column)
+      query += ' AND connection_type = ?';
+      params.push(connection_type);
     }
-    
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+
+    // account_created_at, not created_at
+    query += ' ORDER BY account_created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
-    
+
     const [consumers] = await promisePool.query(query, params);
-    
+
     const [[{ total }]] = await promisePool.query(
-      'SELECT COUNT(*) as total FROM gas_consumers'
+      'SELECT COUNT(*) as total FROM gas_customers'
     );
-    
+
     res.json({
       success: true,
       data: consumers,
@@ -327,7 +405,7 @@ router.get('/consumers', async (req, res) => {
         pages: Math.ceil(total / limit)
       }
     });
-    
+
   } catch (error) {
     console.error('Get consumers error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -337,12 +415,13 @@ router.get('/consumers', async (req, res) => {
 // Get tariffs
 router.get('/tariffs', async (req, res) => {
   try {
+    // gas_tariff_rates (not gas_tariffs); no is_active or category columns
     const [tariffs] = await promisePool.query(
-      'SELECT * FROM gas_tariffs WHERE is_active = TRUE ORDER BY category'
+      'SELECT * FROM gas_tariff_rates ORDER BY state, city, cylinder_type'
     );
-    
+
     res.json({ success: true, data: tariffs });
-    
+
   } catch (error) {
     console.error('Get tariffs error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -354,26 +433,32 @@ router.put('/tariffs/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    
+
+    // Whitelist valid columns for gas_tariff_rates
+    const validColumns = ['state', 'city', 'cylinder_type', 'price_per_cylinder', 'base_price', 'subsidy_amount', 'effective_from', 'supplier'];
     const updateFields = [];
     const params = [];
-    
+
     for (const [key, value] of Object.entries(updates)) {
-      if (key !== 'id') {
+      if (validColumns.includes(key)) {
         updateFields.push(`${key} = ?`);
         params.push(value);
       }
     }
-    
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid fields to update' });
+    }
+
     params.push(id);
-    
+
     await promisePool.query(
-      `UPDATE gas_tariffs SET ${updateFields.join(', ')} WHERE id = ?`,
+      `UPDATE gas_tariff_rates SET ${updateFields.join(', ')} WHERE id = ?`,
       params
     );
-    
+
     res.json({ success: true, message: 'Tariff updated successfully' });
-    
+
   } catch (error) {
     console.error('Update tariff error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -385,22 +470,26 @@ router.get('/cylinder-bookings', async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
-    
-    let query = 'SELECT * FROM gas_cylinder_bookings WHERE 1=1';
+
+    // booking_status, not status; booking_date, not booked_at
+    let query = `SELECT cb.*, c.full_name, c.consumer_id, c.mobile
+                 FROM gas_cylinder_bookings cb
+                 LEFT JOIN gas_customers c ON cb.customer_id = c.id
+                 WHERE 1=1`;
     const params = [];
-    
+
     if (status) {
-      query += ' AND status = ?';
+      query += ' AND cb.booking_status = ?';
       params.push(status);
     }
-    
-    query += ' ORDER BY booked_at DESC LIMIT ? OFFSET ?';
+
+    query += ' ORDER BY cb.booking_date DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
-    
+
     const [bookings] = await promisePool.query(query, params);
-    
+
     res.json({ success: true, data: bookings });
-    
+
   } catch (error) {
     console.error('Get cylinder bookings error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -408,33 +497,31 @@ router.get('/cylinder-bookings', async (req, res) => {
 });
 
 // =====================================================
-// REGULATORY OPERATIONS - ADMIN ONLY (Not available on Kiosk)
+// REGULATORY OPERATIONS - ADMIN ONLY
 // =====================================================
 
-// De-duplication check - verify Aadhaar/LPG ID uniqueness
+// De-duplication check — verify Aadhaar uniqueness
 router.get('/regulatory/deduplication', async (req, res) => {
   try {
-    const { search } = req.query;
-    
-    // Get consumers grouped by aadhaar to find duplicates
+    // gas_customers not gas_consumers; account_created_at not created_at
     const [results] = await promisePool.query(`
       SELECT 
-        CONCAT('****', RIGHT(aadhaar_number, 4)) as masked_aadhaar,
+        CONCAT('****', RIGHT(aadhar_number, 4)) as masked_aadhaar,
         full_name,
         COUNT(*) as connection_count,
         CASE 
           WHEN COUNT(*) > 1 THEN 'flagged'
           ELSE 'clear'
         END as status,
-        MAX(created_at) as last_check_date
-      FROM gas_consumers
-      WHERE aadhaar_number IS NOT NULL
-      GROUP BY aadhaar_number
+        MAX(account_created_at) as last_check_date
+      FROM gas_customers
+      WHERE aadhar_number IS NOT NULL
+      GROUP BY aadhar_number
       HAVING COUNT(*) >= 1
       ORDER BY connection_count DESC
       LIMIT 50
     `);
-    
+
     res.json({ success: true, data: results });
   } catch (error) {
     console.error('De-duplication check error:', error);
@@ -445,19 +532,20 @@ router.get('/regulatory/deduplication', async (req, res) => {
 // PAHAL subsidy records
 router.get('/regulatory/pahal', async (req, res) => {
   try {
+    // gas_customers not gas_consumers; consumer_id not consumer_number
     const [results] = await promisePool.query(`
       SELECT 
-        c.consumer_number,
+        c.consumer_id,
         c.full_name,
         CONCAT(c.bank_name, ' ****', RIGHT(c.bank_account, 4)) as bank_info,
         CASE WHEN c.bank_verified = 1 THEN 'active' ELSE 'pending' END as pahal_status,
-        COALESCE((SELECT SUM(subsidy_amount) FROM gas_payments WHERE consumer_id = c.id), 0) as total_subsidy
-      FROM gas_consumers c
+        COALESCE((SELECT SUM(subsidy_amount) FROM gas_payments WHERE customer_id = c.id), 0) as total_subsidy
+      FROM gas_customers c
       WHERE c.connection_status = 'active'
-      ORDER BY c.created_at DESC
+      ORDER BY c.account_created_at DESC
       LIMIT 50
     `);
-    
+
     res.json({ success: true, data: results });
   } catch (error) {
     console.error('PAHAL records error:', error);
@@ -468,25 +556,27 @@ router.get('/regulatory/pahal', async (req, res) => {
 // DAC (15-day rule) validation
 router.get('/regulatory/dac', async (req, res) => {
   try {
+    // gas_customers not gas_consumers; consumer_id not consumer_number
+    // gas_cylinder_bookings: booking_date not booked_at; booking_status not status; customer_id not consumer_number
     const [results] = await promisePool.query(`
       SELECT 
-        c.consumer_number,
+        c.consumer_id,
         c.full_name,
-        cb.booked_at as last_refill_date,
-        DATEDIFF(NOW(), cb.booked_at) as days_elapsed,
-        CASE WHEN DATEDIFF(NOW(), cb.booked_at) >= 15 THEN 1 ELSE 0 END as can_book
-      FROM gas_consumers c
+        cb.booking_date as last_refill_date,
+        DATEDIFF(NOW(), cb.booking_date) as days_elapsed,
+        CASE WHEN DATEDIFF(NOW(), cb.booking_date) >= 15 THEN 1 ELSE 0 END as can_book
+      FROM gas_customers c
       LEFT JOIN (
-        SELECT consumer_number, MAX(booked_at) as booked_at
+        SELECT customer_id, MAX(booking_date) as booking_date
         FROM gas_cylinder_bookings
-        WHERE status IN ('delivered', 'booked', 'dispatched')
-        GROUP BY consumer_number
-      ) cb ON c.consumer_number = cb.consumer_number
+        WHERE booking_status IN ('delivered', 'placed', 'confirmed', 'dispatched')
+        GROUP BY customer_id
+      ) cb ON c.id = cb.customer_id
       WHERE c.connection_status = 'active'
-      ORDER BY cb.booked_at DESC
+      ORDER BY cb.booking_date DESC
       LIMIT 50
     `);
-    
+
     res.json({ success: true, data: results });
   } catch (error) {
     console.error('DAC check error:', error);
@@ -503,7 +593,7 @@ router.get('/regulatory/cylinder-testing', async (req, res) => {
       { cylinder_id: 'CYL-001', last_test: '2023-06-15', next_due: '2025-06-15', status: 'valid' },
       { cylinder_id: 'CYL-002', last_test: '2022-03-20', next_due: '2024-03-20', status: 'due' },
     ];
-    
+
     res.json({ success: true, data: results });
   } catch (error) {
     console.error('Cylinder testing error:', error);
@@ -514,23 +604,24 @@ router.get('/regulatory/cylinder-testing', async (req, res) => {
 // Inspection schedules
 router.get('/regulatory/inspections', async (req, res) => {
   try {
-    // Would query inspection_schedules table
+    // gas_applications: application_status not status; created_at not submitted_at; no consumer_number column
     const [results] = await promisePool.query(`
       SELECT 
-        a.consumer_number,
-        a.application_type as inspection_type,
-        a.submitted_at as scheduled_date,
-        CASE a.status 
-          WHEN 'completed' THEN 'completed'
-          WHEN 'site_inspection' THEN 'scheduled'
+        a.application_number,
+        a.full_name,
+        a.connection_type as inspection_type,
+        a.created_at as scheduled_date,
+        CASE a.application_status 
+          WHEN 'installed' THEN 'completed'
+          WHEN 'approved' THEN 'scheduled'
           ELSE 'pending'
         END as inspection_status
       FROM gas_applications a
-      WHERE a.status IN ('site_inspection', 'completed', 'approved')
-      ORDER BY a.submitted_at DESC
+      WHERE a.application_status IN ('approved', 'installed', 'under_review')
+      ORDER BY a.created_at DESC
       LIMIT 20
     `);
-    
+
     res.json({ success: true, data: results });
   } catch (error) {
     console.error('Inspections error:', error);
@@ -541,17 +632,18 @@ router.get('/regulatory/inspections', async (req, res) => {
 // Income eligibility stats (PMUY)
 router.get('/regulatory/income-eligibility', async (req, res) => {
   try {
+    // application_status, not status
     const [[stats]] = await promisePool.query(`
       SELECT 
-        COUNT(CASE WHEN connection_type = 'pmuy' AND status = 'approved' THEN 1 END) as pmuy_approved,
-        COUNT(CASE WHEN connection_type = 'pmuy' AND status = 'submitted' THEN 1 END) as pmuy_pending,
-        COUNT(CASE WHEN connection_type = 'pmuy' AND status = 'rejected' THEN 1 END) as pmuy_rejected
+        COUNT(CASE WHEN connection_type = 'pmuy' AND application_status = 'approved' THEN 1 END) as pmuy_approved,
+        COUNT(CASE WHEN connection_type = 'pmuy' AND application_status = 'submitted' THEN 1 END) as pmuy_pending,
+        COUNT(CASE WHEN connection_type = 'pmuy' AND application_status = 'rejected' THEN 1 END) as pmuy_rejected
       FROM gas_applications
       WHERE connection_type = 'pmuy'
     `);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: {
         approved: stats.pmuy_approved || 0,
         pending: stats.pmuy_pending || 0,
@@ -567,26 +659,99 @@ router.get('/regulatory/income-eligibility', async (req, res) => {
 // Insurance summary
 router.get('/regulatory/insurance', async (req, res) => {
   try {
+    // gas_customers not gas_consumers
     const [[stats]] = await promisePool.query(`
       SELECT 
         COUNT(*) as total_consumers,
         COUNT(CASE WHEN connection_status = 'active' THEN 1 END) as active_coverage
-      FROM gas_consumers
+      FROM gas_customers
     `);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: {
         death_coverage: 200000,
         property_coverage: 50000,
         total_consumers: stats.total_consumers || 0,
-        active_coverage_percent: stats.total_consumers ? 
+        active_coverage_percent: stats.total_consumers ?
           Math.round((stats.active_coverage / stats.total_consumers) * 100) : 0
       }
     });
   } catch (error) {
     console.error('Insurance stats error:', error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// =====================================================
+// CYLINDER BOOKING STATUS UPDATE
+// =====================================================
+
+router.put('/cylinder-bookings/:id/status', verifyGasAdminToken, async (req, res) => {
+  try {
+    const { status, notes } = req.body;
+    const validStatuses = ['placed', 'confirmed', 'dispatched', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    await promisePool.query(
+      'UPDATE gas_cylinder_bookings SET booking_status = ? WHERE id = ?',
+      [status, req.params.id]
+    );
+    res.json({ success: true, message: 'Booking status updated' });
+  } catch (error) {
+    console.error('Update booking status error:', error);
+    res.status(500).json({ error: 'Failed to update booking status' });
+  }
+});
+
+// =====================================================
+// CREATE TARIFF
+// =====================================================
+
+router.post('/tariffs', verifyGasAdminToken, async (req, res) => {
+  try {
+    const { state, city, cylinder_type, price_per_cylinder, base_price, subsidy_amount, effective_from, supplier } = req.body;
+    const [result] = await promisePool.query(
+      'INSERT INTO gas_tariff_rates (state, city, cylinder_type, price_per_cylinder, base_price, subsidy_amount, effective_from, supplier) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [state || 'Maharashtra', city || 'Mumbai', cylinder_type || '14kg', price_per_cylinder, base_price || 0, subsidy_amount || 0, effective_from || new Date(), supplier || '']
+    );
+    res.status(201).json({ success: true, message: 'Tariff created', id: result.insertId });
+  } catch (error) {
+    console.error('Create gas tariff error:', error);
+    res.status(500).json({ error: 'Failed to create tariff' });
+  }
+});
+
+// =====================================================
+// SETTINGS
+// =====================================================
+
+router.get('/settings', verifyGasAdminToken, async (req, res) => {
+  try {
+    const [rows] = await promisePool.query("SELECT setting_key, setting_value FROM settings WHERE category = 'gas' OR category = 'general'");
+    res.json({ settings: rows });
+  } catch (error) {
+    console.error('Get gas settings error:', error);
+    res.json({ settings: [] });
+  }
+});
+
+router.put('/settings', verifyGasAdminToken, async (req, res) => {
+  try {
+    const { settings } = req.body;
+    for (const [key, value] of Object.entries(settings)) {
+      const strVal = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      const settingType = typeof value === 'boolean' ? 'boolean' : typeof value === 'number' ? 'number' : 'string';
+      await promisePool.query(
+        "INSERT INTO settings (setting_key, setting_value, setting_type, category) VALUES (?, ?, ?, 'gas') ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = NOW()",
+        [key, strVal, settingType, strVal]
+      );
+    }
+    res.json({ success: true, message: 'Settings saved' });
+  } catch (error) {
+    console.error('Save gas settings error:', error);
+    res.status(500).json({ error: 'Failed to save settings' });
   }
 });
 

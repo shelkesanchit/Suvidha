@@ -14,6 +14,7 @@ import ManageUsers from './pages/ManageUsers';
 import Reports from './pages/Reports';
 import SystemSettings from './pages/SystemSettings';
 import TariffManagement from './pages/TariffManagement';
+import MeterReadingManagement from './pages/MeterReadingManagement';
 
 // Create theme
 const theme = createTheme({
@@ -90,6 +91,7 @@ function AppRoutes() {
         <Route path="applications" element={<ManageApplications />} />
         <Route path="complaints" element={<ManageComplaints />} />
         <Route path="users" element={<ManageUsers />} />
+        <Route path="meter-readings" element={<MeterReadingManagement />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<SystemSettings />} />
         <Route path="tariff" element={<TariffManagement />} />

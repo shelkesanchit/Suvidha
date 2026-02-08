@@ -19,39 +19,46 @@ router.post('/submit', async (req, res) => {
     );
     const complaintNumber = `WCP${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
     
-    // Check if consumer exists
-    let consumerId = null;
-    if (complaint_data.consumer_number) {
-      const [consumers] = await promisePool.query(
-        'SELECT id FROM water_consumers WHERE consumer_number = ?',
-        [complaint_data.consumer_number]
+    // Look up customer by consumer_id or consumer_number
+    let customerId = null;
+    const lookupId = complaint_data.consumer_id || complaint_data.consumer_number;
+    if (lookupId) {
+      const [customers] = await promisePool.query(
+        'SELECT id FROM water_customers WHERE consumer_id = ? OR id = ?',
+        [lookupId, lookupId]
       );
-      if (consumers.length > 0) {
-        consumerId = consumers[0].id;
+      if (customers.length > 0) {
+        customerId = customers[0].id;
       }
     }
     
-    // Insert complaint
+    // Map urgency to priority enum
+    let priority = 'medium';
+    if (complaint_data.urgency === 'critical') {
+      priority = 'urgent';
+    } else if (complaint_data.urgency === 'high') {
+      priority = 'high';
+    } else if (complaint_data.urgency === 'low') {
+      priority = 'low';
+    }
+    // Also accept direct priority value
+    if (complaint_data.priority) {
+      priority = complaint_data.priority;
+    }
+    
+    // Insert complaint using actual water_complaints columns
     const [result] = await promisePool.query(
       `INSERT INTO water_complaints 
-      (complaint_number, consumer_number, consumer_id, contact_name, mobile, email,
-       address, ward, landmark, complaint_category, description, urgency, status, priority) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (complaint_number, customer_id, complaint_type, description, attachment_url, status, priority) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         complaintNumber,
-        complaint_data.consumer_number || null,
-        consumerId,
-        complaint_data.contact_name,
-        complaint_data.mobile,
-        complaint_data.email || null,
-        complaint_data.address || null,
-        complaint_data.ward || null,
-        complaint_data.landmark || null,
-        complaint_data.complaint_category,
+        customerId,
+        complaint_data.complaint_category || complaint_data.complaint_type || 'other',
         complaint_data.description,
-        complaint_data.urgency || 'medium',
+        complaint_data.attachment_url || null,
         'open',
-        complaint_data.urgency === 'critical' ? 1 : (complaint_data.urgency === 'high' ? 3 : 5)
+        priority
       ]
     );
     
@@ -76,12 +83,13 @@ router.get('/track/:complaintNumber', async (req, res) => {
     const { complaintNumber } = req.params;
     
     const [complaints] = await promisePool.query(
-      `SELECT complaint_number, consumer_number, contact_name, mobile, email,
-              address, ward, landmark, complaint_category,
-              description, urgency, status, assigned_engineer, resolution_notes,
-              created_at, resolved_at, closed_at
-       FROM water_complaints 
-       WHERE complaint_number = ?`,
+      `SELECT c.complaint_number, c.customer_id, wc.consumer_id, wc.full_name, wc.mobile, wc.email,
+              c.complaint_type, c.description, c.attachment_url,
+              c.status, c.priority, c.assigned_to, c.resolution_notes,
+              c.created_at, c.resolved_at
+       FROM water_complaints c
+       LEFT JOIN water_customers wc ON c.customer_id = wc.id
+       WHERE c.complaint_number = ?`,
       [complaintNumber]
     );
     
@@ -97,18 +105,26 @@ router.get('/track/:complaintNumber', async (req, res) => {
   }
 });
 
-// Get user's complaints by mobile
-router.get('/my-complaints/:mobile', async (req, res) => {
+// Get user's complaints by consumer_id or customer internal id
+router.get('/my-complaints/:consumerId', async (req, res) => {
   try {
-    const { mobile } = req.params;
+    const { consumerId } = req.params;
+    
+    // Look up the internal id from consumer_id
+    const [customers] = await promisePool.query(
+      'SELECT id FROM water_customers WHERE consumer_id = ? OR id = ?',
+      [consumerId, consumerId]
+    );
+    
+    const customerId = customers.length > 0 ? customers[0].id : consumerId;
     
     const [complaints] = await promisePool.query(
-      `SELECT id, complaint_number, complaint_category, status, urgency, 
+      `SELECT id, complaint_number, complaint_type, status, priority, 
               created_at, resolved_at
        FROM water_complaints 
-       WHERE mobile = ?
+       WHERE customer_id = ?
        ORDER BY created_at DESC`,
-      [mobile]
+      [customerId]
     );
     
     res.json({ success: true, data: complaints });

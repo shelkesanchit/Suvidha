@@ -3,28 +3,28 @@ const { promisePool } = require('../../config/database');
 // Get consumer accounts
 const getConsumerAccounts = async (req, res) => {
   try {
-    const { status, category, page = 1, limit = 50 } = req.query;
+    const { status, connection_type, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT ca.*, u.full_name, u.email, u.phone
-      FROM consumer_accounts ca
-      JOIN users u ON ca.user_id = u.id
+      SELECT id, consumer_id, full_name, mobile, email, state, city, pincode, address,
+             connection_status, connection_type, connection_date, meter_number, is_verified, account_created_at
+      FROM electricity_customers
       WHERE 1=1
     `;
     const params = [];
 
     if (status) {
-      query += ' AND ca.connection_status = ?';
+      query += ' AND connection_status = ?';
       params.push(status);
     }
 
-    if (category) {
-      query += ' AND ca.category = ?';
-      params.push(category);
+    if (connection_type) {
+      query += ' AND connection_type = ?';
+      params.push(connection_type);
     }
 
-    query += ' ORDER BY ca.created_at DESC LIMIT ? OFFSET ?';
+    query += ' ORDER BY account_created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
 
     const [consumers] = await promisePool.query(query, params);

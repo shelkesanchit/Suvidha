@@ -59,7 +59,9 @@ const AdminOverview = () => {
     try {
       setRefreshing(true);
       const response = await api.get('/admin/dashboard/stats');
-      setStats(response.data);
+      // Handle the new response format {success: true, data: {...}}
+      const statsData = response.data.data || response.data;
+      setStats(statsData);
       if (showToast) {
         toast.success('Dashboard refreshed');
       }

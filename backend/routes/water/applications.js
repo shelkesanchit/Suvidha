@@ -123,13 +123,15 @@ router.get('/track/:applicationNumber', async (req, res) => {
     const { applicationNumber } = req.params;
     
     const [applications] = await promisePool.query(
-      `SELECT application_number, application_type, full_name, mobile, email, ward,
-              property_type, house_flat_no, address, landmark, status, 
-              current_stage, stage_history, submitted_at, processed_at, completed_at,
-              pipe_size_requested, connection_type_requested, total_fee, fee_paid,
-              assigned_engineer, remarks, rejection_reason
-       FROM water_applications 
-       WHERE application_number = ?`,
+      `SELECT a.application_number, a.application_type, a.full_name, a.mobile, a.email, a.ward,
+              a.property_type, a.house_flat_no, a.address, a.landmark, a.status, 
+              a.current_stage, a.stage_history, a.submitted_at, a.processed_at, a.completed_at,
+              a.pipe_size_requested, a.connection_type_requested, a.total_fee, a.fee_paid,
+              a.assigned_engineer, a.remarks, a.rejection_reason,
+              c.id as consumer_id, c.meter_number, c.connection_status
+       FROM water_applications a
+       LEFT JOIN water_customers c ON c.full_name COLLATE utf8mb4_unicode_ci = a.full_name COLLATE utf8mb4_unicode_ci AND c.mobile COLLATE utf8mb4_unicode_ci = a.mobile COLLATE utf8mb4_unicode_ci
+       WHERE a.application_number = ?`,
       [applicationNumber]
     );
     

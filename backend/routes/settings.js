@@ -7,14 +7,15 @@ const { verifyToken, isAdmin } = require('../middleware/auth');
 router.get('/', async (req, res) => {
   try {
     const [settings] = await promisePool.query(
-      'SELECT setting_key, setting_value, description FROM system_settings ORDER BY setting_key'
+      'SELECT setting_key, setting_value, setting_type, category FROM settings ORDER BY setting_key'
     );
 
     const settingsMap = {};
     settings.forEach(s => {
       settingsMap[s.setting_key] = {
         value: s.setting_value,
-        description: s.description
+        type: s.setting_type,
+        category: s.category
       };
     });
 
@@ -29,7 +30,7 @@ router.get('/', async (req, res) => {
 router.get('/:key', async (req, res) => {
   try {
     const [settings] = await promisePool.query(
-      'SELECT setting_value FROM system_settings WHERE setting_key = ?',
+      'SELECT setting_value FROM settings WHERE setting_key = ?',
       [req.params.key]
     );
 
@@ -50,8 +51,8 @@ router.put('/:key', verifyToken, isAdmin, async (req, res) => {
     const { value } = req.body;
 
     const [result] = await promisePool.query(
-      'UPDATE system_settings SET setting_value = ?, updated_by = ? WHERE setting_key = ?',
-      [value, req.user.id, req.params.key]
+      'UPDATE settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = ?',
+      [value, req.params.key]
     );
 
     if (result.affectedRows === 0) {
@@ -70,7 +71,7 @@ router.get('/tariffs/all', async (req, res) => {
   try {
     const [settings] = await promisePool.query(
       `SELECT setting_key, setting_value 
-       FROM system_settings 
+       FROM settings 
        WHERE setting_key LIKE 'tariff_%' 
        ORDER BY setting_key`
     );
@@ -84,6 +85,36 @@ router.get('/tariffs/all', async (req, res) => {
   } catch (error) {
     console.error('Get tariffs error:', error);
     res.status(500).json({ error: 'Failed to fetch tariffs' });
+  }
+});
+
+// Create tariff (POST) - for electricity admin TariffManagement
+router.post('/tariff', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { state, city, category, slab_from, slab_to, rate_per_unit, fixed_charge, tax_percentage, effective_from } = req.body;
+    const [result] = await promisePool.query(
+      'INSERT INTO electricity_tariff_rates (state, city, category, slab_from, slab_to, rate_per_unit, fixed_charge, tax_percentage, effective_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [state || 'Maharashtra', city || 'Mumbai', category || 'domestic', slab_from || 0, slab_to || 0, rate_per_unit, fixed_charge || 0, tax_percentage || 0, effective_from || new Date()]
+    );
+    res.status(201).json({ success: true, message: 'Tariff created', id: result.insertId });
+  } catch (error) {
+    console.error('Create electricity tariff error:', error);
+    res.status(500).json({ error: 'Failed to create tariff' });
+  }
+});
+
+// Update tariff by ID (PUT) - for electricity admin TariffManagement
+router.put('/tariff/:id', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { state, city, category, slab_from, slab_to, rate_per_unit, fixed_charge, tax_percentage, effective_from } = req.body;
+    await promisePool.query(
+      'UPDATE electricity_tariff_rates SET state=?, city=?, category=?, slab_from=?, slab_to=?, rate_per_unit=?, fixed_charge=?, tax_percentage=?, effective_from=? WHERE id=?',
+      [state, city, category, slab_from, slab_to, rate_per_unit, fixed_charge, tax_percentage, effective_from, req.params.id]
+    );
+    res.json({ success: true, message: 'Tariff updated' });
+  } catch (error) {
+    console.error('Update electricity tariff error:', error);
+    res.status(500).json({ error: 'Failed to update tariff' });
   }
 });
 

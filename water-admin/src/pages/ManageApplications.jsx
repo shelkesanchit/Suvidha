@@ -98,8 +98,9 @@ const ManageApplications = () => {
 
   const handleUpdateStatus = async () => {
     try {
-      await api.put(`/water/admin/applications/${selectedApp.id}`, actionData);
-      toast.success('Application updated successfully');
+      const response = await api.put(`/water/admin/applications/${selectedApp.id}`, actionData);
+      const msg = response.data?.message || 'Application updated successfully';
+      toast.success(msg);
       setDialogOpen(false);
       fetchApplications();
     } catch (error) {

@@ -151,11 +151,12 @@ const ManageApplications = () => {
   const handleStatusUpdate = async (appId, newStatus, remarks = '') => {
     try {
       setProcessing(true);
-      await api.put(`/api/gas/admin/applications/${appId}/status`, {
+      const response = await api.put(`/api/gas/admin/applications/${appId}/status`, {
         status: newStatus,
         remarks,
       });
-      toast.success(`Application ${newStatus} successfully`);
+      const msg = response.data?.message || `Application ${newStatus} successfully`;
+      toast.success(msg);
       fetchApplications();
       setDetailsOpen(false);
     } catch (error) {
@@ -169,10 +170,10 @@ const ManageApplications = () => {
     { field: 'application_number', headerName: 'App No.', width: 150 },
     { field: 'full_name', headerName: 'Applicant', width: 180 },
     { field: 'mobile', headerName: 'Mobile', width: 130 },
-    { field: 'application_type', headerName: 'Type', width: 120 },
-    { field: 'gas_type', headerName: 'Gas Type', width: 100 },
+    { field: 'connection_type', headerName: 'Type', width: 120 },
+    { field: 'cylinder_type', headerName: 'Cylinder', width: 100 },
     {
-      field: 'status',
+      field: 'application_status',
       headerName: 'Status',
       width: 130,
       renderCell: (params) => (
@@ -180,15 +181,15 @@ const ManageApplications = () => {
           label={params.value?.replace(/_/g, ' ')}
           size="small"
           color={
-            params.value === 'approved' || params.value === 'completed' ? 'success' :
+            params.value === 'approved' || params.value === 'completed' || params.value === 'installed' ? 'success' :
             params.value === 'rejected' ? 'error' :
-            params.value === 'submitted' || params.value === 'pending' ? 'warning' : 'default'
+            params.value === 'submitted' || params.value === 'under_review' ? 'warning' : 'default'
           }
         />
       ),
     },
     {
-      field: 'submitted_at',
+      field: 'created_at',
       headerName: 'Applied On',
       width: 120,
       valueFormatter: (params) => {
@@ -210,7 +211,7 @@ const ManageApplications = () => {
               <Visibility />
             </IconButton>
           </Tooltip>
-          {params.row.status === 'pending' && (
+          {(params.row.application_status === 'submitted' || params.row.application_status === 'under_review') && (
             <>
               <Tooltip title="Approve">
                 <IconButton
@@ -273,10 +274,11 @@ const ManageApplications = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <MenuItem value="all">All Status</MenuItem>
-                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="submitted">Submitted</MenuItem>
+                <MenuItem value="under_review">Under Review</MenuItem>
                 <MenuItem value="approved">Approved</MenuItem>
                 <MenuItem value="rejected">Rejected</MenuItem>
-                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="installed">Installed</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -333,7 +335,7 @@ const ManageApplications = () => {
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="subtitle2" color="text.secondary">Status</Typography>
-                    <Chip label={selectedApp.status?.replace(/_/g, ' ')} color={selectedApp.status === 'approved' ? 'success' : selectedApp.status === 'rejected' ? 'error' : 'warning'} />
+                    <Chip label={(selectedApp.application_status || selectedApp.status)?.replace(/_/g, ' ')} color={(selectedApp.application_status || selectedApp.status) === 'approved' ? 'success' : (selectedApp.application_status || selectedApp.status) === 'rejected' ? 'error' : 'warning'} />
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="subtitle2" color="text.secondary">Applicant Name</Typography>
@@ -349,7 +351,7 @@ const ManageApplications = () => {
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="subtitle2" color="text.secondary">Gas Type</Typography>
-                    <Typography variant="body1" gutterBottom>{selectedApp.gas_type?.toUpperCase()}</Typography>
+                    <Typography variant="body1" gutterBottom>{(selectedApp.cylinder_type || selectedApp.gas_type || 'N/A')?.toUpperCase()}</Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="subtitle2" color="text.secondary">Property Type</Typography>
@@ -543,7 +545,7 @@ const ManageApplications = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailsOpen(false)}>Close</Button>
-          {(selectedApp?.status === 'pending' || selectedApp?.status === 'submitted') && (
+          {(selectedApp?.application_status === 'submitted' || selectedApp?.application_status === 'under_review') && (
             <>
               <Button
                 onClick={() => handleStatusUpdate(selectedApp.id, 'approved')}

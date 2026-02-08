@@ -145,7 +145,7 @@ const GasTrackingForm = ({ onClose, gasType = 'lpg' }) => {
 
   const renderApplicationTracking = () => {
     if (!trackingData) return null;
-    const stageHistory = trackingData.stage_history || [];
+    const status = trackingData.application_status || trackingData.status;
 
     return (
       <Box sx={{ mt: 3 }}>
@@ -158,9 +158,9 @@ const GasTrackingForm = ({ onClose, gasType = 'lpg' }) => {
             <Grid item xs={12} sm={6}>
               <Typography variant="body2" color="text.secondary">Status</Typography>
               <Chip 
-                label={trackingData.status?.replace(/_/g, ' ').toUpperCase()} 
-                color={getStatusColor(trackingData.status)}
-                icon={getStatusIcon(trackingData.status)}
+                label={status?.replace(/_/g, ' ').toUpperCase()} 
+                color={getStatusColor(status)}
+                icon={getStatusIcon(status)}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -169,35 +169,40 @@ const GasTrackingForm = ({ onClose, gasType = 'lpg' }) => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <Typography variant="body2" color="text.secondary">Connection Type</Typography>
-              <Typography fontWeight="bold">{trackingData.connection_type || trackingData.gas_type?.toUpperCase()}</Typography>
+              <Typography fontWeight="bold">{trackingData.connection_type?.replace(/_/g, ' ').toUpperCase()}</Typography>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Application Type</Typography>
-              <Typography fontWeight="bold">{trackingData.application_type?.replace(/_/g, ' ')}</Typography>
+              <Typography variant="body2" color="text.secondary">Cylinder Type</Typography>
+              <Typography fontWeight="bold">{trackingData.cylinder_type?.toUpperCase() || 'N/A'}</Typography>
             </Grid>
             <Grid item xs={12} sm={6}>
               <Typography variant="body2" color="text.secondary">Submitted Date</Typography>
-              <Typography fontWeight="bold">{new Date(trackingData.submitted_at).toLocaleDateString()}</Typography>
+              <Typography fontWeight="bold">{new Date(trackingData.created_at).toLocaleDateString()}</Typography>
             </Grid>
+            {trackingData.consumer_id && (
+              <Grid item xs={12}>
+                <Alert severity="success" sx={{ mt: 1 }}>
+                  <Typography variant="body2">
+                    <strong>Consumer ID:</strong> {trackingData.consumer_id}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Use this Consumer ID for bill payments and future services
+                  </Typography>
+                </Alert>
+              </Grid>
+            )}
           </Grid>
         </Paper>
 
-        <Typography variant="h6" gutterBottom>Application Progress</Typography>
-        <Stepper orientation="vertical" activeStep={stageHistory.length - 1}>
-          {stageHistory.map((stage, index) => (
-            <Step key={index} completed>
-              <StepLabel><Typography fontWeight="bold">{stage.stage}</Typography></StepLabel>
-              <StepContent>
-                <Typography variant="body2" color="text.secondary">{new Date(stage.timestamp).toLocaleString()}</Typography>
-                {stage.remarks && <Typography variant="body2">{stage.remarks}</Typography>}
-              </StepContent>
-            </Step>
-          ))}
-        </Stepper>
+        {trackingData.distributor_name && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2"><strong>Distributor:</strong> {trackingData.distributor_name}</Typography>
+          </Alert>
+        )}
 
-        {trackingData.remarks && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            <Typography variant="body2"><strong>Remarks:</strong> {trackingData.remarks}</Typography>
+        {status === 'approved' && !trackingData.consumer_id && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2">Your application has been approved. Consumer ID will be assigned shortly.</Typography>
           </Alert>
         )}
       </Box>
@@ -260,7 +265,7 @@ const GasTrackingForm = ({ onClose, gasType = 'lpg' }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           {isPNG ? '🔵 Track PNG Application / Complaint' : '🔥 Track LPG Application / Complaint'}
         </Typography>
         <Typography variant="body2" sx={{ opacity: 0.9 }}>OTP-based verification</Typography>

@@ -333,7 +333,7 @@ const SolarRooftopForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           Solar Rooftop Installation Application
         </Typography>
         <Typography variant="caption" color="text.secondary">

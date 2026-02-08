@@ -12,19 +12,19 @@ router.post('/process', async (req, res) => {
   try {
     await connection.beginTransaction();
     
-    const { consumer_number, bill_number, amount, payment_method, mobile } = req.body;
+    const { consumer_id, bill_number, amount, payment_method } = req.body;
     
     // Generate transaction ID
     const transactionId = `WTR${Date.now()}`;
     const receiptNumber = `WRCP${new Date().getFullYear()}${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`;
     
-    // Get consumer
-    const [consumers] = await connection.query(
-      'SELECT id FROM water_consumers WHERE consumer_number = ?',
-      [consumer_number]
+    // Get customer by consumer_id
+    const [customers] = await connection.query(
+      'SELECT id FROM water_customers WHERE consumer_id = ?',
+      [consumer_id]
     );
     
-    const consumerId = consumers.length > 0 ? consumers[0].id : null;
+    const customerId = customers.length > 0 ? customers[0].id : null;
     
     // Get bill if exists
     let billId = null;
@@ -36,45 +36,37 @@ router.post('/process', async (req, res) => {
       billId = bills.length > 0 ? bills[0].id : null;
     }
     
-    // Insert payment record
+    // Map payment_method to valid enum ('cash','cheque','online','bank_transfer')
+    const methodMap = {
+      'cash': 'cash', 'cheque': 'cheque', 'online': 'online',
+      'upi': 'online', 'card': 'online', 'netbanking': 'bank_transfer',
+      'bank_transfer': 'bank_transfer', 'wallet': 'online', 'neft': 'bank_transfer'
+    };
+    const validMethod = methodMap[payment_method] || 'online';
+    
+    // Insert payment record using actual water_payments columns
     const [result] = await connection.query(
       `INSERT INTO water_payments 
-      (transaction_id, consumer_id, consumer_number, bill_id, bill_number, amount,
-       payment_method, status, receipt_number, receipt_generated, completed_at) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      (bill_id, customer_id, payment_date, payment_method, amount, transaction_id, payment_status, receipt_number) 
+      VALUES (?, ?, NOW(), ?, ?, ?, ?, ?)`,
       [
-        transactionId,
-        consumerId,
-        consumer_number,
         billId,
-        bill_number || null,
+        customerId,
+        validMethod,
         amount,
-        payment_method,
+        transactionId,
         'success',
-        receiptNumber,
-        true
+        receiptNumber
       ]
     );
     
-    // Update bill status if exists
+    // Update bill status if exists (using actual water_bills columns)
     if (billId) {
       await connection.query(
         `UPDATE water_bills 
-         SET payment_status = 'paid', status = 'paid', amount_paid = ?, paid_at = NOW()
+         SET bill_status = 'paid', paid_amount = ?, paid_date = CURDATE()
          WHERE id = ?`,
         [amount, billId]
-      );
-    }
-    
-    // Update consumer outstanding amount
-    if (consumerId) {
-      await connection.query(
-        `UPDATE water_consumers 
-         SET outstanding_amount = GREATEST(0, outstanding_amount - ?),
-             last_payment_date = CURDATE(),
-             last_payment_amount = ?
-         WHERE id = ?`,
-        [amount, amount, consumerId]
       );
     }
     
@@ -88,7 +80,7 @@ router.post('/process', async (req, res) => {
         receipt_number: receiptNumber,
         amount: amount,
         payment_method: payment_method,
-        consumer_number: consumer_number
+        consumer_id: consumer_id
       }
     });
     
@@ -102,18 +94,26 @@ router.post('/process', async (req, res) => {
 });
 
 // Get payment history
-router.get('/history/:consumerNumber', async (req, res) => {
+router.get('/history/:consumerId', async (req, res) => {
   try {
-    const { consumerNumber } = req.params;
+    const { consumerId } = req.params;
+    
+    // Look up customer internal id
+    const [customers] = await promisePool.query(
+      'SELECT id FROM water_customers WHERE consumer_id = ? OR id = ?',
+      [consumerId, consumerId]
+    );
+    
+    const customerId = customers.length > 0 ? customers[0].id : consumerId;
     
     const [payments] = await promisePool.query(
-      `SELECT transaction_id, bill_number, amount, payment_method, status,
-              receipt_number, completed_at
+      `SELECT transaction_id, bill_id, amount, payment_method, payment_status,
+              receipt_number, payment_date
        FROM water_payments 
-       WHERE consumer_number = ?
-       ORDER BY completed_at DESC
+       WHERE customer_id = ?
+       ORDER BY payment_date DESC
        LIMIT 20`,
-      [consumerNumber]
+      [customerId]
     );
     
     res.json({ success: true, data: payments });

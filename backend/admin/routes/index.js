@@ -8,6 +8,7 @@ const complaintController = require('../controllers/complaintController');
 const userController = require('../controllers/userController');
 const consumerController = require('../controllers/consumerController');
 const reportController = require('../controllers/reportController');
+const meterReadingController = require('../controllers/meterReadingController');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -52,12 +53,10 @@ router.put('/applications/:id',
   verifyToken, 
   isAdminOrStaff, 
   [
-    body('status').isIn([
-      'submitted', 'under_review', 'document_verification', 'site_inspection', 
-      'approval_pending', 'approved', 'rejected', 'work_in_progress', 'completed'
+    body('application_status').isIn([
+      'submitted', 'under_review', 'approved', 'rejected', 'completed'
     ]),
-    body('remarks').optional(),
-    body('current_stage').optional()
+    body('remarks').optional()
   ],
   (req, res, next) => {
     const errors = validationResult(req);
@@ -122,7 +121,21 @@ router.patch('/users/:id/toggle-status', verifyToken, isAdmin, userController.to
 // Consumer Routes
 router.get('/consumers', verifyToken, isAdminOrStaff, consumerController.getConsumerAccounts);
 
+// Meter Reading Routes
+router.get('/customers', verifyToken, isAdminOrStaff, meterReadingController.getAllCustomers);
+router.post('/meter-readings/submit', verifyToken, isAdminOrStaff, meterReadingController.submitMeterReading);
+router.post('/meter-readings/bulk-submit', verifyToken, isAdminOrStaff, meterReadingController.submitBulkMeterReadings);
+router.get('/meter-readings/history/:customerId', verifyToken, isAdminOrStaff, meterReadingController.getMeterReadingHistory);
+
 // Report Routes
 router.get('/reports/payments', verifyToken, isAdminOrStaff, reportController.getPaymentReports);
+router.get('/reports/applications', verifyToken, isAdminOrStaff, reportController.getApplicationReports);
+router.get('/reports/complaints', verifyToken, isAdminOrStaff, reportController.getComplaintReports);
+router.get('/reports/revenue', verifyToken, isAdminOrStaff, reportController.getRevenueReports);
+
+// General report route handler
+router.get('/reports/:reportType', verifyToken, isAdminOrStaff, (req, res) => {
+  res.status(404).json({ error: `Report type '${req.params.reportType}' not found` });
+});
 
 module.exports = router;

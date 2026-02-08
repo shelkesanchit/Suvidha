@@ -162,3 +162,13 @@ eslint==8.55.0           # Linting (devDep)
 #   Password: admin123
 #
 # ====================
+cd d:\Downloads\Suvidha-main\Suvidha\backend
+npm start
+cd d:\Downloads\Suvidha-main\Suvidha\frontend
+npm run dev
+cd d:\Downloads\Suvidha-main\Suvidha\admin
+npm run dev
+cd d:\Downloads\Suvidha-main\Suvidha\gas-admin
+npm run dev
+cd d:\Downloads\Suvidha-main\Suvidha\water-admin
+npm run dev

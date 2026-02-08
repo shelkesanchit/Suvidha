@@ -180,7 +180,7 @@ const LoginPage = () => {
               Demo Credentials:
             </Typography>
             <Typography variant="body2">
-              Username: <strong>gas_admin</strong> | Password: <strong>GasAdmin@123</strong>
+              Username: <strong>gas_admin@suvidha.gov.in</strong> | Password: <strong>admin123</strong>
             </Typography>
           </Box>
         </Paper>

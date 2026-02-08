@@ -3,6 +3,99 @@ const router = express.Router();
 const { promisePool } = require('../config/database');
 const { verifyToken } = require('../middleware/auth');
 
+// Get electricity bills by customer ID (public endpoint - no auth required)
+router.get('/electricity/:customerId', async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    // Get customer from electricity_customers table
+    const [customers] = await promisePool.query(
+      `SELECT id, consumer_id, full_name, email, mobile, address, city, state, pincode
+       FROM electricity_customers
+       WHERE id = ? OR consumer_id = ?`,
+      [customerId, customerId]
+    );
+
+    if (customers.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: `No customer found with ID: ${customerId}. Please check and try again.`,
+        data: { bills: [] }
+      });
+    }
+
+    const customer = customers[0];
+
+    // Get bills for this customer (only actual bills created by admin)
+    const [bills] = await promisePool.query(
+      `SELECT id, bill_number, meter_number, bill_month, bill_year,
+              billing_period_start, billing_period_end, units_consumed,
+              consumption_charges, fixed_charges, tax_amount, total_amount,
+              bill_status, issue_date, due_date, paid_date, paid_amount
+       FROM electricity_bills
+       WHERE customer_id = ?
+       ORDER BY bill_year DESC, bill_month DESC`,
+      [customer.id]
+    );
+
+    if (bills.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          consumer_number: customer.consumer_id,
+          consumer_name: customer.full_name,
+          email: customer.email,
+          mobile: customer.mobile,
+          address: customer.address,
+          city: customer.city,
+          state: customer.state,
+          pincode: customer.pincode,
+          bills: [],
+          message: 'No bills created yet. Admin will create bills after meter installation and reading.'
+        }
+      });
+    }
+
+    // Format response
+    const formattedBills = bills.map(bill => ({
+      bill_number: bill.bill_number || `ELE-${bill.bill_year}-${bill.bill_month}`,
+      billing_period: `${bill.bill_month}/${bill.bill_year}`,
+      billing_date: bill.issue_date,
+      due_date: bill.due_date,
+      consumption_units: parseFloat(bill.units_consumed) || 0,
+      energy_charges: parseFloat(bill.consumption_charges) || 0,
+      fixed_charges: parseFloat(bill.fixed_charges) || 0,
+      taxes: parseFloat(bill.tax_amount) || 0,
+      total_amount: parseFloat(bill.total_amount) || 0,
+      status: bill.bill_status === 'paid' ? 'Paid' : 'Unpaid',
+      paid_date: bill.paid_date,
+      paid_amount: parseFloat(bill.paid_amount) || 0
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        consumer_number: customer.consumer_id,
+        consumer_name: customer.full_name,
+        email: customer.email,
+        mobile: customer.mobile,
+        address: customer.address,
+        city: customer.city,
+        state: customer.state,
+        pincode: customer.pincode,
+        bills: formattedBills
+      }
+    });
+  } catch (error) {
+    console.error('Get electricity bills error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch bills',
+      data: { bills: [] }
+    });
+  }
+});
+
 // Get all bills for a consumer
 router.get('/consumer/:consumerNumber', verifyToken, async (req, res) => {
   try {

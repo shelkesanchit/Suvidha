@@ -119,7 +119,7 @@ const WaterComplaintForm = ({ onClose }) => {
     return (
       <Box>
         <DialogTitle sx={{ bgcolor: '#f44336', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
+          <Typography component="span" variant="body1" fontWeight={600}>
             🔧 Water Complaint
           </Typography>
         </DialogTitle>
@@ -168,7 +168,7 @@ const WaterComplaintForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: '#f44336', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           🔧 Register Water Complaint / शिकायत दर्ज करें
         </Typography>
       </DialogTitle>

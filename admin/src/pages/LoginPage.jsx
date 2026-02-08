@@ -101,11 +101,11 @@ const LoginPage = () => {
               Sign In to Admin Panel
             </Button>
 
-            <Box sx={{ mt: 3, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
+            <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
               <Typography variant="body2" color="text.secondary" align="center">
-                <strong>Admin Access Only</strong>
+                <strong>Demo Credentials</strong>
                 <br />
-                For customer portal, please visit the main website
+                Email: admin@electricity.gov.in | Password: admin123
               </Typography>
             </Box>
           </Box>

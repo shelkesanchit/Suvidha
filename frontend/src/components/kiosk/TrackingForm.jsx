@@ -72,7 +72,9 @@ const TrackingForm = ({ onClose }) => {
 
       console.log('Tracking:', endpoint);
       const response = await api.get(endpoint);
-      setTrackingData(response.data);
+      // Extract actual data from nested response format
+      const data = response.data.application || response.data.complaint || response.data;
+      setTrackingData(data);
       toast.success('Record found!');
     } catch (error) {
       console.error('Tracking error:', error);
@@ -140,7 +142,7 @@ const TrackingForm = ({ onClose }) => {
       <DialogTitle>
         <Box display="flex" alignItems="center" justifyContent="space-between">
           <Box>
-            <Typography variant="h5" fontWeight={600} color="primary" gutterBottom>
+            <Typography variant="subtitle1" fontWeight={600} color="primary" gutterBottom>
               Track Application/Complaint Status
             </Typography>
             <Typography variant="body2" color="text.secondary">

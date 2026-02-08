@@ -31,11 +31,12 @@ const verifyWaterAdminToken = (req, res, next) => {
 // Admin Login
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, username, password } = req.body;
+    const loginId = email || username;
     
     const [users] = await promisePool.query(
-      `SELECT * FROM water_admin_users WHERE username = ? AND status = 'active'`,
-      [username]
+      `SELECT * FROM admin_users WHERE email = ? AND is_active = 1 AND role IN ('water_admin', 'super_admin')`,
+      [loginId]
     );
     
     if (users.length === 0) {
@@ -52,15 +53,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    // Update last login
-    await promisePool.query(
-      'UPDATE water_admin_users SET last_login = NOW() WHERE id = ?',
-      [user.id]
-    );
-    
     // Generate token
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, name: user.full_name },
+      { id: user.id, email: user.email, role: user.role, name: user.full_name },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -70,11 +65,10 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user.id,
-        username: user.username,
-        name: user.full_name,
         email: user.email,
+        name: user.full_name,
         role: user.role,
-        designation: user.designation
+        phone: user.phone
       }
     });
     
@@ -95,9 +89,9 @@ router.get('/verify', verifyWaterAdminToken, (req, res) => {
 
 router.get('/dashboard/stats', verifyWaterAdminToken, async (req, res) => {
   try {
-    // Get total consumers
+    // Get total consumers (water_customers table)
     const [consumersResult] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_consumers WHERE connection_status = 'active'`
+      `SELECT COUNT(*) as total FROM water_customers WHERE connection_status = 'active'`
     );
     
     // Get pending applications
@@ -105,19 +99,19 @@ router.get('/dashboard/stats', verifyWaterAdminToken, async (req, res) => {
       `SELECT COUNT(*) as total FROM water_applications WHERE status IN ('submitted', 'document_verification', 'site_inspection', 'approval_pending')`
     );
     
-    // Get open complaints
+    // Get open complaints (using actual status enum values)
     const [openComplaintsResult] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_complaints WHERE status IN ('open', 'assigned', 'in_progress')`
+      `SELECT COUNT(*) as total FROM water_complaints WHERE status IN ('open', 'assigned', 'under_investigation')`
     );
     
-    // Get today's revenue
+    // Get today's revenue (using actual water_payments columns)
     const [todayRevenueResult] = await promisePool.query(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM water_payments WHERE status = 'success' AND DATE(completed_at) = CURDATE()`
+      `SELECT COALESCE(SUM(amount), 0) as total FROM water_payments WHERE payment_status = 'success' AND DATE(payment_date) = CURDATE()`
     );
     
     // Get month's revenue
     const [monthRevenueResult] = await promisePool.query(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM water_payments WHERE status = 'success' AND MONTH(completed_at) = MONTH(CURDATE()) AND YEAR(completed_at) = YEAR(CURDATE())`
+      `SELECT COALESCE(SUM(amount), 0) as total FROM water_payments WHERE payment_status = 'success' AND MONTH(payment_date) = MONTH(CURDATE()) AND YEAR(payment_date) = YEAR(CURDATE())`
     );
     
     // Get today's applications
@@ -143,15 +137,15 @@ router.get('/dashboard/stats', verifyWaterAdminToken, async (req, res) => {
        ORDER BY YEAR(MIN(submitted_at)), MONTH(MIN(submitted_at))`
     );
     
-    // Get revenue trend (last 6 months)
+    // Get revenue trend (last 6 months) - using actual columns
     const [revenueTrend] = await promisePool.query(
       `SELECT 
-        DATE_FORMAT(MIN(completed_at), '%b') as month,
+        DATE_FORMAT(MIN(payment_date), '%b') as month,
         COALESCE(SUM(amount), 0) as revenue
        FROM water_payments 
-       WHERE status = 'success' AND completed_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-       GROUP BY MONTH(completed_at), YEAR(completed_at)
-       ORDER BY YEAR(MIN(completed_at)), MONTH(MIN(completed_at))`
+       WHERE payment_status = 'success' AND payment_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+       GROUP BY MONTH(payment_date), YEAR(payment_date)
+       ORDER BY YEAR(MIN(payment_date)), MONTH(MIN(payment_date))`
     );
     
     // Get applications by type
@@ -168,11 +162,11 @@ router.get('/dashboard/stats', verifyWaterAdminToken, async (req, res) => {
        GROUP BY status`
     );
     
-    // Get complaints by category
+    // Get complaints by type (complaint_type, not complaint_category)
     const [complaintsByCategory] = await promisePool.query(
-      `SELECT complaint_category as name, COUNT(*) as value 
+      `SELECT complaint_type as name, COUNT(*) as value 
        FROM water_complaints 
-       GROUP BY complaint_category`
+       GROUP BY complaint_type`
     );
     
     res.json({
@@ -199,7 +193,7 @@ router.get('/dashboard/stats', verifyWaterAdminToken, async (req, res) => {
         { name: 'Open', value: 0 }
       ],
       complaintsByCategory: complaintsByCategory.length > 0 ? complaintsByCategory : [
-        { name: 'No Water', value: 0 }
+        { name: 'other', value: 0 }
       ]
     });
     
@@ -370,29 +364,61 @@ router.put('/applications/:id', verifyWaterAdminToken, async (req, res) => {
       ]
     );
     
-    // If completed/approved, create consumer record
-    if (status === 'completed' && app.application_type === 'new_connection') {
-      const consumerNumber = `WC${new Date().getFullYear()}${String(id).padStart(6, '0')}`;
+    // If approved, create customer record in water_customers
+    let generatedCustomerId = null;
+    if (status === 'approved' && app.application_type === 'new_connection') {
+      const year = new Date().getFullYear();
+      const prefix = `WC${year}`;
+
+      // Get next sequence number from water_customers
+      const [maxResult] = await connection.query(
+        'SELECT MAX(id) as max_id FROM water_customers WHERE id LIKE ?',
+        [`${prefix}%`]
+      );
+
+      let nextSeq = 1;
+      if (maxResult[0].max_id) {
+        const currentSeq = parseInt(maxResult[0].max_id.replace(prefix, ''), 10);
+        nextSeq = currentSeq + 1;
+      }
+
+      generatedCustomerId = `${prefix}${String(nextSeq).padStart(6, '0')}`;
+      const meterId = `WM${Date.now()}`;
       
+      // Map property_type to valid meter_type enum (domestic/commercial/industrial)
+      const meterTypeMap = { residential: 'domestic', commercial: 'commercial', industrial: 'industrial' };
+      const meterType = meterTypeMap[app.property_type] || 'domestic';
+
       await connection.query(
-        `INSERT INTO water_consumers 
-        (consumer_number, full_name, father_spouse_name, email, mobile, aadhaar_number,
-         property_id, house_flat_no, building_name, ward, address, landmark,
-         connection_type, property_type, ownership_status, pipe_size,
-         connection_status, connection_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', CURDATE())`,
+        `INSERT INTO water_customers 
+        (id, consumer_id, full_name, mobile, email, aadhar_number,
+         state, city, area, pincode, address, meter_number, meter_type,
+         connection_status, connection_date, is_verified)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', CURDATE(), 1)`,
         [
-          consumerNumber, app.full_name, app.father_spouse_name, app.email, app.mobile,
-          app.aadhaar_number, app.property_id, app.house_flat_no, app.building_name,
-          app.ward, app.address, app.landmark, app.connection_type_requested,
-          app.property_type, app.ownership_status, app.pipe_size_requested
+          generatedCustomerId, generatedCustomerId, app.full_name, app.mobile, app.email,
+          app.aadhaar_number || app.aadhar_number || null,
+          app.state || 'Maharashtra',
+          app.city || app.ward || 'N/A',
+          app.area || app.ward || null,
+          app.pincode || null,
+          app.address || null, meterId,
+          meterType
         ]
       );
     }
     
     await connection.commit();
     
-    res.json({ success: true, message: 'Application updated successfully' });
+    res.json({
+      success: true,
+      message: generatedCustomerId
+        ? `Application approved. Consumer ID: ${generatedCustomerId}`
+        : `Application ${status} successfully`,
+      data: {
+        customer_id: generatedCustomerId
+      }
+    });
     
   } catch (error) {
     await connection.rollback();
@@ -413,28 +439,31 @@ router.get('/complaints', verifyWaterAdminToken, async (req, res) => {
     const { status, category, search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
     
-    let query = `SELECT * FROM water_complaints WHERE 1=1`;
+    let query = `SELECT c.*, wc.consumer_id, wc.full_name, wc.mobile 
+                 FROM water_complaints c
+                 LEFT JOIN water_customers wc ON c.customer_id = wc.id
+                 WHERE 1=1`;
     const params = [];
     
     if (status) {
-      query += ` AND status = ?`;
+      query += ` AND c.status = ?`;
       params.push(status);
     }
     
     if (category) {
-      query += ` AND complaint_category = ?`;
+      query += ` AND c.complaint_type = ?`;
       params.push(category);
     }
     
     if (search) {
-      query += ` AND (complaint_number LIKE ? OR contact_name LIKE ? OR mobile LIKE ?)`;
+      query += ` AND (c.complaint_number LIKE ? OR wc.full_name LIKE ? OR wc.mobile LIKE ?)`;
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     
     query += ` ORDER BY 
-      CASE WHEN status IN ('open', 'assigned') THEN 0 ELSE 1 END,
-      priority ASC,
-      created_at DESC 
+      CASE WHEN c.status IN ('open', 'assigned') THEN 0 ELSE 1 END,
+      FIELD(c.priority, 'urgent', 'high', 'medium', 'low'),
+      c.created_at DESC 
       LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), parseInt(offset));
     
@@ -461,7 +490,7 @@ router.get('/complaints', verifyWaterAdminToken, async (req, res) => {
 // Update complaint
 router.put('/complaints/:id', verifyWaterAdminToken, async (req, res) => {
   try {
-    const { status, assigned_engineer, resolution_notes, priority } = req.body;
+    const { status, assigned_to, resolution_notes, priority } = req.body;
     const { id } = req.params;
     
     let updateFields = [];
@@ -471,18 +500,14 @@ router.put('/complaints/:id', verifyWaterAdminToken, async (req, res) => {
       updateFields.push('status = ?');
       params.push(status);
       
-      if (status === 'resolved') {
+      if (status === 'resolved' || status === 'closed') {
         updateFields.push('resolved_at = NOW()');
-      } else if (status === 'closed') {
-        updateFields.push('closed_at = NOW()');
-      } else if (status === 'assigned') {
-        updateFields.push('assignment_date = NOW()');
       }
     }
     
-    if (assigned_engineer) {
-      updateFields.push('assigned_engineer = ?');
-      params.push(assigned_engineer);
+    if (assigned_to) {
+      updateFields.push('assigned_to = ?');
+      params.push(assigned_to);
     }
     
     if (resolution_notes) {
@@ -511,7 +536,7 @@ router.put('/complaints/:id', verifyWaterAdminToken, async (req, res) => {
 });
 
 // =====================================================
-// CONSUMERS MANAGEMENT
+// CONSUMERS MANAGEMENT (water_customers table)
 // =====================================================
 
 // Get all consumers
@@ -520,7 +545,7 @@ router.get('/consumers', verifyWaterAdminToken, async (req, res) => {
     const { status, search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
     
-    let query = `SELECT * FROM water_consumers WHERE 1=1`;
+    let query = `SELECT * FROM water_customers WHERE 1=1`;
     const params = [];
     
     if (status) {
@@ -529,18 +554,18 @@ router.get('/consumers', verifyWaterAdminToken, async (req, res) => {
     }
     
     if (search) {
-      query += ` AND (consumer_number LIKE ? OR full_name LIKE ? OR mobile LIKE ?)`;
+      query += ` AND (consumer_id LIKE ? OR full_name LIKE ? OR mobile LIKE ?)`;
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     
-    query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    query += ` ORDER BY account_created_at DESC LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), parseInt(offset));
     
     const [consumers] = await promisePool.query(query, params);
     
     // Get total count
     const [countResult] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_consumers`
+      `SELECT COUNT(*) as total FROM water_customers`
     );
     
     res.json({
@@ -559,16 +584,16 @@ router.get('/consumers', verifyWaterAdminToken, async (req, res) => {
 // Update consumer
 router.put('/consumers/:id', verifyWaterAdminToken, async (req, res) => {
   try {
-    const { connection_status, meter_number, tariff_category } = req.body;
+    const { connection_status, meter_number, meter_type } = req.body;
     const { id } = req.params;
     
     await promisePool.query(
-      `UPDATE water_consumers 
+      `UPDATE water_customers 
        SET connection_status = COALESCE(?, connection_status),
            meter_number = COALESCE(?, meter_number),
-           tariff_category = COALESCE(?, tariff_category)
+           meter_type = COALESCE(?, meter_type)
        WHERE id = ?`,
-      [connection_status, meter_number, tariff_category, id]
+      [connection_status, meter_number, meter_type, id]
     );
     
     res.json({ success: true, message: 'Consumer updated successfully' });
@@ -614,15 +639,15 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
 
     // 1. Summary Statistics
     const [consumersTotal] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_consumers`
+      `SELECT COUNT(*) as total FROM water_customers`
     );
     const [consumersActive] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_consumers WHERE connection_status = 'active'`
+      `SELECT COUNT(*) as total FROM water_customers WHERE connection_status = 'active'`
     );
     const [billsData] = await promisePool.query(
       `SELECT 
         COALESCE(SUM(total_amount), 0) as totalBilled,
-        COALESCE(SUM(amount_paid), 0) as totalCollected
+        COALESCE(SUM(paid_amount), 0) as totalCollected
        FROM water_bills`
     );
     const [appsTotal] = await promisePool.query(
@@ -645,26 +670,26 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
       resolvedComplaints: parseInt(complaintsData[0]?.resolved) || 0,
     };
 
-    // 2. Collections data (last 6 months)
+    // 2. Collections data (last 6 months) - using actual water_bills columns
     const [collectionsData] = await promisePool.query(
       `SELECT 
-        DATE_FORMAT(bill_date, '%b') as month,
+        DATE_FORMAT(issue_date, '%b') as month,
         COALESCE(SUM(total_amount), 0) as billed,
-        COALESCE(SUM(amount_paid), 0) as collected
+        COALESCE(SUM(paid_amount), 0) as collected
        FROM water_bills
-       WHERE bill_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-       GROUP BY YEAR(bill_date), MONTH(bill_date), DATE_FORMAT(bill_date, '%b')
-       ORDER BY YEAR(bill_date), MONTH(bill_date)`
+       WHERE issue_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+       GROUP BY YEAR(issue_date), MONTH(issue_date), DATE_FORMAT(issue_date, '%b')
+       ORDER BY YEAR(issue_date), MONTH(issue_date)`
     );
 
-    // 3. Category-wise distribution
+    // 3. Category-wise distribution (using meter_type from water_customers)
     const [categoryData] = await promisePool.query(
       `SELECT 
-        COALESCE(property_type, 'residential') as category,
+        COALESCE(meter_type, 'domestic') as category,
         COUNT(*) as consumers,
         0 as revenue
-       FROM water_consumers
-       GROUP BY property_type
+       FROM water_customers
+       GROUP BY meter_type
        ORDER BY consumers DESC`
     );
     
@@ -678,36 +703,36 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
     // Calculate revenue per category from bills
     const [categoryRevenue] = await promisePool.query(
       `SELECT 
-        COALESCE(wc.property_type, 'residential') as category,
-        COALESCE(SUM(wb.amount_paid), 0) as revenue
-       FROM water_consumers wc
-       LEFT JOIN water_bills wb ON wc.consumer_number = wb.consumer_number
-       GROUP BY wc.property_type`
+        COALESCE(wc.meter_type, 'domestic') as category,
+        COALESCE(SUM(wb.paid_amount), 0) as revenue
+       FROM water_customers wc
+       LEFT JOIN water_bills wb ON wc.id = wb.customer_id
+       GROUP BY wc.meter_type`
     );
     
     // Merge revenue into categoryWise
     categoryRevenue.forEach(cr => {
-      const cat = categoryWise.find(c => c.category.toLowerCase() === (cr.category || 'residential').toLowerCase());
+      const cat = categoryWise.find(c => c.category.toLowerCase() === (cr.category || 'domestic').toLowerCase());
       if (cat) {
         cat.revenue = parseFloat(cr.revenue) || 0;
       }
     });
 
-    // 4. Ward-wise distribution
-    const [wardData] = await promisePool.query(
+    // 4. Area-wise distribution (using area from water_customers instead of ward)
+    const [areaData] = await promisePool.query(
       `SELECT 
-        COALESCE(ward, 'Unknown') as ward,
+        COALESCE(area, 'Unknown') as area,
         COUNT(*) as consumers,
         0 as revenue
-       FROM water_consumers
-       WHERE ward IS NOT NULL AND ward != ''
-       GROUP BY ward
+       FROM water_customers
+       WHERE area IS NOT NULL AND area != ''
+       GROUP BY area
        ORDER BY consumers DESC
        LIMIT 10`
     );
     
-    const wardWise = wardData.map(w => ({
-      ward: w.ward.startsWith('Ward') ? w.ward : `Ward ${w.ward}`,
+    const wardWise = areaData.map(w => ({
+      ward: w.area,
       consumers: w.consumers,
       revenue: 0
     }));
@@ -740,24 +765,22 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
       { type: 'New Connection', pending: 0, approved: 0, rejected: 0 }
     ];
 
-    // 6. Complaints by category
+    // 6. Complaints by type (complaint_type, not complaint_category)
     const [complaintsCategory] = await promisePool.query(
       `SELECT 
-        CASE complaint_category
-          WHEN 'no-water' THEN 'No Water'
-          WHEN 'low-pressure' THEN 'Low Pressure'
-          WHEN 'pipeline-leak' THEN 'Pipeline Leak'
-          WHEN 'contaminated' THEN 'Contaminated'
-          WHEN 'meter-stopped' THEN 'Meter Stopped'
-          WHEN 'high-bill' THEN 'High Bill'
-          WHEN 'illegal-connection' THEN 'Illegal Connection'
-          WHEN 'sewerage' THEN 'Sewerage'
-          ELSE complaint_category
+        CASE complaint_type
+          WHEN 'low_pressure' THEN 'Low Pressure'
+          WHEN 'contamination' THEN 'Contamination'
+          WHEN 'leakage' THEN 'Leakage'
+          WHEN 'billing' THEN 'Billing'
+          WHEN 'meter_issue' THEN 'Meter Issue'
+          WHEN 'other' THEN 'Other'
+          ELSE complaint_type
         END as category,
-        SUM(CASE WHEN status IN ('open', 'assigned', 'in_progress', 'reopened') THEN 1 ELSE 0 END) as open,
+        SUM(CASE WHEN status IN ('open', 'assigned', 'under_investigation') THEN 1 ELSE 0 END) as open,
         SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as resolved
        FROM water_complaints
-       GROUP BY complaint_category`
+       GROUP BY complaint_type`
     );
 
     const complaints = complaintsCategory.length > 0 ? complaintsCategory.map(c => ({
@@ -765,7 +788,7 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
       open: parseInt(c.open) || 0,
       resolved: parseInt(c.resolved) || 0
     })) : [
-      { category: 'No Water', open: 0, resolved: 0 }
+      { category: 'Other', open: 0, resolved: 0 }
     ];
 
     // Construct collections array (ensure at least some data points)
@@ -786,8 +809,8 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
       data: {
         summary,
         collections,
-        categoryWise: categoryWise.length > 0 ? categoryWise : [{ category: 'Residential', consumers: 0, revenue: 0 }],
-        wardWise: wardWise.length > 0 ? wardWise : [{ ward: 'Ward 1', consumers: 0, revenue: 0 }],
+        categoryWise: categoryWise.length > 0 ? categoryWise : [{ category: 'Domestic', consumers: 0, revenue: 0 }],
+        wardWise: wardWise.length > 0 ? wardWise : [{ ward: 'Area 1', consumers: 0, revenue: 0 }],
         applications,
         complaints
       }
@@ -815,24 +838,24 @@ router.get('/reports/summary', verifyWaterAdminToken, async (req, res) => {
       [start_date || '2024-01-01', end_date || new Date().toISOString().split('T')[0]]
     );
     
-    // Complaints summary
+    // Complaints summary (using actual status enum values)
     const [complaintsSummary] = await promisePool.query(
       `SELECT 
         COUNT(*) as total,
         SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as resolved,
-        SUM(CASE WHEN status IN ('open', 'assigned', 'in_progress') THEN 1 ELSE 0 END) as pending
+        SUM(CASE WHEN status IN ('open', 'assigned', 'under_investigation') THEN 1 ELSE 0 END) as pending
        FROM water_complaints
        WHERE DATE(created_at) BETWEEN ? AND ?`,
       [start_date || '2024-01-01', end_date || new Date().toISOString().split('T')[0]]
     );
     
-    // Revenue summary
+    // Revenue summary (using actual water_payments columns)
     const [revenueSummary] = await promisePool.query(
       `SELECT 
         COUNT(*) as total_transactions,
         COALESCE(SUM(amount), 0) as total_revenue
        FROM water_payments
-       WHERE status = 'success' AND DATE(completed_at) BETWEEN ? AND ?`,
+       WHERE payment_status = 'success' AND DATE(payment_date) BETWEEN ? AND ?`,
       [start_date || '2024-01-01', end_date || new Date().toISOString().split('T')[0]]
     );
     
@@ -855,7 +878,7 @@ router.get('/reports/summary', verifyWaterAdminToken, async (req, res) => {
 router.get('/tariffs', verifyWaterAdminToken, async (req, res) => {
   try {
     const [tariffs] = await promisePool.query(
-      `SELECT * FROM water_tariffs WHERE is_active = TRUE ORDER BY category`
+      `SELECT * FROM water_tariff_rates ORDER BY state, city, slab_from`
     );
     res.json(tariffs);
   } catch (error) {
@@ -866,20 +889,96 @@ router.get('/tariffs', verifyWaterAdminToken, async (req, res) => {
 
 router.put('/tariffs/:id', verifyWaterAdminToken, async (req, res) => {
   try {
-    const { slab_1_rate, slab_2_rate, slab_3_rate, slab_4_rate, minimum_charge, meter_rent } = req.body;
+    const { rate_per_unit, fixed_charge, tax_percentage, slab_from, slab_to, unit_type, state, city, effective_from } = req.body;
+    
+    const updateFields = [];
+    const params = [];
+    
+    if (rate_per_unit !== undefined) { updateFields.push('rate_per_unit = ?'); params.push(rate_per_unit); }
+    if (fixed_charge !== undefined) { updateFields.push('fixed_charge = ?'); params.push(fixed_charge); }
+    if (tax_percentage !== undefined) { updateFields.push('tax_percentage = ?'); params.push(tax_percentage); }
+    if (slab_from !== undefined) { updateFields.push('slab_from = ?'); params.push(slab_from); }
+    if (slab_to !== undefined) { updateFields.push('slab_to = ?'); params.push(slab_to); }
+    if (unit_type !== undefined) { updateFields.push('unit_type = ?'); params.push(unit_type); }
+    if (state !== undefined) { updateFields.push('state = ?'); params.push(state); }
+    if (city !== undefined) { updateFields.push('city = ?'); params.push(city); }
+    if (effective_from !== undefined) { updateFields.push('effective_from = ?'); params.push(effective_from); }
+    
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    
+    params.push(req.params.id);
     
     await promisePool.query(
-      `UPDATE water_tariffs 
-       SET slab_1_rate = ?, slab_2_rate = ?, slab_3_rate = ?, slab_4_rate = ?,
-           minimum_charge = ?, meter_rent = ?
-       WHERE id = ?`,
-      [slab_1_rate, slab_2_rate, slab_3_rate, slab_4_rate, minimum_charge, meter_rent, req.params.id]
+      `UPDATE water_tariff_rates SET ${updateFields.join(', ')} WHERE id = ?`,
+      params
     );
     
     res.json({ success: true, message: 'Tariff updated successfully' });
   } catch (error) {
     console.error('Update tariff error:', error);
     res.status(500).json({ error: 'Failed to update tariff' });
+  }
+});
+
+// POST /tariffs - Create new tariff
+router.post('/tariffs', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const { state, city, slab_from, slab_to, rate_per_unit, unit_type, fixed_charge, tax_percentage, effective_from } = req.body;
+    const [result] = await promisePool.query(
+      `INSERT INTO water_tariff_rates (state, city, slab_from, slab_to, rate_per_unit, unit_type, fixed_charge, tax_percentage, effective_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [state || 'Maharashtra', city || 'Mumbai', slab_from || 0, slab_to || 0, rate_per_unit, unit_type || 'kl', fixed_charge || 0, tax_percentage || 0, effective_from || new Date()]
+    );
+    res.status(201).json({ success: true, message: 'Tariff created', id: result.insertId });
+  } catch (error) {
+    console.error('Create tariff error:', error);
+    res.status(500).json({ error: 'Failed to create tariff' });
+  }
+});
+
+// DELETE /tariffs/:id
+router.delete('/tariffs/:id', verifyWaterAdminToken, async (req, res) => {
+  try {
+    await promisePool.query('DELETE FROM water_tariff_rates WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Tariff deleted' });
+  } catch (error) {
+    console.error('Delete tariff error:', error);
+    res.status(500).json({ error: 'Failed to delete tariff' });
+  }
+});
+
+// GET /settings
+router.get('/settings', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const [rows] = await promisePool.query("SELECT setting_key, setting_value FROM settings WHERE category = 'water' OR category = 'general'");
+    const data = {};
+    rows.forEach(r => {
+      try { data[r.setting_key] = JSON.parse(r.setting_value); } catch { data[r.setting_key] = r.setting_value; }
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Get settings error:', error);
+    res.json({ success: true, data: {} });
+  }
+});
+
+// PUT /settings
+router.put('/settings', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const settings = req.body;
+    for (const [key, value] of Object.entries(settings)) {
+      const strVal = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      const settingType = typeof value === 'boolean' ? 'boolean' : typeof value === 'number' ? 'number' : 'string';
+      await promisePool.query(
+        "INSERT INTO settings (setting_key, setting_value, setting_type, category) VALUES (?, ?, ?, 'water') ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = NOW()",
+        [key, strVal, settingType, strVal]
+      );
+    }
+    res.json({ success: true, message: 'Settings saved' });
+  } catch (error) {
+    console.error('Save settings error:', error);
+    res.status(500).json({ error: 'Failed to save settings' });
   }
 });
 

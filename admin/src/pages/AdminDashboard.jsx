@@ -30,6 +30,7 @@ import {
   Logout as LogoutIcon,
   Power as PowerIcon,
   Receipt as BillIcon,
+  FlashOn as ElectricityIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -39,6 +40,7 @@ const menuItems = [
   { text: 'Dashboard', icon: DashboardIcon, path: '/' },
   { text: 'Applications', icon: ApplicationIcon, path: '/applications', badge: 0 },
   { text: 'Complaints', icon: ComplaintIcon, path: '/complaints', badge: 0 },
+  { text: 'Meter Readings', icon: ElectricityIcon, path: '/meter-readings', badge: 0 },
   { text: 'Users', icon: AccountIcon, path: '/users' },
   { text: 'Reports', icon: ReportsIcon, path: '/reports' },
   { text: 'Tariffs', icon: BillIcon, path: '/tariff' },
