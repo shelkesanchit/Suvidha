@@ -75,7 +75,7 @@ const SolarRooftopForm = ({ onClose }) => {
 
   const handleSubmit = async () => {
     try {
-      const response = await api.post('/applications/submit', {
+      const response = await api.post('/electricity/applications/submit', {
         application_type: 'solar_rooftop',
         application_data: formData,
       });
@@ -333,7 +333,7 @@ const SolarRooftopForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           Solar Rooftop Installation Application
         </Typography>
         <Typography variant="caption" color="text.secondary">

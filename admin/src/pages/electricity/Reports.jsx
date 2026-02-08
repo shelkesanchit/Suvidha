@@ -20,7 +20,7 @@ import {
   Assessment as ReportIcon,
   TrendingUp as TrendingIcon,
 } from '@mui/icons-material';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const Reports = () => {

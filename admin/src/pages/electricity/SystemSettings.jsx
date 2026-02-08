@@ -19,7 +19,7 @@ import {
   DialogActions,
 } from '@mui/material';
 import { Edit as EditIcon, Save as SaveIcon } from '@mui/icons-material';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const SystemSettings = () => {

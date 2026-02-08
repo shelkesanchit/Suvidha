@@ -38,7 +38,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
@@ -59,7 +59,9 @@ const AdminOverview = () => {
     try {
       setRefreshing(true);
       const response = await api.get('/admin/dashboard/stats');
-      setStats(response.data);
+      // Handle the new response format {success: true, data: {...}}
+      const statsData = response.data.data || response.data;
+      setStats(statsData);
       if (showToast) {
         toast.success('Dashboard refreshed');
       }

@@ -345,9 +345,7 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
     return (
       <Box>
         <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
-            {isPNG ? '🔵 PNG Connection Application' : '🔥 LPG Connection Application'}
-          </Typography>
+          {isPNG ? '🔵 PNG Connection Application' : '🔥 LPG Connection Application'}
         </DialogTitle>
         <DialogContent sx={{ textAlign: 'center', py: 4 }}>
           <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
@@ -937,12 +935,14 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
-          {isPNG ? '🔵 Apply for PNG Connection' : '🔥 Apply for LPG Connection'}
-        </Typography>
-        <Typography variant="body2" sx={{ opacity: 0.9 }}>
-          {isPNG ? 'Piped Natural Gas for your home' : 'Domestic | PMUY (Ujjwala) | Commercial'}
-        </Typography>
+        <Box>
+          <Typography variant="h6" fontWeight={600}>
+            {isPNG ? '🔵 Apply for PNG Connection' : '🔥 Apply for LPG Connection'}
+          </Typography>
+          <Typography variant="body2" sx={{ opacity: 0.9 }}>
+            {isPNG ? 'Piped Natural Gas for your home' : 'Domestic | PMUY (Ujjwala) | Commercial'}
+          </Typography>
+        </Box>
       </DialogTitle>
       <DialogContent sx={{ mt: 2 }}>
         <Stepper activeStep={activeStep} sx={{ mb: 4 }} alternativeLabel>

@@ -1,6 +1,6 @@
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 async function seed() {
   let connection;
@@ -12,7 +12,7 @@ async function seed() {
       host: process.env.DB_HOST || 'localhost',
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'suvidha',
+      database: process.env.DB_NAME || 'suvidha_db',
       port: process.env.DB_PORT || 3306
     });
 

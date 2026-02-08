@@ -6,10 +6,17 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js",
-    "water-migrate": "node scripts/water-migrate.js",
-    "water-seed": "node scripts/water-seed.js"
+    "setup": "node scripts/setup-all.js",
+    "db:create": "node scripts/create-database.js",
+    "db:setup": "node scripts/setup-all.js",
+    "db:migrate:all": "npm run db:migrate:electricity && npm run db:migrate:gas && npm run db:migrate:water",
+    "db:seed:all": "npm run db:seed:electricity && npm run db:seed:gas && npm run db:seed:water",
+    "db:migrate:electricity": "node scripts/electricity-migrate.js",
+    "db:seed:electricity": "node scripts/electricity-seed.js",
+    "db:migrate:gas": "node scripts/gas-migrate.js",
+    "db:seed:gas": "node scripts/gas-seed.js",
+    "db:migrate:water": "node scripts/water-migrate.js",
+    "db:seed:water": "node scripts/water-seed.js"
   },
   "keywords": [
     "electricity",

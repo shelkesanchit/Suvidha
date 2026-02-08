@@ -7,9 +7,12 @@ const getConsumerAccounts = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT ca.*, u.full_name, u.email, u.phone
+      SELECT ca.id, ca.consumer_number, ca.category, ca.tariff_type, ca.sanctioned_load, 
+             ca.meter_number, ca.connection_status, ca.address_line1, ca.address_line2, 
+             ca.city, ca.state, ca.pincode, ca.created_at,
+             u.full_name, u.email, u.phone
       FROM electricity_consumer_accounts ca
-      JOIN electricity_users u ON ca.user_id = u.id
+      LEFT JOIN electricity_users u ON ca.user_id = u.id
       WHERE 1=1
     `;
     const params = [];

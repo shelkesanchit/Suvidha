@@ -13,7 +13,7 @@ router.get('/fetch/:consumerNumber', async (req, res) => {
     
     // Get consumer details
     const [consumers] = await promisePool.query(
-      `SELECT * FROM water_consumers WHERE consumer_number = ?`,
+      `SELECT * FROM water_customers WHERE consumer_number = ?`,
       [consumerNumber]
     );
     

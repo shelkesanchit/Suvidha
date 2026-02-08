@@ -53,7 +53,7 @@ router.put('/applications/:id',
   isAdminOrStaff, 
   [
     body('status').isIn([
-      'submitted', 'under_review', 'document_verification', 'site_inspection', 
+      'submitted', 'document_verification', 'site_inspection', 
       'approval_pending', 'approved', 'rejected', 'work_in_progress', 'completed'
     ]),
     body('remarks').optional(),

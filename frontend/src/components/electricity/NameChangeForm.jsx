@@ -1104,7 +1104,7 @@ const NameChangeForm = ({ onClose }) => {
       <Dialog open={true} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ textAlign: 'center', bgcolor: 'success.main', color: 'white' }}>
           <CheckCircle sx={{ fontSize: 60, mb: 1 }} />
-          <Typography variant="h5">Application Submitted Successfully!</Typography>
+          <Typography variant="subtitle1">Application Submitted Successfully!</Typography>
         </DialogTitle>
         <DialogContent sx={{ mt: 3 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>

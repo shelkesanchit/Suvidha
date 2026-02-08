@@ -14,7 +14,7 @@ import {
   IconButton,
 } from '@mui/material';
 import { Block as BlockIcon, CheckCircle as ActiveIcon } from '@mui/icons-material';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const ManageUsers = () => {

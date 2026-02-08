@@ -220,7 +220,7 @@ const LoadChangeForm = ({ onClose }) => {
           uploadedAt: new Date().toISOString(),
         }));
 
-      const response = await api.post('/applications/submit', {
+      const response = await api.post('/electricity/applications/submit', {
         application_type: 'change_of_load',
         application_data: formData,
         documents: documentsArray,
@@ -956,7 +956,7 @@ const LoadChangeForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
+        <Typography component="span" variant="body1" fontWeight={600}>
           Load Change Request
         </Typography>
         <Typography variant="body2" color="text.secondary">

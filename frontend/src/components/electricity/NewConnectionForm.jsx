@@ -336,17 +336,40 @@ const NewConnectionForm = ({ onClose }) => {
           uploadedAt: new Date().toISOString(),
         }));
 
-      const response = await api.post('/applications/submit', {
+      console.log('Submitting application with data:', {
+        application_type: 'new_connection',
+        application_data: formData,
+        documents: documentsArray.length > 0 ? `${documentsArray.length} files` : 'no files'
+      });
+
+      const response = await api.post('/electricity/applications/submit', {
         application_type: 'new_connection',
         application_data: formData,
         documents: documentsArray,
       });
 
+      console.log('Application submitted successfully:', response.data);
       setApplicationNumber(response.data.application_number);
       setSubmitted(true);
       toast.success('Application submitted successfully!');
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to submit application');
+      console.error('Submission error:', error);
+      let errorMessage = 'Failed to submit application';
+      
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        // Handle express-validator errors
+        errorMessage = error.response.data.errors
+          .map(e => `${e.path}: ${e.msg}`)
+          .join(', ');
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
     }
   };
 
@@ -921,12 +944,14 @@ const NewConnectionForm = ({ onClose }) => {
   return (
     <Box>
       <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
-          New Electricity Connection Application
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Please fill all required fields marked with *
-        </Typography>
+        <Box>
+          <Typography variant="subtitle1" fontWeight={600}>
+            New Electricity Connection Application
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Please fill all required fields marked with *
+          </Typography>
+        </Box>
       </DialogTitle>
 
       <DialogContent>

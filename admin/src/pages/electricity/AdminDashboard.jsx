@@ -30,19 +30,21 @@ import {
   Logout as LogoutIcon,
   Power as PowerIcon,
   Receipt as BillIcon,
+  FlashOn as ElectricityIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
 const drawerWidth = 260;
 
 const menuItems = [
-  { text: 'Dashboard', icon: DashboardIcon, path: '/electricity' },
-  { text: 'Applications', icon: ApplicationIcon, path: '/electricity/applications', badge: 0 },
-  { text: 'Complaints', icon: ComplaintIcon, path: '/electricity/complaints', badge: 0 },
-  { text: 'Users', icon: AccountIcon, path: '/electricity/users' },
-  { text: 'Reports', icon: ReportsIcon, path: '/electricity/reports' },
-  { text: 'Tariffs', icon: BillIcon, path: '/electricity/tariff' },
-  { text: 'Settings', icon: SettingsIcon, path: '/electricity/settings' },
+  { text: 'Dashboard', icon: DashboardIcon, path: '/' },
+  { text: 'Applications', icon: ApplicationIcon, path: '/applications', badge: 0 },
+  { text: 'Complaints', icon: ComplaintIcon, path: '/complaints', badge: 0 },
+  { text: 'Meter Readings', icon: ElectricityIcon, path: '/meter-readings', badge: 0 },
+  { text: 'Users', icon: AccountIcon, path: '/users' },
+  { text: 'Reports', icon: ReportsIcon, path: '/reports' },
+  { text: 'Tariffs', icon: BillIcon, path: '/tariff' },
+  { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
 
 const AdminDashboard = () => {
@@ -67,7 +69,7 @@ const AdminDashboard = () => {
   const handleLogout = () => {
     handleMenuClose();
     logout();
-    navigate('/electricity/login');
+    navigate('/login');
   };
 
   const drawer = (

@@ -41,7 +41,7 @@ import {
   Close as CloseIcon,
   Download as DownloadIcon,
 } from '@mui/icons-material';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const ManageApplications = () => {
@@ -68,7 +68,9 @@ const ManageApplications = () => {
       console.log('Fetching applications from:', `/admin/applications${params}`);
       const response = await api.get(`/admin/applications${params}`);
       console.log('Received applications:', response.data);
-      setApplications(response.data);
+      // Handle both old array format and new {success, data} format
+      const appData = Array.isArray(response.data) ? response.data : (response.data.data || []);
+      setApplications(appData);
     } catch (error) {
       console.error('Failed to fetch applications:', error);
       console.error('Error response:', error.response?.data);
@@ -82,8 +84,7 @@ const ManageApplications = () => {
     setSelectedApp(app);
     setActionData({
       status: app.status,
-      remarks: app.remarks || '',
-      current_stage: app.current_stage || ''
+      remarks: app.remarks || ''
     });
     setDialogOpen(true);
   };
@@ -259,23 +260,15 @@ const ManageApplications = () => {
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary">Applicant</Typography>
-                      <Typography variant="body1">{app.full_name || app.application_data?.full_name || 'N/A'}</Typography>
-                      <Typography variant="body2">{app.email || app.application_data?.email || 'N/A'}</Typography>
-                      <Typography variant="body2">{app.phone || app.application_data?.mobile || 'N/A'}</Typography>
+                      <Typography variant="body1">{app.applicant_name || app.full_name || 'N/A'}</Typography>
+                      <Typography variant="body2">{app.email || 'N/A'}</Typography>
+                      <Typography variant="body2">{app.mobile || app.phone || 'N/A'}</Typography>
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary">Submitted</Typography>
                       <Typography variant="body1">
                         {new Date(app.submitted_at).toLocaleString()}
                       </Typography>
-                      {app.current_stage && (
-                        <>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Current Stage</Typography>
-                          <Typography variant="body1" fontWeight={600}>
-                            {app.current_stage}
-                          </Typography>
-                        </>
-                      )}
                     </Grid>
                   </Grid>
 
@@ -309,7 +302,7 @@ const ManageApplications = () => {
       )}
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <DialogTitle component="div" sx={{ bgcolor: 'primary.main', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6">Update Application Status</Typography>
           <IconButton onClick={() => setDialogOpen(false)} sx={{ color: 'white' }}>
             <CloseIcon />
@@ -409,33 +402,6 @@ const ManageApplications = () => {
                 </MenuItem>
               </TextField>
 
-              {/* Current Stage */}
-              <TextField
-                fullWidth
-                select
-                label="Processing Stage"
-                value={actionData.current_stage}
-                onChange={(e) => setActionData({ ...actionData, current_stage: e.target.value })}
-                sx={{ mb: 3 }}
-                helperText="Select the current processing stage"
-              >
-                <MenuItem value="">-- Select Stage --</MenuItem>
-                <MenuItem value="Application Submitted">Application Submitted</MenuItem>
-                <MenuItem value="Documents Under Review">Documents Under Review</MenuItem>
-                <MenuItem value="Documents Verified">Documents Verified</MenuItem>
-                <MenuItem value="Documents Incomplete">Documents Incomplete - Pending Resubmission</MenuItem>
-                <MenuItem value="Site Inspection Scheduled">Site Inspection Scheduled</MenuItem>
-                <MenuItem value="Site Inspection Completed">Site Inspection Completed</MenuItem>
-                <MenuItem value="Pending Technical Approval">Pending Technical Approval</MenuItem>
-                <MenuItem value="Technical Approval Granted">Technical Approval Granted</MenuItem>
-                <MenuItem value="Payment Pending">Payment Pending</MenuItem>
-                <MenuItem value="Payment Received">Payment Received</MenuItem>
-                <MenuItem value="Meter Installation Scheduled">Meter Installation Scheduled</MenuItem>
-                <MenuItem value="Meter Installed">Meter Installed</MenuItem>
-                <MenuItem value="Connection Activated">Connection Activated</MenuItem>
-                <MenuItem value="Application Rejected">Application Rejected</MenuItem>
-              </TextField>
-
               {/* Remarks */}
               <TextField
                 fullWidth
@@ -461,7 +427,7 @@ const ManageApplications = () => {
       </Dialog>
 
       <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
+        <DialogTitle component="div">
           <Typography variant="h5" fontWeight={600}>
             Application Details
           </Typography>
@@ -489,7 +455,7 @@ const ManageApplications = () => {
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Full Name</Typography>
-                    <Typography variant="body1" fontWeight={600}>{selectedApp.application_data?.full_name || 'N/A'}</Typography>
+                    <Typography variant="body1" fontWeight={600}>{selectedApp.application_data?.full_name || selectedApp.applicant_name || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Father's/Husband's Name</Typography>
@@ -513,7 +479,7 @@ const ManageApplications = () => {
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <Typography variant="caption" color="text.secondary">Mobile</Typography>
-                    <Typography variant="body1" fontWeight={600}>{selectedApp.application_data?.mobile || 'N/A'}</Typography>
+                    <Typography variant="body1" fontWeight={600}>{selectedApp.application_data?.mobile || selectedApp.mobile || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <Typography variant="caption" color="text.secondary">Alternate Mobile</Typography>
@@ -521,7 +487,7 @@ const ManageApplications = () => {
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <Typography variant="caption" color="text.secondary">Email</Typography>
-                    <Typography variant="body1">{selectedApp.application_data?.email || 'N/A'}</Typography>
+                    <Typography variant="body1">{selectedApp.application_data?.email || selectedApp.email || 'N/A'}</Typography>
                   </Grid>
                   {selectedApp.application_data?.pan_number && (
                     <Grid item xs={12} sm={4}>
@@ -537,7 +503,7 @@ const ManageApplications = () => {
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
                     <Typography variant="caption" color="text.secondary">Premises Address</Typography>
-                    <Typography variant="body1" fontWeight={600}>{selectedApp.application_data?.premises_address || 'N/A'}</Typography>
+                    <Typography variant="body1" fontWeight={600}>{selectedApp.application_data?.premises_address || selectedApp.address || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" color="text.secondary">Plot/House No.</Typography>
@@ -549,7 +515,7 @@ const ManageApplications = () => {
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" color="text.secondary">City/Village</Typography>
-                    <Typography variant="body1">{selectedApp.application_data?.city || 'N/A'}</Typography>
+                    <Typography variant="body1">{selectedApp.application_data?.city || selectedApp.city || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" color="text.secondary">District</Typography>
@@ -557,11 +523,11 @@ const ManageApplications = () => {
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" color="text.secondary">State</Typography>
-                    <Typography variant="body1">{selectedApp.application_data?.state || 'N/A'}</Typography>
+                    <Typography variant="body1">{selectedApp.application_data?.state || selectedApp.state || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" color="text.secondary">Pincode</Typography>
-                    <Typography variant="body1">{selectedApp.application_data?.pincode || 'N/A'}</Typography>
+                    <Typography variant="body1">{selectedApp.application_data?.pincode || selectedApp.pincode || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" color="text.secondary">Khata/Survey No.</Typography>
@@ -718,7 +684,7 @@ const ManageApplications = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <DialogTitle component="div" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6">Document Preview</Typography>
           <IconButton onClick={() => setDocumentDialogOpen(false)}>
             <CloseIcon />

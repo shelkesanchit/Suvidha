@@ -58,7 +58,7 @@ const PrepaidRechargeForm = ({ onClose }) => {
     setLoading(true);
 
     try {
-      const response = await api.post('/payments/prepaid-recharge', {
+      const response = await api.post('/electricity/payments/prepaid-recharge', {
         consumer_number: consumerNumber,
         amount: parseFloat(amount),
         payment_mode: paymentMode,
@@ -99,7 +99,7 @@ const PrepaidRechargeForm = ({ onClose }) => {
             <Box display="flex" alignItems="center" gap={1}>
               <CheckCircleOutlined sx={{ fontSize: 40 }} />
               <Box>
-                <Typography variant="h5" fontWeight={600}>
+                <Typography variant="subtitle1" fontWeight={600}>
                   Recharge Successful
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.9 }}>

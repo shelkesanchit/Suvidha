@@ -32,7 +32,7 @@ const CategoryChangeForm = ({ onClose }) => {
     setLoading(true);
 
     try {
-      const response = await api.post('/applications/submit', {
+      const response = await api.post('/electricity/applications/submit', {
         application_type: 'category_change',
         application_data: formData,
       });

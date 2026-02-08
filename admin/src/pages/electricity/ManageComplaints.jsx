@@ -20,7 +20,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { CheckCircle } from '@mui/icons-material';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const ManageComplaints = () => {

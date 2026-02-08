@@ -41,19 +41,33 @@ if (process.env.NODE_ENV === 'development') {
 // Static files
 app.use('/uploads', express.static('uploads'));
 
+// Initialize Database Connection
+const { promisePool } = require('./config/database');
+
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV 
-  });
+app.get('/health', async (req, res) => {
+  try {
+    const connection = await promisePool.getConnection();
+    connection.release();
+
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      database: '✓ Connected'
+    });
+  } catch (dbError) {
+    res.status(503).json({
+      status: 'Database Error',
+      error: dbError.message,
+      environment: process.env.NODE_ENV,
+      database: '✗ Disconnected'
+    });
+  }
 });
 
-// Routes - Department-specific
+// Routes - Electricity Department
 app.use('/api/electricity', require('./routes/electricity/index'));
-app.use('/api/water', require('./routes/water/index'));
-app.use('/api/gas', require('./routes/gas/index'));
 
 // Admin routes
 app.use('/api/admin', require('./admin/routes/index'));
@@ -63,6 +77,9 @@ app.use('/api/water', require('./routes/water/index'));
 
 // Gas Distribution Routes (Separate)
 app.use('/api/gas', require('./routes/gas/index'));
+
+// Government Services Routes (Integrates with Dummy API)
+app.use('/api/gov-services', require('./routes/governmentServices'));
 
 // 404 handler
 app.use((req, res) => {

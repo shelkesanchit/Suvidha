@@ -23,7 +23,7 @@ router.post('/submit', async (req, res) => {
     let consumerId = null;
     if (complaint_data.consumer_number) {
       const [consumers] = await promisePool.query(
-        'SELECT id FROM water_consumers WHERE consumer_number = ?',
+        'SELECT id FROM water_customers WHERE consumer_number = ?',
         [complaint_data.consumer_number]
       );
       if (consumers.length > 0) {
