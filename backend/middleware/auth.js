@@ -14,7 +14,7 @@ const verifyToken = async (req, res, next) => {
     
     // Get user from database
     const [users] = await promisePool.query(
-      'SELECT id, email, role, full_name, is_active FROM users WHERE id = ?',
+      'SELECT id, email, role, full_name, is_active FROM electricity_users WHERE id = ?',
       [decoded.id]
     );
 

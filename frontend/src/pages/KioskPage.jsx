@@ -26,21 +26,22 @@ import {
   Speed as SpeedIcon,
   AccountBalance as AccountIcon,
   ElectricMeter as MeterIcon,
+  ArrowBack as BackIcon,
 } from '@mui/icons-material';
 
 // Import service components
-import NewConnectionForm from '../components/kiosk/NewConnectionForm';
-import BillPaymentForm from '../components/kiosk/BillPaymentForm';
-import ComplaintForm from '../components/kiosk/ComplaintForm';
-import TrackingForm from '../components/kiosk/TrackingForm';
-import BillCalculator from '../components/kiosk/BillCalculator';
-import LoadChangeForm from '../components/kiosk/LoadChangeForm';
-import NameChangeForm from '../components/kiosk/NameChangeForm';
-import MeterReadingForm from '../components/kiosk/MeterReadingForm';
-import SolarRooftopForm from '../components/kiosk/SolarRooftopForm';
-import ReconnectionForm from '../components/kiosk/ReconnectionForm';
-import CategoryChangeForm from '../components/kiosk/CategoryChangeForm';
-import PrepaidRechargeForm from '../components/kiosk/PrepaidRechargeForm';
+import NewConnectionForm from '../components/electricity/NewConnectionForm';
+import BillPaymentForm from '../components/electricity/BillPaymentForm';
+import ComplaintForm from '../components/electricity/ComplaintForm';
+import TrackingForm from '../components/electricity/TrackingForm';
+import BillCalculator from '../components/electricity/BillCalculator';
+import LoadChangeForm from '../components/electricity/LoadChangeForm';
+import NameChangeForm from '../components/electricity/NameChangeForm';
+import MeterReadingForm from '../components/electricity/MeterReadingForm';
+import SolarRooftopForm from '../components/electricity/SolarRooftopForm';
+import ReconnectionForm from '../components/electricity/ReconnectionForm';
+import CategoryChangeForm from '../components/electricity/CategoryChangeForm';
+import PrepaidRechargeForm from '../components/electricity/PrepaidRechargeForm';
 
 const services = [
   {
@@ -164,23 +165,24 @@ const KioskPage = () => {
     <Box className="kiosk-container">
       <AppBar position="static" className="kiosk-header">
         <Toolbar>
-          <PowerIcon sx={{ mr: 2, fontSize: 40 }} />
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h4" fontWeight={700}>
-              SUVIDHA KIOSK
-            </Typography>
-            <Typography variant="subtitle1">
-              Electricity Department - Self Service Portal
-            </Typography>
-          </Box>
           <Button
             variant="outlined"
             color="inherit"
-            startIcon={<HomeIcon />}
+            startIcon={<BackIcon />}
             onClick={() => navigate('/')}
+            sx={{ mr: 2 }}
           >
-            Home
+            Back
           </Button>
+          <PowerIcon sx={{ mr: 2, fontSize: 40 }} />
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h4" fontWeight={700}>
+              ELECTRICITY SERVICES
+            </Typography>
+            <Typography variant="subtitle1">
+              SUVIDHA Kiosk - Electricity Department
+            </Typography>
+          </Box>
         </Toolbar>
       </AppBar>
 

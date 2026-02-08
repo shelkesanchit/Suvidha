@@ -8,8 +8,8 @@ const getConsumerAccounts = async (req, res) => {
 
     let query = `
       SELECT ca.*, u.full_name, u.email, u.phone
-      FROM consumer_accounts ca
-      JOIN users u ON ca.user_id = u.id
+      FROM electricity_consumer_accounts ca
+      JOIN electricity_users u ON ca.user_id = u.id
       WHERE 1=1
     `;
     const params = [];

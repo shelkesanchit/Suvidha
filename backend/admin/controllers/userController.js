@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { promisePool } = require('../../config/database');
 
-// Get all users
+// Get all electricity_users
 const getAllUsers = async (req, res) => {
   try {
     const { role, page = 1, limit = 50 } = req.query;
@@ -9,7 +9,7 @@ const getAllUsers = async (req, res) => {
 
     let query = `
       SELECT id, email, role, full_name, phone, is_active, created_at
-      FROM users
+      FROM electricity_users
       WHERE 1=1
     `;
     const params = [];
@@ -26,7 +26,7 @@ const getAllUsers = async (req, res) => {
 
     res.json(users);
   } catch (error) {
-    console.error('Get users error:', error);
+    console.error('Get electricity_users error:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 };
@@ -38,7 +38,7 @@ const createStaffUser = async (req, res) => {
 
     // Check if user exists
     const [existing] = await promisePool.query(
-      'SELECT id FROM users WHERE email = ?',
+      'SELECT id FROM electricity_users WHERE email = ?',
       [email]
     );
 
@@ -51,7 +51,7 @@ const createStaffUser = async (req, res) => {
 
     // Insert user
     await promisePool.query(
-      'INSERT INTO users (email, password, role, full_name, phone) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO electricity_users (email, password, role, full_name, phone) VALUES (?, ?, ?, ?, ?)',
       [email, hashedPassword, 'staff', full_name, phone]
     );
 
@@ -68,7 +68,7 @@ const toggleUserStatus = async (req, res) => {
     const userId = req.params.id;
 
     await promisePool.query(
-      'UPDATE users SET is_active = NOT is_active WHERE id = ?',
+      'UPDATE electricity_users SET is_active = NOT is_active WHERE id = ?',
       [userId]
     );
 

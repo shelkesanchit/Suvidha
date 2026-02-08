@@ -1,6 +1,6 @@
 const { promisePool } = require('../../config/database');
 
-// Get all complaints
+// Get all electricity_complaints
 const getAllComplaints = async (req, res) => {
   try {
     const { status, priority, page = 1, limit = 20 } = req.query;
@@ -8,9 +8,9 @@ const getAllComplaints = async (req, res) => {
 
     let query = `
       SELECT c.*, ca.consumer_number, u.full_name AS user_full_name, u.email AS user_email, u.phone AS user_phone
-      FROM complaints c
-      LEFT JOIN consumer_accounts ca ON c.consumer_account_id = ca.id
-      LEFT JOIN users u ON c.user_id = u.id
+      FROM electricity_complaints c
+      LEFT JOIN electricity_consumer_accounts ca ON c.consumer_account_id = ca.id
+      LEFT JOIN electricity_users u ON c.user_id = u.id
       WHERE 1=1
     `;
     const params = [];
@@ -55,7 +55,7 @@ const getAllComplaints = async (req, res) => {
 
     res.json(parsedComplaints);
   } catch (error) {
-    console.error('Get complaints error:', error);
+    console.error('Get electricity_complaints error:', error);
     res.status(500).json({ error: 'Failed to fetch complaints' });
   }
 };
@@ -71,7 +71,7 @@ const updateComplaint = async (req, res) => {
 
     // Get complaint details
     const [complaints] = await connection.query(
-      `SELECT c.* FROM complaints c WHERE c.id = ?`,
+      `SELECT c.* FROM electricity_complaints c WHERE c.id = ?`,
       [complaintId]
     );
 
@@ -117,7 +117,7 @@ const updateComplaint = async (req, res) => {
 
     // Update complaint
     await connection.query(
-      `UPDATE complaints 
+      `UPDATE electricity_complaints 
        SET status = ?, resolution_notes = ?, assigned_to = ?, stage_history = ?,
            resolved_at = CASE WHEN ? IN ('resolved', 'closed') THEN NOW() ELSE resolved_at END
        WHERE id = ?`,
@@ -133,7 +133,7 @@ const updateComplaint = async (req, res) => {
       }
 
       await connection.query(
-        `INSERT INTO notifications (user_id, title, message, type) 
+        `INSERT INTO electricity_notifications (user_id, title, message, type) 
          VALUES (?, ?, ?, ?)`,
         [complaint.user_id, 'Complaint Update', message, 
          status === 'resolved' ? 'success' : 'info']

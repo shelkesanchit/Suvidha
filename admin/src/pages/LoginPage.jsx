@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -7,24 +7,69 @@ import {
   Button,
   Typography,
   Avatar,
+  IconButton,
 } from '@mui/material';
-import { AdminPanelSettings } from '@mui/icons-material';
+import { AdminPanelSettings, ElectricBolt, LocalFireDepartment, Water, ArrowBack } from '@mui/icons-material';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 
-const LoginPage = () => {
-  const { login } = useAuth();
+const LoginPage = ({ department = 'electricity' }) => {
+  const { login, isAuthenticated, department: authDepartment } = useAuth();
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors } } = useForm();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Redirect if already authenticated with correct department
+  useEffect(() => {
+    if (isAuthenticated && authDepartment === department) {
+      navigate(`/${department}`, { replace: true });
+    }
+  }, [isAuthenticated, authDepartment, department, navigate]);
+
+  const deptConfig = {
+    electricity: {
+      title: 'Electricity Department',
+      icon: <ElectricBolt sx={{ fontSize: 40 }} />,
+      color: '#1976d2',
+      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      fields: { username: 'Email Address', password: 'Password' },
+      usernameType: 'email',
+    },
+    gas: {
+      title: 'Gas Department',
+      icon: <LocalFireDepartment sx={{ fontSize: 40 }} />,
+      color: '#ff6f00',
+      gradient: 'linear-gradient(135deg, #ff6f00 0%, #ff8f00 100%)',
+      fields: { username: 'Username', password: 'Password' },
+      usernameType: 'text',
+    },
+    water: {
+      title: 'Water Department',
+      icon: <Water sx={{ fontSize: 40 }} />,
+      color: '#0288d1',
+      gradient: 'linear-gradient(135deg, #0288d1 0%, #03a9f4 100%)',
+      fields: { username: 'Username', password: 'Password' },
+      usernameType: 'text',
+    },
+  };
+
+  const config = deptConfig[department];
 
   const onSubmit = async (data) => {
+    if (isSubmitting) return;
+    
     try {
-      await login(data.email, data.password);
-      navigate('/');
+      setIsSubmitting(true);
+      const credentials = department === 'electricity' 
+        ? { email: data.username, password: data.password }
+        : { username: data.username, password: data.password };
+      
+      await login(credentials, department);
+      // Navigation will be handled by useEffect after state updates
     } catch (error) {
       // Error handled in AuthContext
+      setIsSubmitting(false);
     }
   };
 
@@ -35,20 +80,31 @@ const LoginPage = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: config.gradient,
       }}
     >
       <Container maxWidth="sm">
-        <Paper elevation={10} sx={{ p: 4 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-            <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 60, height: 60 }}>
-              <AdminPanelSettings sx={{ fontSize: 40 }} />
+        <Paper elevation={10} sx={{ p: 4, position: 'relative' }}>
+          <IconButton
+            onClick={() => navigate('/')}
+            sx={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+            }}
+          >
+            <ArrowBack />
+          </IconButton>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3, mt: 2 }}>
+            <Avatar sx={{ m: 1, bgcolor: config.color, width: 60, height: 60 }}>
+              {config.icon}
             </Avatar>
             <Typography component="h1" variant="h4" fontWeight="bold">
-              SUVIDHA Admin Panel
+              SUVIDHA Admin
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Electricity Department Management System
+            <Typography variant="h6" color="text.secondary" sx={{ mt: 1 }}>
+              {config.title}
             </Typography>
           </Box>
 
@@ -57,18 +113,21 @@ const LoginPage = () => {
               margin="normal"
               required
               fullWidth
-              id="email"
-              label="Email Address"
-              autoComplete="email"
+              id="username"
+              label={config.fields.username}
+              type={config.usernameType}
+              autoComplete={config.usernameType === 'email' ? 'email' : 'username'}
               autoFocus
-              error={!!errors.email}
-              helperText={errors.email?.message}
-              {...register('email', {
-                required: 'Email is required',
-                pattern: {
-                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: 'Invalid email address',
-                },
+              error={!!errors.username}
+              helperText={errors.username?.message}
+              {...register('username', {
+                required: `${config.fields.username} is required`,
+                ...(config.usernameType === 'email' && {
+                  pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: 'Invalid email address',
+                  },
+                }),
               })}
             />
 
@@ -76,7 +135,7 @@ const LoginPage = () => {
               margin="normal"
               required
               fullWidth
-              label="Password"
+              label={config.fields.password}
               type="password"
               id="password"
               autoComplete="current-password"
@@ -96,16 +155,29 @@ const LoginPage = () => {
               fullWidth
               variant="contained"
               size="large"
-              sx={{ mt: 3, mb: 2, py: 1.5 }}
+              disabled={isSubmitting}
+              sx={{ 
+                mt: 3, 
+                mb: 2, 
+                py: 1.5,
+                bgcolor: config.color,
+                '&:hover': {
+                  bgcolor: config.color,
+                  opacity: 0.9,
+                },
+              }}
             >
-              Sign In to Admin Panel
+              {isSubmitting ? 'Signing In...' : 'Sign In'}
             </Button>
 
-            <Box sx={{ mt: 3, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
-              <Typography variant="body2" color="text.secondary" align="center">
-                <strong>Admin Access Only</strong>
-                <br />
-                For customer portal, please visit the main website
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Typography variant="caption" color="text.secondary" display="block">
+                <strong>Default Credentials:</strong>
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                {department === 'electricity' && 'admin@electricity.gov.in / Admin@123'}
+                {department === 'gas' && 'gas_admin / GasAdmin@123'}
+                {department === 'water' && 'water_admin / WaterAdmin@123'}
               </Typography>
             </Box>
           </Box>

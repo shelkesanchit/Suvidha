@@ -1,16 +1,22 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 
 // Pages
-import HomePage from './pages/HomePage';
+import LandingPage from './pages/LandingPage';
 import KioskPage from './pages/KioskPage';
+import GasServicesPage from './pages/GasServicesPage';
+import MunicipalServicesPage from './pages/MunicipalServicesPage';
+import WaterServicesPage from './pages/WaterServicesPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/kiosk" replace />} />
-      <Route path="/kiosk" element={<KioskPage />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/electricity" element={<KioskPage />} />
+      <Route path="/gas" element={<GasServicesPage />} />
+      <Route path="/municipal" element={<MunicipalServicesPage />} />
+      <Route path="/municipal/water" element={<WaterServicesPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

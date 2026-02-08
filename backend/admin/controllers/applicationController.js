@@ -1,6 +1,6 @@
 const { promisePool } = require('../../config/database');
 
-// Get all applications
+// Get all electricity_applications
 const getAllApplications = async (req, res) => {
   try {
     const { status, type, page = 1, limit = 20 } = req.query;
@@ -12,8 +12,8 @@ const getAllApplications = async (req, res) => {
              a.application_data, a.documents, a.remarks, a.current_stage, a.stage_history,
              a.submitted_at, a.reviewed_by, a.reviewed_at, a.completed_at,
              u.full_name, u.email, u.phone
-      FROM applications a
-      LEFT JOIN users u ON a.user_id = u.id
+      FROM electricity_applications a
+      LEFT JOIN electricity_users u ON a.user_id = u.id
       WHERE 1=1
     `;
     const params = [];
@@ -32,7 +32,7 @@ const getAllApplications = async (req, res) => {
     query += ' ORDER BY a.id DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
 
-    console.log('Fetching applications with query:', query);
+    console.log('Fetching electricity_applications with query:', query);
     console.log('Query params:', params);
 
     const [applications] = await promisePool.query(query, params);
@@ -61,7 +61,7 @@ const getAllApplications = async (req, res) => {
 
     res.json(parsedApplications);
   } catch (error) {
-    console.error('Get applications error:', error);
+    console.error('Get electricity_applications error:', error);
     console.error('Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to fetch applications', details: error.message });
   }
@@ -80,7 +80,7 @@ const updateApplication = async (req, res) => {
 
     // Get application details
     const [applications] = await connection.query(
-      'SELECT * FROM applications WHERE id = ?',
+      'SELECT * FROM electricity_applications WHERE id = ?',
       [applicationId]
     );
 
@@ -111,7 +111,7 @@ const updateApplication = async (req, res) => {
     // Update application
     console.log('Updating application in database...');
     await connection.query(
-      `UPDATE applications 
+      `UPDATE electricity_applications 
        SET status = ?, remarks = ?, current_stage = ?, stage_history = ?, 
            reviewed_by = ?, reviewed_at = NOW(),
            completed_at = CASE WHEN ? IN ('approved', 'completed') THEN NOW() ELSE completed_at END
@@ -132,14 +132,14 @@ const updateApplication = async (req, res) => {
         // Generate consumer number
         const year = new Date().getFullYear();
         const [countResult] = await connection.query(
-          'SELECT COUNT(*) as count FROM consumer_accounts WHERE YEAR(created_at) = ?',
+          'SELECT COUNT(*) as count FROM electricity_consumer_accounts WHERE YEAR(created_at) = ?',
           [year]
         );
         const consumerNumber = `EC${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
 
         // Insert consumer account
         await connection.query(
-          `INSERT INTO consumer_accounts 
+          `INSERT INTO electricity_consumer_accounts 
            (user_id, consumer_number, category, tariff_type, sanctioned_load, 
             connection_status, address_line1, address_line2, city, state, pincode)
            VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
@@ -174,7 +174,7 @@ const updateApplication = async (req, res) => {
 
         if (notificationMessage) {
           await connection.query(
-            `INSERT INTO notifications (user_id, title, message, type) 
+            `INSERT INTO electricity_notifications (user_id, title, message, type) 
              VALUES (?, ?, ?, ?)`,
             [application.user_id, 'Application Update', notificationMessage, 
              status === 'approved' ? 'success' : status === 'rejected' ? 'error' : 'info']
@@ -213,7 +213,7 @@ const uploadDocuments = async (req, res) => {
     
     // Get existing documents
     const [applications] = await promisePool.query(
-      'SELECT documents FROM applications WHERE id = ?',
+      'SELECT documents FROM electricity_applications WHERE id = ?',
       [applicationId]
     );
 
@@ -244,7 +244,7 @@ const uploadDocuments = async (req, res) => {
 
     // Update database
     await promisePool.query(
-      'UPDATE applications SET documents = ? WHERE id = ?',
+      'UPDATE electricity_applications SET documents = ? WHERE id = ?',
       [JSON.stringify(allDocuments), applicationId]
     );
 
