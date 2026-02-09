@@ -78,7 +78,7 @@ const WaterDashboard = () => {
   const handleLogout = () => {
     logout();
     toast.success('Logged out successfully');
-    navigate('/water/login');
+    navigate('/');
   };
 
   const handleNavigation = (path) => {

@@ -114,8 +114,6 @@ const DashboardOverview = () => {
       icon: PeopleIcon,
       color: '#0288d1',
       bgColor: '#e3f2fd',
-      trend: '+12%',
-      trendUp: true,
     },
     {
       title: 'Active Connections',
@@ -123,8 +121,6 @@ const DashboardOverview = () => {
       icon: WaterDrop,
       color: '#00bcd4',
       bgColor: '#e0f7fa',
-      trend: '+8%',
-      trendUp: true,
     },
     {
       title: 'Pending Applications',
@@ -150,8 +146,6 @@ const DashboardOverview = () => {
       icon: PaymentIcon,
       color: '#4caf50',
       bgColor: '#e8f5e9',
-      trend: '+15%',
-      trendUp: true,
     },
     {
       title: 'Monthly Collection',
@@ -159,8 +153,6 @@ const DashboardOverview = () => {
       icon: TrendingIcon,
       color: '#9c27b0',
       bgColor: '#f3e5f5',
-      trend: '+24%',
-      trendUp: true,
     },
   ];
 

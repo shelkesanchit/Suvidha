@@ -83,14 +83,13 @@ const Reports = () => {
     } catch (error) {
       console.error('Failed to fetch report data:', error);
       toast.error('Failed to fetch report data from database');
-      // Set empty data instead of mock data
       setReportData({
         summary: { totalConsumers: 0, activeConnections: 0, totalBilled: 0, totalCollected: 0, totalApplications: 0, totalComplaints: 0, resolvedComplaints: 0 },
-        collections: [{ month: 'Jan', billed: 0, collected: 0 }],
-        categoryWise: [{ category: 'Residential', consumers: 0, revenue: 0 }],
-        wardWise: [{ ward: 'Ward 1', consumers: 0, revenue: 0 }],
-        applications: [{ type: 'New Connection', pending: 0, approved: 0, rejected: 0 }],
-        complaints: [{ category: 'No Water', open: 0, resolved: 0 }],
+        collections: [],
+        categoryWise: [],
+        wardWise: [],
+        applications: [],
+        complaints: [],
       });
     } finally {
       setLoading(false);

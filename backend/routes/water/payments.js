@@ -20,7 +20,7 @@ router.post('/process', async (req, res) => {
     
     // Get consumer
     const [consumers] = await connection.query(
-      'SELECT id FROM water_customers WHERE consumer_number = ?',
+      'SELECT id FROM water_consumers WHERE consumer_number = ?',
       [consumer_number]
     );
     
@@ -69,7 +69,7 @@ router.post('/process', async (req, res) => {
     // Update consumer outstanding amount
     if (consumerId) {
       await connection.query(
-        `UPDATE water_customers 
+        `UPDATE water_consumers 
          SET outstanding_amount = GREATEST(0, outstanding_amount - ?),
              last_payment_date = CURDATE(),
              last_payment_amount = ?

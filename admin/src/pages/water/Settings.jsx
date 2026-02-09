@@ -35,38 +35,38 @@ const Settings = () => {
   const [tabValue, setTabValue] = useState(0);
   const [settings, setSettings] = useState({
     // General Settings
-    department_name: 'Water Supply Department',
-    department_address: 'Municipal Corporation Building, Main Road',
-    contact_phone: '1800-XXX-XXXX',
-    contact_email: 'water@municipality.gov',
-    office_hours: '9:00 AM - 6:00 PM',
+    department_name: '',
+    department_address: '',
+    contact_phone: '',
+    contact_email: '',
+    office_hours: '',
     
     // Billing Settings
     billing_cycle: 'monthly',
-    bill_due_days: 15,
-    late_payment_penalty: 5,
-    minimum_bill_amount: 50,
-    round_off_amount: true,
+    bill_due_days: 0,
+    late_payment_penalty: 0,
+    minimum_bill_amount: 0,
+    round_off_amount: false,
     
     // Connection Settings
-    new_connection_fee: 500,
-    security_deposit_domestic: 1000,
-    security_deposit_commercial: 2500,
-    security_deposit_industrial: 5000,
-    reconnection_fee: 300,
+    new_connection_fee: 0,
+    security_deposit_domestic: 0,
+    security_deposit_commercial: 0,
+    security_deposit_industrial: 0,
+    reconnection_fee: 0,
     
     // Notification Settings
-    sms_notifications: true,
-    email_notifications: true,
-    bill_reminder_days: 3,
-    payment_confirmation_sms: true,
-    complaint_status_sms: true,
+    sms_notifications: false,
+    email_notifications: false,
+    bill_reminder_days: 0,
+    payment_confirmation_sms: false,
+    complaint_status_sms: false,
     
     // System Settings
-    auto_disconnect_days: 90,
-    max_pending_bills: 3,
-    enable_online_payment: true,
-    enable_mobile_app: true,
+    auto_disconnect_days: 0,
+    max_pending_bills: 0,
+    enable_online_payment: false,
+    enable_mobile_app: false,
   });
 
   useEffect(() => {

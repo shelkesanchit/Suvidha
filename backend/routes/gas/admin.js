@@ -6,13 +6,7 @@ const jwt = require('jsonwebtoken');
 
 // =====================================================
 // GAS ADMIN ROUTES
-// Fixed to match actual DB schemas:
-//   admin_users (not gas_admin_users) - login by email, not username
-//   gas_consumers (not gas_consumers)
-//   gas_applications.application_status (not status)
-//   gas_tariff_rates (not gas_tariffs)
-//   gas_cylinder_bookings.booking_status / booking_date
-//   No gas_bills table
+// Uses gas_admin_users table with username/email login
 // =====================================================
 
 // JWT Secret
@@ -39,10 +33,10 @@ router.post('/login', async (req, res) => {
     const { email, username, password } = req.body;
     const loginId = email || username;
 
-    // Use admin_users table, filter by email and role, check is_active
+    // Use gas_admin_users table, login by username or email
     const [users] = await promisePool.query(
-      'SELECT * FROM admin_users WHERE email = ? AND is_active = 1 AND role IN (?, ?)',
-      [loginId, 'gas_admin', 'super_admin']
+      'SELECT * FROM gas_admin_users WHERE (username = ? OR email = ?) AND is_active = 1',
+      [loginId, loginId]
     );
 
     if (users.length === 0) {
@@ -51,8 +45,8 @@ router.post('/login', async (req, res) => {
 
     const user = users[0];
     
-    // For demo, accept 'admin123' as password
-    const isMatch = password === 'admin123' || await bcrypt.compare(password, user.password_hash);
+    // For demo, accept 'admin123' as password (gas_admin_users uses 'password' column)
+    const isMatch = password === 'admin123' || await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -67,21 +61,41 @@ router.post('/login', async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          full_name: user.full_name,
-          role: user.role,
-          phone: user.phone
-        }
+      token,
+      admin: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        full_name: user.full_name,
+        role: user.role,
+        phone: user.phone
       }
     });
 
   } catch (error) {
     console.error('Admin login error:', error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get Current Admin User (auth/me)
+router.get('/auth/me', verifyGasAdminToken, async (req, res) => {
+  try {
+    const [users] = await promisePool.query(
+      `SELECT id, username, full_name, role, email, phone, created_at 
+       FROM gas_admin_users 
+       WHERE id = ? AND is_active = 1`,
+      [req.adminUser.id]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(users[0]);
+  } catch (error) {
+    console.error('Gas auth/me error:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
   }
 });
 

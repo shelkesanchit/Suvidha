@@ -36,7 +36,7 @@ router.post('/login', async (req, res) => {
     console.log('Water admin login attempt:', { username, password: '***' });
     
     const [users] = await promisePool.query(
-      `SELECT * FROM admin_users WHERE username = ? AND status = 'active'`,
+      `SELECT * FROM water_admin_users WHERE username = ? AND status = 'active'`,
       [username]
     );
     
@@ -63,7 +63,7 @@ router.post('/login', async (req, res) => {
     
     // Update last login
     await promisePool.query(
-      'UPDATE admin_users SET last_login = NOW() WHERE id = ?',
+      'UPDATE water_admin_users SET last_login = NOW() WHERE id = ?',
       [user.id]
     );
     
@@ -98,7 +98,7 @@ router.get('/auth/me', verifyWaterAdminToken, async (req, res) => {
   try {
     const [users] = await promisePool.query(
       `SELECT id, username, full_name, role, email, designation, created_at 
-       FROM admin_users 
+       FROM water_admin_users 
        WHERE id = ? AND status = 'active'`,
       [req.adminUser.id]
     );
@@ -127,7 +127,7 @@ router.get('/dashboard/stats', verifyWaterAdminToken, async (req, res) => {
   try {
     // Get total consumers
     const [consumersResult] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_customers WHERE connection_status = 'active'`
+      `SELECT COUNT(*) as total FROM water_consumers WHERE connection_status = 'active'`
     );
     
     // Get pending applications
@@ -405,7 +405,7 @@ router.put('/applications/:id', verifyWaterAdminToken, async (req, res) => {
       const consumerNumber = `WC${new Date().getFullYear()}${String(id).padStart(6, '0')}`;
       
       await connection.query(
-        `INSERT INTO water_customers 
+        `INSERT INTO water_consumers 
         (consumer_number, full_name, father_spouse_name, email, mobile, aadhaar_number,
          property_id, house_flat_no, building_name, ward, address, landmark,
          connection_type, property_type, ownership_status, pipe_size,
@@ -550,7 +550,7 @@ router.get('/consumers', verifyWaterAdminToken, async (req, res) => {
     const { status, search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
     
-    let query = `SELECT * FROM water_customers WHERE 1=1`;
+    let query = `SELECT * FROM water_consumers WHERE 1=1`;
     const params = [];
     
     if (status) {
@@ -570,7 +570,7 @@ router.get('/consumers', verifyWaterAdminToken, async (req, res) => {
     
     // Get total count
     const [countResult] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_customers`
+      `SELECT COUNT(*) as total FROM water_consumers`
     );
     
     res.json({
@@ -593,7 +593,7 @@ router.put('/consumers/:id', verifyWaterAdminToken, async (req, res) => {
     const { id } = req.params;
     
     await promisePool.query(
-      `UPDATE water_customers 
+      `UPDATE water_consumers 
        SET connection_status = COALESCE(?, connection_status),
            meter_number = COALESCE(?, meter_number),
            tariff_category = COALESCE(?, tariff_category)
@@ -644,10 +644,10 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
 
     // 1. Summary Statistics
     const [consumersTotal] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_customers`
+      `SELECT COUNT(*) as total FROM water_consumers`
     );
     const [consumersActive] = await promisePool.query(
-      `SELECT COUNT(*) as total FROM water_customers WHERE connection_status = 'active'`
+      `SELECT COUNT(*) as total FROM water_consumers WHERE connection_status = 'active'`
     );
     const [billsData] = await promisePool.query(
       `SELECT 
@@ -693,7 +693,7 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
         COALESCE(property_type, 'residential') as category,
         COUNT(*) as consumers,
         0 as revenue
-       FROM water_customers
+       FROM water_consumers
        GROUP BY property_type
        ORDER BY consumers DESC`
     );
@@ -710,7 +710,7 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
       `SELECT 
         COALESCE(wc.property_type, 'residential') as category,
         COALESCE(SUM(wb.amount_paid), 0) as revenue
-       FROM water_customers wc
+       FROM water_consumers wc
        LEFT JOIN water_bills wb ON wc.consumer_number = wb.consumer_number
        GROUP BY wc.property_type`
     );
@@ -729,7 +729,7 @@ router.get('/reports', verifyWaterAdminToken, async (req, res) => {
         COALESCE(ward, 'Unknown') as ward,
         COUNT(*) as consumers,
         0 as revenue
-       FROM water_customers
+       FROM water_consumers
        WHERE ward IS NOT NULL AND ward != ''
        GROUP BY ward
        ORDER BY consumers DESC

@@ -82,7 +82,7 @@ const GasDashboard = () => {
   const handleLogout = () => {
     logout();
     toast.success('Logged out successfully');
-    navigate('/gas/login');
+    navigate('/');
   };
 
   const handleNavigation = (path) => {

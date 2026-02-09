@@ -79,16 +79,8 @@ const TariffManagement = () => {
       setTariffs(response.data.data || []);
     } catch (error) {
       console.error('Failed to fetch tariffs:', error);
-      // Mock data for demo
-      setTariffs([
-        { id: 1, category: 'domestic', slab_name: 'Slab 1', min_units: 0, max_units: 10, rate_per_kl: 5.00, fixed_charge: 50, is_active: true },
-        { id: 2, category: 'domestic', slab_name: 'Slab 2', min_units: 11, max_units: 20, rate_per_kl: 8.00, fixed_charge: 50, is_active: true },
-        { id: 3, category: 'domestic', slab_name: 'Slab 3', min_units: 21, max_units: 30, rate_per_kl: 12.00, fixed_charge: 50, is_active: true },
-        { id: 4, category: 'domestic', slab_name: 'Above 30 KL', min_units: 31, max_units: null, rate_per_kl: 18.00, fixed_charge: 50, is_active: true },
-        { id: 5, category: 'commercial', slab_name: 'All Units', min_units: 0, max_units: null, rate_per_kl: 25.00, fixed_charge: 150, is_active: true },
-        { id: 6, category: 'industrial', slab_name: 'All Units', min_units: 0, max_units: null, rate_per_kl: 35.00, fixed_charge: 300, is_active: true },
-        { id: 7, category: 'institutional', slab_name: 'All Units', min_units: 0, max_units: null, rate_per_kl: 15.00, fixed_charge: 100, is_active: true },
-      ]);
+      toast.error('Failed to fetch tariffs');
+      setTariffs([]);
     } finally {
       setLoading(false);
     }

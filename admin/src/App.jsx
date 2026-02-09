@@ -4,8 +4,13 @@ import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-// Pages
+// Role Selection
+import RoleSelection from './pages/RoleSelection';
+
+// Shared Login Page (department-aware)
 import LoginPage from './pages/LoginPage';
+
+// Electricity Pages
 import AdminDashboard from './pages/electricity/AdminDashboard';
 import AdminOverview from './pages/electricity/AdminOverview';
 import ManageApplications from './pages/electricity/ManageApplications';
@@ -15,6 +20,28 @@ import Reports from './pages/electricity/Reports';
 import SystemSettings from './pages/electricity/SystemSettings';
 import TariffManagement from './pages/electricity/TariffManagement';
 import MeterReadingManagement from './pages/electricity/MeterReadingManagement';
+
+// Gas Pages
+import GasDashboard from './pages/gas/GasDashboard';
+import GasDashboardOverview from './pages/gas/DashboardOverview';
+import GasManageApplications from './pages/gas/ManageApplications';
+import GasManageComplaints from './pages/gas/ManageComplaints';
+import GasManageConsumers from './pages/gas/ManageConsumers';
+import CylinderBookings from './pages/gas/CylinderBookings';
+import RegulatoryOperations from './pages/gas/RegulatoryOperations';
+import GasReports from './pages/gas/Reports';
+import GasTariffManagement from './pages/gas/TariffManagement';
+import GasSettings from './pages/gas/Settings';
+
+// Water Pages
+import WaterDashboard from './pages/water/WaterDashboard';
+import WaterDashboardOverview from './pages/water/DashboardOverview';
+import WaterManageApplications from './pages/water/ManageApplications';
+import WaterManageComplaints from './pages/water/ManageComplaints';
+import WaterManageConsumers from './pages/water/ManageConsumers';
+import WaterReports from './pages/water/Reports';
+import WaterTariffManagement from './pages/water/TariffManagement';
+import WaterSettings from './pages/water/Settings';
 
 // Create theme
 const theme = createTheme({
@@ -36,30 +63,39 @@ const theme = createTheme({
 });
 
 // Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const ProtectedRoute = ({ children, dept }) => {
+  const { isAuthenticated, loading, department } = useAuth();
 
   if (loading) {
     return <div>Loading...</div>;
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={dept ? `/${dept}/login` : '/login'} replace />;
+  }
+
+  // If a specific department is required, verify it matches
+  if (dept && department !== dept) {
+    return <Navigate to={`/${dept}/login`} replace />;
   }
 
   return children;
 };
 
 // Public Route Component (redirect if already logged in)
-const PublicRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const PublicRoute = ({ children, dept }) => {
+  const { isAuthenticated, loading, department } = useAuth();
 
   if (loading) {
     return <div>Loading...</div>;
   }
 
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+  if (isAuthenticated && department) {
+    // Redirect to the department they're logged into
+    if (department === 'electricity') {
+      return <Navigate to="/electricity" replace />;
+    }
+    return <Navigate to={`/${department}`} replace />;
   }
 
   return children;
@@ -68,21 +104,25 @@ const PublicRoute = ({ children }) => {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public Routes */}
+      {/* Role Selection - Landing Page */}
+      <Route path="/" element={<RoleSelection />} />
+
+      {/* Legacy /login redirects to role selection */}
+      <Route path="/login" element={<Navigate to="/" replace />} />
+
+      {/* ============ ELECTRICITY ROUTES ============ */}
       <Route
-        path="/login"
+        path="/electricity/login"
         element={
-          <PublicRoute>
-            <LoginPage />
+          <PublicRoute dept="electricity">
+            <LoginPage department="electricity" />
           </PublicRoute>
         }
       />
-
-      {/* Protected Admin Routes */}
       <Route
-        path="/*"
+        path="/electricity/*"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute dept="electricity">
             <AdminDashboard />
           </ProtectedRoute>
         }
@@ -97,7 +137,61 @@ function AppRoutes() {
         <Route path="tariff" element={<TariffManagement />} />
       </Route>
 
-      {/* Catch all - redirect to home */}
+      {/* ============ GAS ROUTES ============ */}
+      <Route
+        path="/gas/login"
+        element={
+          <PublicRoute dept="gas">
+            <LoginPage department="gas" />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/gas/*"
+        element={
+          <ProtectedRoute dept="gas">
+            <GasDashboard />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<GasDashboardOverview />} />
+        <Route path="applications" element={<GasManageApplications />} />
+        <Route path="complaints" element={<GasManageComplaints />} />
+        <Route path="consumers" element={<GasManageConsumers />} />
+        <Route path="cylinders" element={<CylinderBookings />} />
+        <Route path="regulatory" element={<RegulatoryOperations />} />
+        <Route path="reports" element={<GasReports />} />
+        <Route path="tariff" element={<GasTariffManagement />} />
+        <Route path="settings" element={<GasSettings />} />
+      </Route>
+
+      {/* ============ WATER ROUTES ============ */}
+      <Route
+        path="/water/login"
+        element={
+          <PublicRoute dept="water">
+            <LoginPage department="water" />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/water/*"
+        element={
+          <ProtectedRoute dept="water">
+            <WaterDashboard />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<WaterDashboardOverview />} />
+        <Route path="applications" element={<WaterManageApplications />} />
+        <Route path="complaints" element={<WaterManageComplaints />} />
+        <Route path="consumers" element={<WaterManageConsumers />} />
+        <Route path="reports" element={<WaterReports />} />
+        <Route path="tariff" element={<WaterTariffManagement />} />
+        <Route path="settings" element={<WaterSettings />} />
+      </Route>
+
+      {/* Catch all - redirect to role selection */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
