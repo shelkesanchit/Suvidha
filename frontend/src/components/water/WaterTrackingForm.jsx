@@ -5,7 +5,6 @@ import {
   TextField,
   Button,
   Grid,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
@@ -263,12 +262,6 @@ const WaterTrackingForm = ({ onClose }) => {
 
   return (
     <Box>
-      <DialogTitle sx={{ bgcolor: '#0288d1', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
-          🔍 Track Request / अनुरोध ट्रैक करें
-        </Typography>
-      </DialogTitle>
-
       <DialogContent sx={{ mt: 2 }}>
         {!trackingData ? (
           <Box>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../../utils/api';
 import {
   Box,
   Typography,
@@ -35,9 +35,7 @@ const BillPaymentForm = ({ onClose }) => {
     setLoading(true);
     try {
       // Call electricity bills endpoint from backend
-      const response = await axios.get(
-        `http://localhost:5000/api/bills/electricity/${consumerNumber}`
-      );
+      const response = await api.get(`/bills/electricity/${consumerNumber}`);
 
       if (response.data && response.data.success && response.data.data) {
         const billResponse = response.data.data;
@@ -86,13 +84,10 @@ const BillPaymentForm = ({ onClose }) => {
     setLoading(true);
     try {
       // Call payment API
-      const response = await axios.post(
-        `http://localhost:5000/api/payments/electricity/process`,
-        {
+      const response = await api.post('/payments/electricity/process', {
           customer_id: bill.consumer_number,
           bill_number: bill.bill_number,
-        }
-      );
+        });
 
       if (response.data && response.data.success) {
         const txnId = response.data.transaction_id;
@@ -117,10 +112,6 @@ const BillPaymentForm = ({ onClose }) => {
   if (paymentSuccess) {
     return (
       <Box>
-        <DialogTitle sx={{ bgcolor: '#ffa500', color: 'white' }}>
-          <Typography variant="body1" fontWeight={600}>⚡ Electricity Bill Payment</Typography>
-        </DialogTitle>
-
         <DialogContent sx={{ textAlign: 'center', py: 4 }}>
           <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
           <Typography variant="h4" color="success.main" gutterBottom>Payment Successful!</Typography>
@@ -153,10 +144,6 @@ const BillPaymentForm = ({ onClose }) => {
 
   return (
     <Box>
-      <DialogTitle sx={{ bgcolor: '#ffa500', color: 'white' }}>
-        <Typography variant="body1" fontWeight={600}>⚡ Pay Electricity Bill</Typography>
-      </DialogTitle>
-
       <DialogContent sx={{ mt: 2 }}>
         <Alert severity="info" sx={{ mb: 3 }}>
           Enter your Consumer Number to view and pay your electricity bill with REAL MSEDCL tariffs

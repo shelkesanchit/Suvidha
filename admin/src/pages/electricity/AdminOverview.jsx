@@ -38,7 +38,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import api from '../../utils/api';
+import api from '../../utils/electricity/api';
 import toast from 'react-hot-toast';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];

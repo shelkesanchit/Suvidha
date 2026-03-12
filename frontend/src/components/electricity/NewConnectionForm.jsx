@@ -21,9 +21,11 @@ import {
   FormLabel,
   Chip,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon } from '@mui/icons-material';
+import { CheckCircle as SuccessIcon, Print as PrintIcon } from '@mui/icons-material';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const steps = ['Applicant Details', 'Premises Information', 'Connection Details', 'Documents', 'Review & Submit'];
 
@@ -197,6 +199,10 @@ const NewConnectionForm = ({ onClose }) => {
   const [submitted, setSubmitted] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
   const [customLoad, setCustomLoad] = useState(false);
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState({});
   const [formData, setFormData] = useState({
     // Applicant Details
@@ -325,7 +331,12 @@ const NewConnectionForm = ({ onClose }) => {
     setActiveStep((prevStep) => prevStep - 1);
   };
 
-  const handleSubmit = async () => {
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
+  };
+
+  const handleSubmit = async (email) => {
     try {
       // Prepare documents array
       const documentsArray = Object.entries(uploadedDocs)
@@ -336,22 +347,27 @@ const NewConnectionForm = ({ onClose }) => {
           uploadedAt: new Date().toISOString(),
         }));
 
-      console.log('Submitting application with data:', {
-        application_type: 'new_connection',
-        application_data: formData,
-        documents: documentsArray.length > 0 ? `${documentsArray.length} files` : 'no files'
-      });
-
       const response = await api.post('/electricity/applications/submit', {
         application_type: 'new_connection',
         application_data: formData,
         documents: documentsArray,
       });
 
-      console.log('Application submitted successfully:', response.data);
-      setApplicationNumber(response.data.application_number);
+      const appNum = response.data.application_number;
+      const ts = new Date().toISOString();
+      setApplicationNumber(appNum);
       setSubmitted(true);
+      setVerifiedEmail(email);
+      setSubmittedAt(ts);
+      setShowReceipt(true);
       toast.success('Application submitted successfully!');
+      api.post('/electricity/otp/send-receipt', {
+        email,
+        application_number: appNum,
+        application_type: 'new_connection',
+        application_data: formData,
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch (error) {
       console.error('Submission error:', error);
       let errorMessage = 'Failed to submit application';
@@ -934,9 +950,23 @@ const NewConnectionForm = ({ onClose }) => {
             4. Track your application using the application number
           </Typography>
         </Alert>
-        <Button variant="contained" onClick={onClose} size="large">
-          Close
-        </Button>
+        <Box sx={{ mt: 2, display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => setShowReceipt(true)}>
+            Print Receipt
+          </Button>
+          <Button variant="contained" onClick={onClose} size="large">
+            Close
+          </Button>
+        </Box>
+        <ApplicationReceipt
+          open={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          applicationNumber={applicationNumber}
+          applicationType="new_connection"
+          formData={formData}
+          email={verifiedEmail}
+          submittedAt={submittedAt}
+        />
       </Box>
     );
   }
@@ -978,7 +1008,7 @@ const NewConnectionForm = ({ onClose }) => {
           Back
         </Button>
         {activeStep === steps.length - 1 ? (
-          <Button variant="contained" onClick={handleSubmit} size="large">
+          <Button variant="contained" onClick={() => setShowOtpDialog(true)} size="large">
             Submit Application
           </Button>
         ) : (
@@ -987,6 +1017,12 @@ const NewConnectionForm = ({ onClose }) => {
           </Button>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.email || ''}
+      />
     </Box>
   );
 };

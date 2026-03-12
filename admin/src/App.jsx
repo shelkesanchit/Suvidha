@@ -20,6 +20,7 @@ import Reports from './pages/electricity/Reports';
 import SystemSettings from './pages/electricity/SystemSettings';
 import TariffManagement from './pages/electricity/TariffManagement';
 import MeterReadingManagement from './pages/electricity/MeterReadingManagement';
+import ConsumerAccounts from './pages/electricity/ConsumerAccounts';
 
 // Gas Pages
 import GasDashboard from './pages/gas/GasDashboard';
@@ -132,6 +133,7 @@ function AppRoutes() {
         <Route path="complaints" element={<ManageComplaints />} />
         <Route path="users" element={<ManageUsers />} />
         <Route path="meter-readings" element={<MeterReadingManagement />} />
+        <Route path="consumers" element={<ConsumerAccounts />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<SystemSettings />} />
         <Route path="tariff" element={<TariffManagement />} />

@@ -42,9 +42,9 @@ const HomePage = () => {
           </Typography>
 
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <Card 
+            <Card
               className="touch-card"
-              sx={{ 
+              sx={{
                 maxWidth: 500,
                 width: '100%',
                 transition: 'transform 0.3s',
@@ -59,13 +59,13 @@ const HomePage = () => {
                   Kiosk Services
                 </Typography>
                 <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                  Access all electricity department services in one place. 
+                  Access all electricity department services in one place.
                   {isAuthenticated ? ' Continue to explore services.' : ' Login or register to get started.'}
                 </Typography>
-                <Button 
-                  variant="contained" 
+                <Button
+                  variant="contained"
                   size="large"
-                  fullWidth 
+                  fullWidth
                   sx={{ py: 1.5, fontSize: '1.1rem' }}
                   onClick={() => navigate(isAuthenticated ? '/kiosk' : '/login')}
                 >

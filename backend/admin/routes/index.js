@@ -8,33 +8,18 @@ const complaintController = require('../controllers/complaintController');
 const userController = require('../controllers/userController');
 const consumerController = require('../controllers/consumerController');
 const reportController = require('../controllers/reportController');
+const meterReadingController = require('../controllers/meterReadingController');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/documents');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'doc-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Use memory storage — files are uploaded to Supabase Storage in applicationController
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -124,5 +109,11 @@ router.get('/consumers', verifyToken, isAdminOrStaff, consumerController.getCons
 
 // Report Routes
 router.get('/reports/payments', verifyToken, isAdminOrStaff, reportController.getPaymentReports);
+
+// Meter Reading Routes
+router.get('/meter-readings/customers', verifyToken, isAdminOrStaff, meterReadingController.getAllCustomers);
+router.post('/meter-readings/submit', verifyToken, isAdminOrStaff, meterReadingController.submitMeterReading);
+router.post('/meter-readings/bulk', verifyToken, isAdminOrStaff, meterReadingController.submitBulkMeterReadings);
+router.get('/meter-readings/history/:customerId', verifyToken, isAdminOrStaff, meterReadingController.getMeterReadingHistory);
 
 module.exports = router;

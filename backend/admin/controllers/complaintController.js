@@ -1,9 +1,9 @@
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 
 const getAllComplaints = async (req, res) => {
   try {
     const { status: filterStatus, priority, page = 1, limit = 20 } = req.query;
-    const offset = (page - 1) * limit;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     let query = `
       SELECT c.*, ca.consumer_number, u.full_name, u.email, u.phone
@@ -13,76 +13,53 @@ const getAllComplaints = async (req, res) => {
       WHERE 1=1
     `;
     const params = [];
+    let idx = 1;
 
-    if (filterStatus) {
-      query += ' AND c.status = ?';
-      params.push(filterStatus);
-    }
+    if (filterStatus) { query += ' AND c.status = $' + idx++; params.push(filterStatus); }
+    if (priority) { query += ' AND c.priority = $' + idx++; params.push(priority); }
 
-    if (priority) {
-      query += ' AND c.priority = ?';
-      params.push(priority);
-    }
-
-    query += ' ORDER BY c.submitted_at DESC LIMIT ? OFFSET ?';
+    query += ' ORDER BY c.submitted_at DESC LIMIT $' + idx++ + ' OFFSET $' + idx++;
     params.push(parseInt(limit), offset);
 
-    const [complaints] = await promisePool.query(query, params);
-
-    res.json(complaints);
+    const result = await pool.query(query, params);
+    res.json(result.rows);
   } catch (error) {
     console.error('Get complaints error:', error);
     res.status(500).json({ error: 'Failed to fetch complaints' });
   }
 };
 
-// Update complaint
 const updateComplaint = async (req, res) => {
-  const connection = await promisePool.getConnection();
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
     const { status: newStatus, resolution_notes, assigned_to } = req.body;
     const complaintId = req.params.id;
 
-    // Get complaint details
-    const [complaints] = await connection.query(
-      `SELECT * FROM electricity_complaints WHERE id = ?`,
-      [complaintId]
-    );
-
-    if (complaints.length === 0) {
-      await connection.rollback();
-      connection.release();
+    const existing = await client.query('SELECT id FROM electricity_complaints WHERE id = $1', [complaintId]);
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Complaint not found' });
     }
 
-    // Update complaint
-    await connection.query(
-      `UPDATE electricity_complaints 
-       SET status = ?, resolution_notes = ?, assigned_to = ?,
-           resolved_at = CASE WHEN ? IN ('resolved', 'closed') THEN NOW() ELSE resolved_at END
-       WHERE id = ?`,
-      [newStatus, resolution_notes || null, assigned_to || null, 
-       newStatus, complaintId]
+    await client.query(
+      `UPDATE electricity_complaints
+       SET status = $1, resolution_notes = $2, assigned_to = $3,
+           resolved_at = CASE WHEN $4 IN ('resolved', 'closed') THEN NOW() ELSE resolved_at END
+       WHERE id = $5`,
+      [newStatus, resolution_notes || null, assigned_to || null, newStatus, complaintId]
     );
 
-    await connection.commit();
-
-    res.json({ 
-      message: 'Complaint updated successfully'
-    });
+    await client.query('COMMIT');
+    res.json({ message: 'Complaint updated successfully' });
   } catch (error) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error('Update complaint error:', error.message);
-    console.error('Error details:', error);
     res.status(500).json({ error: 'Failed to update complaint', details: error.message });
   } finally {
-    connection.release();
+    client.release();
   }
 };
 
-module.exports = {
-  getAllComplaints,
-  updateComplaint
-};
+module.exports = { getAllComplaints, updateComplaint };

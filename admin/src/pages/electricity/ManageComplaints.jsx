@@ -20,7 +20,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { CheckCircle } from '@mui/icons-material';
-import api from '../../utils/api';
+import api from '../../utils/electricity/api';
 import toast from 'react-hot-toast';
 
 const ManageComplaints = () => {
@@ -40,10 +40,9 @@ const ManageComplaints = () => {
     try {
       setLoading(true);
       const params = filterStatus ? `?status=${filterStatus}` : '';
-      console.log('Fetching complaints from:', `/admin/complaints${params}`);
       const response = await api.get(`/admin/complaints${params}`);
-      console.log('Received complaints:', response.data);
-      setComplaints(response.data);
+      const data = Array.isArray(response.data) ? response.data : (response.data.data || []);
+      setComplaints(data);
     } catch (error) {
       console.error('Failed to fetch complaints:', error);
       toast.error(error.response?.data?.error || 'Failed to fetch complaints');

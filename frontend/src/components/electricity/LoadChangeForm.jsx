@@ -23,9 +23,11 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon, CloudUpload } from '@mui/icons-material';
+import { CheckCircle as SuccessIcon, CloudUpload, Print as PrintIcon } from '@mui/icons-material';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const steps = ['Consumer Details', 'Load Change Details', 'Documents & Declaration', 'Review & Submit'];
 
@@ -54,6 +56,10 @@ const LoadChangeForm = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState({
     electricity_bill: null,
     load_calculation: null,
@@ -208,7 +214,12 @@ const LoadChangeForm = ({ onClose }) => {
     setActiveStep((prev) => prev - 1);
   };
 
-  const handleSubmit = async () => {
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
+  };
+
+  const handleSubmit = async (email) => {
     setLoading(true);
     try {
       // Prepare documents array
@@ -226,9 +237,21 @@ const LoadChangeForm = ({ onClose }) => {
         documents: documentsArray,
       });
 
-      setApplicationNumber(response.data.application_number);
+      const appNum = response.data.application_number;
+      const ts = new Date().toISOString();
+      setApplicationNumber(appNum);
       setSuccess(true);
+      setVerifiedEmail(email);
+      setSubmittedAt(ts);
+      setShowReceipt(true);
       toast.success('Load change request submitted successfully!');
+      api.post('/electricity/otp/send-receipt', {
+        email,
+        application_number: appNum,
+        application_type: 'change_of_load',
+        application_data: formData,
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to submit request');
     } finally {
@@ -946,24 +969,29 @@ const LoadChangeForm = ({ onClose }) => {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Estimated Processing Time: 10-15 working days
         </Typography>
-        <Button variant="contained" onClick={onClose} size="large">
-          Close
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => setShowReceipt(true)}>
+            Print Receipt
+          </Button>
+          <Button variant="contained" onClick={onClose} size="large">
+            Close
+          </Button>
+        </Box>
+        <ApplicationReceipt
+          open={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          applicationNumber={applicationNumber}
+          applicationType="change_of_load"
+          formData={formData}
+          email={verifiedEmail}
+          submittedAt={submittedAt}
+        />
       </Box>
     );
   }
 
   return (
     <Box>
-      <DialogTitle>
-        <Typography component="span" variant="body1" fontWeight={600}>
-          Load Change Request
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Application for Change of Sanctioned Load / Contract Demand
-        </Typography>
-      </DialogTitle>
-
       <DialogContent>
         <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
           {steps.map((label) => (
@@ -988,7 +1016,7 @@ const LoadChangeForm = ({ onClose }) => {
         ) : (
           <Button 
             variant="contained" 
-            onClick={handleSubmit} 
+            onClick={() => setShowOtpDialog(true)} 
             disabled={loading}
             startIcon={loading && <CircularProgress size={20} />}
           >
@@ -996,6 +1024,12 @@ const LoadChangeForm = ({ onClose }) => {
           </Button>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.email || ''}
+      />
     </Box>
   );
 };

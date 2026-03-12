@@ -6,7 +6,6 @@ import {
   Button,
   Grid,
   MenuItem,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
@@ -16,6 +15,7 @@ import {
   CardContent,
   CircularProgress,
 } from '@mui/material';
+import DocUpload from '../municipal/DocUpload';
 import {
   CheckCircle as SuccessIcon,
   WaterDrop,
@@ -24,18 +24,23 @@ import {
   Receipt,
   Warning,
   BugReport,
+  FloodOutlined as PipeBurstIcon,
+  Science as SamplingIcon,
+  ReceiptLong as MeterDisputeIcon,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
-// Complaint categories as per municipal standards (Section 5.1 of document)
 const complaintCategories = [
   { value: 'no-water', label: 'No Water Supply / पानी नहीं आ रहा', icon: <WaterDrop />, color: '#f44336' },
   { value: 'low-pressure', label: 'Low Pressure / कम प्रेशर', icon: <Speed />, color: '#ff9800' },
   { value: 'contaminated', label: 'Contaminated Water / गंदा पानी', icon: <BugReport />, color: '#795548' },
-  { value: 'pipeline-leak', label: 'Pipeline Leakage / पाइप टूट गया', icon: <Build />, color: '#e91e63' },
-  { value: 'meter-stopped', label: 'Meter Stopped / मीटर खराब', icon: <Speed />, color: '#673ab7' },
+  { value: 'pipeline-leak', label: 'Pipeline Leakage / पाइप रिसाव', icon: <Build />, color: '#e91e63' },
+  { value: 'pipe-burst', label: 'Pipe Burst (Emergency) / पाइप फट गया', icon: <PipeBurstIcon />, color: '#b71c1c' },
+  { value: 'meter-stopped', label: 'Meter Stopped/Faulty / मीटर खराब', icon: <Speed />, color: '#673ab7' },
+  { value: 'meter-reading-dispute', label: 'Meter Reading Dispute / मीटर रीडिंग विवाद', icon: <MeterDisputeIcon />, color: '#1565c0' },
   { value: 'high-bill', label: 'High Bill / ज़्यादा बिल', icon: <Receipt />, color: '#9c27b0' },
+  { value: 'water-sampling', label: 'Water Sampling / Testing Request', icon: <SamplingIcon />, color: '#00695c' },
   { value: 'other', label: 'Other Issue / अन्य समस्या', icon: <Warning />, color: '#607d8b' },
 ];
 
@@ -44,10 +49,11 @@ const WaterComplaintForm = ({ onClose }) => {
   const [submitting, setSubmitting] = useState(false);
   const [complaintNumber, setComplaintNumber] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [docs, setDocs] = useState({});
   const [formData, setFormData] = useState({
-    // Mandatory fields as per Section 5.1
-    consumer_number: '', // CCN / RR No - The unique key
+    consumer_number: '',
     complaint_category: '',
+    urgency: 'normal',
     description: '',
     contact_name: '',
     mobile: '',
@@ -56,6 +62,9 @@ const WaterComplaintForm = ({ onClose }) => {
     address: '',
     landmark: '',
   });
+
+  const handleFileChange = (name, file) => setDocs((prev) => ({ ...prev, [name]: file }));
+  const handleRemoveFile = (name) => setDocs((prev) => { const d = { ...prev }; delete d[name]; return d; });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -100,7 +109,7 @@ const WaterComplaintForm = ({ onClose }) => {
         address: formData.address || null,
         landmark: formData.landmark || null,
         description: formData.description,
-        urgency: 'medium'
+        urgency: formData.urgency,
       };
 
       const response = await api.post('/water/complaints/submit', { complaint_data });
@@ -118,11 +127,6 @@ const WaterComplaintForm = ({ onClose }) => {
   if (submitted) {
     return (
       <Box>
-        <DialogTitle sx={{ bgcolor: '#f44336', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
-            🔧 Water Complaint
-          </Typography>
-        </DialogTitle>
         <DialogContent sx={{ textAlign: 'center', py: 4 }}>
           <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
           <Typography variant="h4" color="success.main" gutterBottom>
@@ -167,12 +171,6 @@ const WaterComplaintForm = ({ onClose }) => {
 
   return (
     <Box>
-      <DialogTitle sx={{ bgcolor: '#f44336', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
-          🔧 Register Water Complaint / शिकायत दर्ज करें
-        </Typography>
-      </DialogTitle>
-
       <DialogContent sx={{ mt: 2 }}>
         {/* Complaint Category Selection */}
         <Typography variant="h6" color="primary" gutterBottom>
@@ -203,6 +201,22 @@ const WaterComplaintForm = ({ onClose }) => {
             </Grid>
           ))}
         </Grid>
+
+        {selectedCategory === 'pipe-burst' && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <strong>PIPE BURST EMERGENCY:</strong> Call <strong>1916</strong> immediately for urgent response. This form will also register a complaint for follow-up.
+          </Alert>
+        )}
+        {selectedCategory === 'water-sampling' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            A water quality inspector will visit your premises within 3 working days to collect a sample for testing.
+          </Alert>
+        )}
+        {selectedCategory === 'meter-reading-dispute' && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Please attach a photo of your current meter reading in the description. A meter inspector will be assigned within 7 working days.
+          </Alert>
+        )}
 
         <Divider sx={{ mb: 3 }} />
 
@@ -294,18 +308,51 @@ const WaterComplaintForm = ({ onClose }) => {
         <Typography variant="h6" color="primary" gutterBottom>
           Problem Description / समस्या का विवरण *
         </Typography>
-        <TextField
-          fullWidth
-          required
-          multiline
-          rows={3}
-          label="Describe your problem"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          placeholder="E.g., No water supply since morning 6 AM, affecting all floors..."
-          sx={{ mb: 2 }}
-        />
+        <Grid container spacing={3} sx={{ mb: 1 }}>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              required
+              multiline
+              rows={3}
+              label="Describe your problem *"
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              placeholder="E.g., No water supply since morning 6 AM, affecting all floors..."
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              select
+              label="Urgency Level / तात्कालिकता *"
+              name="urgency"
+              value={formData.urgency}
+              onChange={handleChange}
+            >
+              <MenuItem value="normal">Normal — Response within 3-5 days</MenuItem>
+              <MenuItem value="urgent">Urgent — Response within 24 hours</MenuItem>
+              <MenuItem value="emergency">Emergency — Immediate response needed</MenuItem>
+            </TextField>
+          </Grid>
+          {['contaminated', 'meter-reading-dispute', 'pipeline-leak', 'pipe-burst'].includes(selectedCategory) && (
+            <Grid item xs={12}>
+              <DocUpload
+                label={selectedCategory === 'meter-reading-dispute' ? 'Meter Photo (current reading)' :
+                  selectedCategory === 'contaminated' ? 'Water/Sample Photo (evidence)' :
+                  'Leak/Damage Photo'}
+                name="evidence_photo"
+                required={selectedCategory === 'contaminated' || selectedCategory === 'meter-reading-dispute'}
+                docs={docs}
+                onFileChange={handleFileChange}
+                onRemove={handleRemoveFile}
+                hint="JPG, PNG (max 5 MB) — Helps faster resolution"
+                accept="image/*"
+              />
+            </Grid>
+          )}
+        </Grid>
       </DialogContent>
 
       <DialogActions sx={{ p: 3 }}>

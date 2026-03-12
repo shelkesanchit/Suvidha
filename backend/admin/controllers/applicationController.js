@@ -1,206 +1,132 @@
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 
 const getAllApplications = async (req, res) => {
   try {
     const { status: filterStatus, page = 1, limit = 20 } = req.query;
-    const offset = (page - 1) * limit;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    // First get IDs only with ORDER BY to avoid sort memory issues with large JSON columns
-    let idQuery = `
-      SELECT a.id
-      FROM electricity_applications a
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (filterStatus) {
-      idQuery += ' AND a.status = ?';
-      params.push(filterStatus);
-    }
-
-    idQuery += ' ORDER BY a.submitted_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), offset);
-
-    const [idResults] = await promisePool.query(idQuery, params);
-    
-    if (idResults.length === 0) {
-      return res.json({
-        success: true,
-        data: [],
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: 0
-        }
-      });
-    }
-
-    // Then fetch full details for those IDs only
-    const ids = idResults.map(row => row.id);
-    const [applications] = await promisePool.query(`
+    let query = `
       SELECT a.id, a.application_number, a.user_id, a.application_type, a.status,
-             a.application_data, a.documents, a.remarks, a.submitted_at, a.reviewed_at, a.completed_at,
+             a.application_data, a.documents, a.remarks, a.current_stage, a.stage_history,
+             a.submitted_at, a.reviewed_at, a.completed_at,
              u.full_name as user_name, u.email as user_email, u.phone as user_phone
       FROM electricity_applications a
       LEFT JOIN electricity_users u ON a.user_id = u.id
-      WHERE a.id IN (?)
-      ORDER BY a.submitted_at DESC
-    `, [ids]);
+      WHERE 1=1
+    `;
+    const params = [];
+    let paramIndex = 1;
 
-    // Parse JSON fields
-    const parsedApplications = applications.map(app => {
-      try {
-        return {
-          ...app,
-          documents: app.documents ? (typeof app.documents === 'string' ? JSON.parse(app.documents) : app.documents) : [],
-          application_data: app.application_data ? (typeof app.application_data === 'string' ? JSON.parse(app.application_data) : app.application_data) : null
-        };
-      } catch (parseError) {
-        console.error('Error parsing application data:', parseError, 'for app:', app.id);
-        return {
-          ...app,
-          documents: [],
-          application_data: null
-        };
-      }
-    });
+    if (filterStatus) {
+      query += ' AND a.status = $' + paramIndex++;
+      params.push(filterStatus);
+    }
+
+    query += ' ORDER BY a.submitted_at DESC LIMIT $' + paramIndex++ + ' OFFSET $' + paramIndex++;
+    params.push(parseInt(limit), offset);
+
+    const result = await pool.query(query, params);
 
     res.json({
       success: true,
-      data: parsedApplications,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: parsedApplications.length
-      }
+      data: result.rows,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total: result.rows.length }
     });
   } catch (error) {
     console.error('Get applications error:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to fetch applications',
-      message: error.message 
-    });
+    res.status(500).json({ success: false, error: 'Failed to fetch applications', message: error.message });
   }
 };
 
-// Update application status
 const updateApplication = async (req, res) => {
-  const connection = await promisePool.getConnection();
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
-    const { status: newStatus, remarks } = req.body;
+    const { status: newStatus, remarks, current_stage } = req.body;
     const applicationId = req.params.id;
 
-    // Get application details
-    const [applications] = await connection.query(
-      'SELECT * FROM electricity_applications WHERE id = ?',
+    const appResult = await client.query(
+      'SELECT id FROM electricity_applications WHERE id = $1',
       [applicationId]
     );
 
-    if (applications.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({ 
-        success: false,
-        error: 'Application not found' 
-      });
+    if (appResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Application not found' });
     }
 
-    const application = applications[0];
-    
-    // Parse application_data if it's a string
-    const appData = typeof application.application_data === 'string' 
-      ? JSON.parse(application.application_data) 
-      : application.application_data;
+    const stageLabel = current_stage || newStatus.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const stageEntry = JSON.stringify([{
+      stage: stageLabel,
+      status: newStatus,
+      remarks: remarks || null,
+      updated_by: req.user?.id || null,
+      timestamp: new Date().toISOString()
+    }]);
 
-    // Update application
-    await connection.query(
-      'UPDATE electricity_applications SET status = ?, remarks = ?, reviewed_at = NOW() WHERE id = ?',
-      [newStatus, remarks || null, applicationId]
+    await client.query(
+      `UPDATE electricity_applications
+       SET status = $1, remarks = $2, current_stage = $3,
+           stage_history = stage_history || $4::jsonb,
+           reviewed_at = NOW()
+       WHERE id = $5`,
+      [newStatus, remarks || null, stageLabel, stageEntry, applicationId]
     );
 
-    await connection.commit();
+    await client.query('COMMIT');
 
-    res.json({ 
-      success: true,
-      message: 'Application updated successfully',
-      data: {
-        id: applicationId,
-        status: newStatus
-      }
-    });
+    res.json({ success: true, message: 'Application updated successfully', data: { id: applicationId, status: newStatus } });
   } catch (error) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error('Update application error:', error);
-    connection.release();
+    res.status(500).json({ success: false, error: 'Failed to update application', message: error.message });
+  } finally {
+    client.release();
   }
 };
 
-// Upload documents for an application
 const uploadDocuments = async (req, res) => {
   try {
     const applicationId = req.params.id;
-    
-    // Get existing documents
-    const [applications] = await promisePool.query(
-      'SELECT documents FROM electricity_applications WHERE id = ?',
+    const supabase = require('../../config/supabase');
+    const path = require('path');
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'electricity-documents';
+
+    const appResult = await pool.query(
+      'SELECT documents FROM electricity_applications WHERE id = $1',
       [applicationId]
     );
 
-    if (applications.length === 0) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Application not found' 
-      });
+    if (appResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Application not found' });
     }
 
-    // Parse existing documents
-    let existingDocuments = [];
-    if (applications[0].documents) {
-      existingDocuments = typeof applications[0].documents === 'string'
-        ? JSON.parse(applications[0].documents)
-        : applications[0].documents;
-    }
+    const existingDocuments = appResult.rows[0].documents || [];
 
-    // Add new documents
-    const newDocuments = req.files.map(file => ({
-      name: file.originalname,
-      type: file.mimetype,
-      size: file.size,
-      path: file.path,
-      url: `/uploads/documents/${file.filename}`,
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: req.user?.id || 'admin'
+    const newDocuments = await Promise.all(req.files.map(async (file) => {
+      const filename = 'applications/' + applicationId + '/' + Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(file.originalname);
+      const { error } = await supabase.storage.from(bucket).upload(filename, file.buffer, { contentType: file.mimetype, upsert: false });
+      if (error) throw new Error('Storage upload failed: ' + error.message);
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filename);
+      return {
+        name: file.originalname, type: file.mimetype, size: file.size,
+        url: urlData.publicUrl, uploadedAt: new Date().toISOString(), uploadedBy: req.user?.id || 'admin'
+      };
     }));
 
     const allDocuments = [...existingDocuments, ...newDocuments];
 
-    // Update database
-    await promisePool.query(
-      'UPDATE electricity_applications SET documents = ? WHERE id = ?',
+    await pool.query(
+      'UPDATE electricity_applications SET documents = $1 WHERE id = $2',
       [JSON.stringify(allDocuments), applicationId]
     );
 
-    res.json({
-      success: true,
-      message: 'Documents uploaded successfully',
-      data: {
-        documents: allDocuments
-      }
-    });
+    res.json({ success: true, message: 'Documents uploaded successfully', data: { documents: allDocuments } });
   } catch (error) {
     console.error('Upload documents error:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to upload documents',
-      message: error.message 
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
-module.exports = {
-  getAllApplications,
-  updateApplication,
-  uploadDocuments
-};
+module.exports = { getAllApplications, updateApplication, uploadDocuments };

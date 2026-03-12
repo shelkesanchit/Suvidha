@@ -9,6 +9,7 @@ const paymentRoutes = require('./payments');
 const complaintRoutes = require('./complaints');
 const consumerRoutes = require('./consumer');
 const settingsRoutes = require('./settings');
+const otpRoutes = require('./otp');
 const adminRoutes = require('../../admin/routes/index');
 
 // Mount routes
@@ -19,6 +20,7 @@ router.use('/payments', paymentRoutes);
 router.use('/complaints', complaintRoutes);
 router.use('/consumer', consumerRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/otp', otpRoutes);
 router.use('/admin', adminRoutes);
 
 module.exports = router;

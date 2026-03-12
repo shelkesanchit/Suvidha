@@ -93,26 +93,7 @@ const PrepaidRechargeForm = ({ onClose }) => {
 
   if (success) {
     return (
-      <Dialog open={true} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ bgcolor: 'success.main', color: 'white', pb: 3 }}>
-          <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Box display="flex" alignItems="center" gap={1}>
-              <CheckCircleOutlined sx={{ fontSize: 40 }} />
-              <Box>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  Recharge Successful
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                  Your prepaid meter has been recharged
-                </Typography>
-              </Box>
-            </Box>
-            <IconButton onClick={onClose} sx={{ color: 'white' }}>
-              <CloseOutlined />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-
+      <Box>
         <DialogContent sx={{ mt: 3 }}>
           {/* Transaction Summary */}
           <Paper elevation={0} sx={{ p: 3, bgcolor: 'success.lighter', borderRadius: 2, mb: 3 }}>
@@ -227,26 +208,12 @@ const PrepaidRechargeForm = ({ onClose }) => {
             Close
           </Button>
         </DialogActions>
-      </Dialog>
+      </Box>
     );
   }
 
   return (
     <Box>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box>
-            <Typography variant="h5" fontWeight={600} color="primary" gutterBottom>
-              Prepaid Meter Recharge
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Instantly recharge your prepaid electricity meter online
-            </Typography>
-          </Box>
-          <BoltOutlined sx={{ fontSize: 40, color: 'warning.main', opacity: 0.5 }} />
-        </Box>
-      </DialogTitle>
-
       <DialogContent sx={{ mt: 2 }}>
         {/* Consumer Details */}
         <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2, mb: 3 }}>

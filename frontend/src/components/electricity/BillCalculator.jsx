@@ -131,19 +131,6 @@ const BillCalculator = ({ onClose }) => {
 
   return (
     <Box>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box>
-            <Typography variant="h5" fontWeight={600} color="primary" gutterBottom>
-              Electricity Bill Calculator
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Estimate your electricity bill based on consumption and category
-            </Typography>
-          </Box>
-          <CalculateIcon sx={{ fontSize: 40, color: 'primary.main', opacity: 0.3 }} />
-        </Box>
-      </DialogTitle>
       
       <DialogContent sx={{ mt: 2 }}>
         {/* Input Section */}

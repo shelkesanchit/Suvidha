@@ -14,6 +14,7 @@ import {
   ElectricBolt as ElectricIcon,
   LocalFireDepartment as GasIcon,
   Water as WaterIcon,
+  AccountBalance as MunicipalIcon,
 } from '@mui/icons-material';
 
 const LandingPage = () => {
@@ -41,13 +42,23 @@ const LandingPage = () => {
       route: '/gas',
     },
     {
-      id: 'municipal',
-      title: 'Municipal Corporations',
-      description: 'Water supply, waste management, and civic services',
+      id: 'water',
+      title: 'Water Supply Services',
+      description: 'Water connections, bill payments, tanker booking, complaints',
       icon: WaterIcon,
       color: '#0288d1',
       gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
       lightGradient: 'linear-gradient(135deg, #e1f5fe 0%, #b3e5fc 100%)',
+      route: '/water',
+    },
+    {
+      id: 'municipal',
+      title: 'Municipal Corporations',
+      description: 'Property tax, trade license, civic services, and more',
+      icon: MunicipalIcon,
+      color: '#388e3c',
+      gradient: 'linear-gradient(135deg, #56ab2f 0%, #a8e063 100%)',
+      lightGradient: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
       route: '/municipal',
     },
   ];
@@ -84,11 +95,11 @@ const LandingPage = () => {
         }}
       />
 
-      <Container 
-        maxWidth="lg" 
-        sx={{ 
-          position: 'relative', 
-          zIndex: 1, 
+      <Container
+        maxWidth="lg"
+        sx={{
+          position: 'relative',
+          zIndex: 1,
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
@@ -166,7 +177,7 @@ const LandingPage = () => {
 
         <Grid container spacing={3} sx={{ mb: 2 }}>
           {services.map((service, index) => (
-            <Grid item xs={12} md={4} key={service.id}>
+            <Grid item xs={12} sm={6} md={3} key={service.id}>
               <Fade in timeout={1000 + index * 200}>
                 <Card
                   sx={{

@@ -24,9 +24,11 @@ import {
   IconButton,
   Tooltip,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon, CloudUpload, Delete, AttachFile, CheckCircle } from '@mui/icons-material';
+import { CheckCircle as SuccessIcon, CloudUpload, Delete, AttachFile, CheckCircle, Print as PrintIcon } from '@mui/icons-material';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const steps = ['Complainant Details', 'Complaint Information', 'Review & Submit'];
 
@@ -119,6 +121,10 @@ const ComplaintForm = ({ onClose }) => {
   const [submitted, setSubmitted] = useState(false);
   const [complaintNumber, setComplaintNumber] = useState('');
   const [uploadedDocuments, setUploadedDocuments] = useState({});
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
   const [formData, setFormData] = useState({
     // Complainant Details
     full_name: '',
@@ -248,7 +254,12 @@ const ComplaintForm = ({ onClose }) => {
     setActiveStep((prev) => prev - 1);
   };
 
-  const handleSubmit = async () => {
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
+  };
+
+  const handleSubmit = async (email) => {
     try {
       const complaintData = {
         ...formData,
@@ -259,9 +270,21 @@ const ComplaintForm = ({ onClose }) => {
       };
 
       const response = await api.post('/electricity/complaints/submit', complaintData);
-      setComplaintNumber(response.data.complaint_number);
+      const cNum = response.data.complaint_number;
+      const ts = new Date().toISOString();
+      setComplaintNumber(cNum);
       setSubmitted(true);
+      setVerifiedEmail(email);
+      setSubmittedAt(ts);
+      setShowReceipt(true);
       toast.success('Complaint registered successfully');
+      api.post('/electricity/otp/send-receipt', {
+        email,
+        application_number: cNum,
+        application_type: 'complaint',
+        application_data: formData,
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to register complaint');
     }
@@ -834,24 +857,29 @@ const ComplaintForm = ({ onClose }) => {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Expected Resolution Time: {formData.priority === 'critical' ? '2-4 hours' : formData.priority === 'high' ? '12-24 hours' : '24-48 hours'}
         </Typography>
-        <Button variant="contained" onClick={onClose} size="large">
-          Close
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => setShowReceipt(true)}>
+            Print Receipt
+          </Button>
+          <Button variant="contained" onClick={onClose} size="large">
+            Close
+          </Button>
+        </Box>
+        <ApplicationReceipt
+          open={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          applicationNumber={complaintNumber}
+          applicationType="complaint"
+          formData={formData}
+          email={verifiedEmail}
+          submittedAt={submittedAt}
+        />
       </Box>
     );
   }
 
   return (
     <Box>
-      <DialogTitle>
-        <Typography variant="body1" fontWeight={600}>
-          Register Complaint
-        </Typography>
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-          Electricity Distribution Service - Complaint Registration
-        </Typography>
-      </DialogTitle>
-
       <DialogContent>
         <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
           {steps.map((label) => (
@@ -874,11 +902,17 @@ const ComplaintForm = ({ onClose }) => {
             Next
           </Button>
         ) : (
-          <Button variant="contained" onClick={handleSubmit} color="primary">
+          <Button variant="contained" onClick={() => setShowOtpDialog(true)} color="primary">
             Submit Complaint
           </Button>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.email || ''}
+      />
     </Box>
   );
 };

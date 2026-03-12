@@ -38,30 +38,26 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// Static files
-app.use('/uploads', express.static('uploads'));
-
 // Initialize Database Connection
-const { promisePool } = require('./config/database');
+const { pool } = require('./config/database');
 
 // Health check
 app.get('/health', async (req, res) => {
   try {
-    const connection = await promisePool.getConnection();
-    connection.release();
+    await pool.query('SELECT 1');
 
     res.json({
       status: 'OK',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,
-      database: '✓ Connected'
+      database: '\u2713 Connected'
     });
   } catch (dbError) {
     res.status(503).json({
       status: 'Database Error',
       error: dbError.message,
       environment: process.env.NODE_ENV,
-      database: '✗ Disconnected'
+      database: '\u2717 Disconnected'
     });
   }
 });
@@ -78,8 +74,11 @@ app.use('/api/water', require('./routes/water/index'));
 // Gas Distribution Routes (Separate)
 app.use('/api/gas', require('./routes/gas/index'));
 
+// Municipal Corporation Routes
+app.use('/api/municipal', require('./routes/municipal/index'));
+
 // Government Services Routes (Integrates with Dummy API)
-app.use('/api/gov-services', require('./routes/governmentServices'));
+app.use('/api/gov-services', require('./routes/governmentServices/index'));
 
 // 404 handler
 app.use((req, res) => {

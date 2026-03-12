@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../../utils/api';
 import {
   Box,
   TextField,
@@ -28,8 +28,10 @@ import {
   Card,
   CardContent,
 } from '@mui/material';
-import { CheckCircle, CloudUpload, Camera, Info } from '@mui/icons-material';
+import { CheckCircle, CloudUpload, Camera, Info, Print as PrintIcon } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const steps = ['Consumer Information', 'Meter Reading Details', 'Photo Upload', 'Review & Submit'];
 
@@ -50,6 +52,10 @@ const MeterReadingForm = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
   const [uploadedPhoto, setUploadedPhoto] = useState(null);
 
   const [formData, setFormData] = useState({
@@ -157,14 +163,18 @@ const MeterReadingForm = ({ onClose }) => {
     setActiveStep((prev) => prev - 1);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
+  };
+
+  const handleSubmit = async (email) => {
     setLoading(true);
 
     try {
       // Call real government meter reading API
-      const response = await axios.post(
-        `http://localhost:5000/api/gov-services/electricity/meter-reading/${formData.consumer_number}`,
+      const response = await api.post(
+        `/gov-services/electricity/meter-reading/${formData.consumer_number}`,
         {
           reading_value: parseFloat(formData.current_reading),
           reading_date: formData.reading_date,
@@ -178,16 +188,21 @@ const MeterReadingForm = ({ onClose }) => {
 
       if (response.data && response.data.success) {
         const calculatedBill = response.data.calculated_bill || response.data.bill;
-        
-        // Store calculated bill result
-        setSubmissionId(response.data.submission_id || 'MR' + Date.now());
-        
-        // Show success with calculated bill amount
-        toast.success(
-          `✓ Reading submitted! Bill auto-calculated: ₹${calculatedBill?.total_amount || 0}`
-        );
-        
+        const sid = response.data.submission_id || 'MR' + Date.now();
+        const ts = new Date().toISOString();
+        setSubmissionId(sid);
         setSuccess(true);
+        setVerifiedEmail(email);
+        setSubmittedAt(ts);
+        setShowReceipt(true);
+        toast.success(`✓ Reading submitted! Bill auto-calculated: ₹${calculatedBill?.total_amount || 0}`);
+        api.post('/electricity/otp/send-receipt', {
+          email,
+          application_number: sid,
+          application_type: 'meter_reading',
+          application_data: formData,
+          submitted_at: ts,
+        }).catch(console.warn);
       } else {
         toast.error('Failed to submit reading');
       }
@@ -196,7 +211,7 @@ const MeterReadingForm = ({ onClose }) => {
       
       // For demo, allow fallback
       if (formData.consumer_number) {
-        setSubmissionId('MR' + Date.now());
+        const sid = 'MR' + Date.now();
         
         // Auto-calculate bill from reading using real MSEDCL rates
         const consumption = formData.current_reading - (formData.previous_reading || 0);
@@ -216,9 +231,20 @@ const MeterReadingForm = ({ onClose }) => {
         const fixedCharges = 50;
         const tax = (energyCharges + fixedCharges) * 0.12;
         const totalBill = energyCharges + fixedCharges + tax;
-        
-        toast.success(`✓ Reading submitted! Auto-Bill: ₹${totalBill.toFixed(2)}`);
+        const ts = new Date().toISOString();
+        setSubmissionId(sid);
         setSuccess(true);
+        setVerifiedEmail(email);
+        setSubmittedAt(ts);
+        setShowReceipt(true);
+        toast.success(`✓ Reading submitted! Auto-Bill: ₹${totalBill.toFixed(2)}`);
+        api.post('/electricity/otp/send-receipt', {
+          email,
+          application_number: sid,
+          application_type: 'meter_reading',
+          application_data: formData,
+          submitted_at: ts,
+        }).catch(console.warn);
       } else {
         toast.error('Please enter consumer number');
       }
@@ -789,11 +815,7 @@ const MeterReadingForm = ({ onClose }) => {
 
   if (success) {
     return (
-      <Dialog open={true} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ textAlign: 'center', bgcolor: 'success.main', color: 'white' }}>
-          <CheckCircle sx={{ fontSize: 60, mb: 1 }} />
-          <Typography variant="h5">Reading Submitted Successfully!</Typography>
-        </DialogTitle>
+      <Box>
         <DialogContent sx={{ mt: 3 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>
             <Typography variant="h6" color="primary" gutterBottom>
@@ -864,26 +886,29 @@ const MeterReadingForm = ({ onClose }) => {
             </Typography>
           </Paper>
         </DialogContent>
-        <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
+        <DialogActions sx={{ justifyContent: 'center', pb: 3, gap: 1.5, flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => setShowReceipt(true)}>
+            Print Receipt
+          </Button>
           <Button variant="contained" size="large" onClick={onClose}>
             Close
           </Button>
         </DialogActions>
-      </Dialog>
+        <ApplicationReceipt
+          open={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          applicationNumber={submissionId}
+          applicationType="meter_reading"
+          formData={formData}
+          email={verifiedEmail}
+          submittedAt={submittedAt}
+        />
+      </Box>
     );
   }
 
   return (
     <Box sx={{ width: '100%', p: 3 }}>
-      <Paper sx={{ p: 3, mb: 3, bgcolor: 'primary.main', color: 'white' }}>
-        <Typography variant="h5" fontWeight="bold" gutterBottom>
-          Submit Meter Reading
-        </Typography>
-        <Typography variant="body2">
-          Self-service meter reading submission for accurate billing
-        </Typography>
-      </Paper>
-
       <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
         {steps.map((label) => (
           <Step key={label}>
@@ -892,7 +917,7 @@ const MeterReadingForm = ({ onClose }) => {
         ))}
       </Stepper>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={e => e.preventDefault()}>
         {renderStepContent(activeStep)}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
@@ -911,7 +936,7 @@ const MeterReadingForm = ({ onClose }) => {
             {activeStep === steps.length - 1 ? (
               <Button
                 variant="contained"
-                onClick={handleSubmit}
+                onClick={() => setShowOtpDialog(true)}
                 disabled={loading}
                 startIcon={loading && <CircularProgress size={20} />}
               >
@@ -925,6 +950,12 @@ const MeterReadingForm = ({ onClose }) => {
           </Box>
         </Box>
       </form>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.email || ''}
+      />
     </Box>
   );
 };

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 const { verifyToken } = require('../../middleware/auth');
 
 // Submit complaint
@@ -12,17 +12,16 @@ router.post('/submit', [
   body('full_name').notEmpty().withMessage('Full name is required'),
   body('mobile').notEmpty().isLength({ min: 10, max: 10 }).withMessage('Valid mobile number is required'),
 ], async (req, res) => {
-  const connection = await promisePool.getConnection();
+  const client = await pool.connect();
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array(), error: errors.array()[0]?.msg });
     }
 
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
-    const { 
+    const {
       consumer_number, complaint_category, complaint_type, description, priority,
       full_name, father_husband_name, mobile, alternate_mobile, email,
       address, landmark, city, district, state, pincode,
@@ -31,46 +30,27 @@ router.post('/submit', [
     } = req.body;
 
     let consumerAccountId = null;
-    let userId = req.user?.id || null;
+    const userId = req.user?.id || null;
 
-    // Verify consumer account if provided
     if (consumer_number) {
-      const [accounts] = await connection.query(
-        'SELECT id FROM electricity_consumer_accounts WHERE consumer_number = ?',
+      const acc = await client.query(
+        'SELECT id FROM electricity_consumer_accounts WHERE consumer_number = $1',
         [consumer_number]
       );
-
-      if (accounts.length > 0) {
-        consumerAccountId = accounts[0].id;
-      }
+      if (acc.rows.length > 0) consumerAccountId = acc.rows[0].id;
     }
 
-    // Generate complaint number
     const year = new Date().getFullYear();
-    const [countResult] = await connection.query(
-      'SELECT COUNT(*) as count FROM electricity_complaints WHERE YEAR(submitted_at) = ?',
+    const countResult = await client.query(
+      'SELECT COUNT(*) as count FROM electricity_complaints WHERE EXTRACT(YEAR FROM submitted_at) = $1',
       [year]
     );
-    const complaintNumber = `CMP${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
+    const complaintNumber = `CMP${year}${String(parseInt(countResult.rows[0].count) + 1).padStart(6, '0')}`;
 
-    // Auto-assign priority based on complaint category
     let assignedPriority = priority || 'medium';
-    if (complaint_category === 'supply_related') {
-      assignedPriority = 'high';
-    } else if (complaint_category === 'meter_related' && complaint_type?.includes('Burnt')) {
-      assignedPriority = 'critical';
-    }
+    if (complaint_category === 'supply_related') assignedPriority = 'high';
+    else if (complaint_category === 'meter_related' && complaint_type?.includes('Burnt')) assignedPriority = 'critical';
 
-    // Store complaint data as JSON
-    const complaintData = {
-      full_name, father_husband_name, mobile, alternate_mobile, email,
-      address, landmark, city, district, state, pincode,
-      is_consumer, consumer_name, subject, affected_since,
-      location_details, nearby_transformer, pole_number,
-      complaint_category, complaint_type
-    };
-
-    // Initialize stage history
     const stageHistory = [{
       stage: 'Complaint Registered',
       status: 'open',
@@ -78,60 +58,62 @@ router.post('/submit', [
       remarks: 'Complaint registered successfully'
     }];
 
-    // Insert complaint
-    const [result] = await connection.query(
-      `INSERT INTO electricity_complaints 
-       (complaint_number, consumer_account_id, user_id, complaint_type, priority, description, location, status, stage_history, complaint_data, documents) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
-      [complaintNumber, consumerAccountId, userId, `${complaint_category}:${complaint_type}`, assignedPriority, 
-       description, location_details || '', JSON.stringify(stageHistory), JSON.stringify(complaintData),
-       documents ? JSON.stringify(documents) : null]
+    const typeMapping = {
+      'supply_related': 'power_outage',
+      'voltage_related': 'voltage_fluctuation',
+      'meter_related': 'meter_fault',
+      'billing_related': 'billing_dispute',
+      'service_related': 'service_quality',
+    };
+    const dbComplaintType = typeMapping[complaint_category] || 'other';
+
+    const result = await client.query(
+      `INSERT INTO electricity_complaints
+       (complaint_number, consumer_account_id, user_id, complaint_type, priority, description, location, status, stage_history)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8) RETURNING id`,
+      [complaintNumber, consumerAccountId, userId, dbComplaintType, assignedPriority,
+       description, location_details || '', JSON.stringify(stageHistory)]
     );
 
-    // Create notification if user is logged in
     if (userId) {
-      await connection.query(
-        `INSERT INTO electricity_notifications (user_id, title, message, type) 
-         VALUES (?, ?, ?, ?)`,
-        [userId, 'Complaint Registered', 
+      await client.query(
+        `INSERT INTO electricity_notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)`,
+        [userId, 'Complaint Registered',
          `Your complaint ${complaintNumber} has been registered successfully. We will address it soon.`,
          'info']
       );
     }
 
-    await connection.commit();
+    await client.query('COMMIT');
 
     res.status(201).json({
       message: 'Complaint submitted successfully',
       complaint_number: complaintNumber,
-      complaint_id: result.insertId
+      complaint_id: result.rows[0].id
     });
   } catch (error) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error('Submit complaint error:', error.message);
-    console.error('SQL Error Code:', error.code);
-    console.error('SQL:', error.sql);
     res.status(500).json({ error: 'Failed to submit complaint', details: error.message });
   } finally {
-    connection.release();
+    client.release();
   }
 });
 
-// Get user's electricity_complaints
+// Get user complaints
 router.get('/my-complaints', verifyToken, async (req, res) => {
   try {
-    const [complaints] = await promisePool.query(
+    const result = await pool.query(
       `SELECT c.*, ca.consumer_number
        FROM electricity_complaints c
        JOIN electricity_consumer_accounts ca ON c.consumer_account_id = ca.id
-       WHERE ca.user_id = ?
+       WHERE ca.user_id = $1
        ORDER BY c.submitted_at DESC`,
       [req.user.id]
     );
-
-    res.json(complaints);
+    res.json(result.rows);
   } catch (error) {
-    console.error('Get electricity_complaints error:', error);
+    console.error('Get complaints error:', error);
     res.status(500).json({ error: 'Failed to fetch complaints' });
   }
 });
@@ -139,27 +121,21 @@ router.get('/my-complaints', verifyToken, async (req, res) => {
 // Track complaint status
 router.get('/track/:complaintNumber', async (req, res) => {
   try {
-    const [complaints] = await promisePool.query(
-      `SELECT c.complaint_number, c.complaint_type, c.priority, c.status, 
+    const result = await pool.query(
+      `SELECT c.complaint_number, c.complaint_type, c.priority, c.status,
               c.description, c.resolution_notes, c.submitted_at, c.resolved_at, c.stage_history,
               ca.consumer_number
        FROM electricity_complaints c
        LEFT JOIN electricity_consumer_accounts ca ON c.consumer_account_id = ca.id
-       WHERE c.complaint_number = ?`,
+       WHERE c.complaint_number = $1`,
       [req.params.complaintNumber]
     );
 
-    if (complaints.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Complaint not found' });
     }
 
-    const complaint = complaints[0];
-    res.json({
-      ...complaint,
-      stage_history: complaint.stage_history 
-        ? (typeof complaint.stage_history === 'string' ? JSON.parse(complaint.stage_history) : complaint.stage_history)
-        : []
-    });
+    res.json(result.rows[0]);
   } catch (error) {
     console.error('Track complaint error:', error);
     res.status(500).json({ error: 'Failed to track complaint' });
@@ -169,20 +145,20 @@ router.get('/track/:complaintNumber', async (req, res) => {
 // Get complaint details
 router.get('/:complaintNumber', verifyToken, async (req, res) => {
   try {
-    const [complaints] = await promisePool.query(
+    const result = await pool.query(
       `SELECT c.*, ca.consumer_number, u.full_name as assigned_to_name
        FROM electricity_complaints c
        JOIN electricity_consumer_accounts ca ON c.consumer_account_id = ca.id
        LEFT JOIN electricity_users u ON c.assigned_to = u.id
-       WHERE c.complaint_number = ? AND ca.user_id = ?`,
+       WHERE c.complaint_number = $1 AND ca.user_id = $2`,
       [req.params.complaintNumber, req.user.id]
     );
 
-    if (complaints.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Complaint not found' });
     }
 
-    res.json(complaints[0]);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error('Get complaint error:', error);
     res.status(500).json({ error: 'Failed to fetch complaint' });

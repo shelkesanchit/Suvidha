@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 const { verifyToken } = require('../../middleware/auth');
 
 // Register
@@ -20,28 +20,26 @@ router.post('/register', [
 
     const { email, password, phone } = req.body;
 
-    // Check if user exists
-    const [existing] = await promisePool.query(
-      'SELECT id FROM electricity_users WHERE email = ? OR phone = ?',
+    const existing = await pool.query(
+      'SELECT id FROM electricity_users WHERE email = $1 OR phone = $2',
       [email, phone]
     );
 
-    if (existing.length > 0) {
+    if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email or phone already registered' });
     }
 
-    // Hash password (PIN)
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert user with email as full_name
-    const [result] = await promisePool.query(
-      'INSERT INTO electricity_users (email, password, role, full_name, phone) VALUES (?, ?, ?, ?, ?)',
+    const result = await pool.query(
+      'INSERT INTO electricity_users (email, password, role, full_name, phone) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [email, hashedPassword, 'customer', email.split('@')[0], phone]
     );
 
-    // Generate token
+    const userId = result.rows[0].id;
+
     const token = jwt.sign(
-      { id: result.insertId, email, role: 'customer' },
+      { id: userId, email, role: 'customer' },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE || '24h' }
     );
@@ -49,13 +47,7 @@ router.post('/register', [
     res.status(201).json({
       message: 'Registration successful',
       token,
-      user: {
-        id: result.insertId,
-        email,
-        full_name: email.split('@')[0],
-        phone,
-        role: 'customer'
-      }
+      user: { id: userId, email, full_name: email.split('@')[0], phone, role: 'customer' }
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -76,29 +68,23 @@ router.post('/login', [
 
     const { email, password } = req.body;
 
-    // Get user
-    const [users] = await promisePool.query(
-      'SELECT * FROM electricity_users WHERE email = ?',
-      [email]
-    );
+    const result = await pool.query('SELECT * FROM electricity_users WHERE email = $1', [email]);
 
-    if (users.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const user = users[0];
+    const user = result.rows[0];
 
     if (!user.is_active) {
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
-    // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Generate token
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
@@ -108,13 +94,7 @@ router.post('/login', [
     res.json({
       message: 'Login successful',
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        role: user.role,
-        phone: user.phone
-      }
+      user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role, phone: user.phone }
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -125,16 +105,16 @@ router.post('/login', [
 // Get current user
 router.get('/me', verifyToken, async (req, res) => {
   try {
-    const [users] = await promisePool.query(
-      'SELECT id, email, role, full_name, phone, created_at FROM electricity_users WHERE id = ?',
+    const result = await pool.query(
+      'SELECT id, email, role, full_name, phone, created_at FROM electricity_users WHERE id = $1',
       [req.user.id]
     );
 
-    if (users.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(users[0]);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to fetch user data' });
@@ -144,7 +124,7 @@ router.get('/me', verifyToken, async (req, res) => {
 // Change password
 router.post('/change-password', verifyToken, [
   body('currentPassword').notEmpty(),
-  body('newPassword').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
+  body('newPassword').isLength({ min: 8 })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -154,25 +134,14 @@ router.post('/change-password', verifyToken, [
 
     const { currentPassword, newPassword } = req.body;
 
-    // Get current password
-    const [users] = await promisePool.query(
-      'SELECT password FROM electricity_users WHERE id = ?',
-      [req.user.id]
-    );
-
-    const isValidPassword = await bcrypt.compare(currentPassword, users[0].password);
+    const result = await pool.query('SELECT password FROM electricity_users WHERE id = $1', [req.user.id]);
+    const isValidPassword = await bcrypt.compare(currentPassword, result.rows[0].password);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // Update password
-    await promisePool.query(
-      'UPDATE electricity_users SET password = ? WHERE id = ?',
-      [hashedPassword, req.user.id]
-    );
+    await pool.query('UPDATE electricity_users SET password = $1 WHERE id = $2', [hashedPassword, req.user.id]);
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {

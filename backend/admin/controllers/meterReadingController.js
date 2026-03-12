@@ -1,16 +1,16 @@
-const { promisePool: pool } = require('../../config/database');
+const { pool } = require('../../config/database');
 
-// Get all consumer accounts
+// Get all active consumer accounts with their latest reading
 const getAllCustomers = async (req, res) => {
   try {
     const { state, city, pincode } = req.query;
 
     let query = `
-      SELECT ca.id, ca.consumer_number, ca.meter_number, ca.category, 
+      SELECT ca.id, ca.consumer_number, ca.meter_number, ca.category,
              ca.connection_status, ca.address_line1, ca.city, ca.state, ca.pincode,
              u.full_name AS name, u.email, u.phone AS mobile,
-             mr.reading_value AS previousReading,
-             mr.reading_date AS lastReadingDate
+             mr.reading_value AS "previousReading",
+             mr.reading_date AS "lastReadingDate"
       FROM electricity_consumer_accounts ca
       LEFT JOIN electricity_users u ON ca.user_id = u.id
       LEFT JOIN (
@@ -23,26 +23,15 @@ const getAllCustomers = async (req, res) => {
       WHERE ca.connection_status = 'active'
     `;
     const params = [];
+    let idx = 1;
 
-    if (state) {
-      query += ' AND ca.state = ?';
-      params.push(state);
-    }
-    if (city) {
-      query += ' AND ca.city = ?';
-      params.push(city);
-    }
-    if (pincode) {
-      query += ' AND ca.pincode = ?';
-      params.push(pincode);
-    }
-
+    if (state) { query += ` AND ca.state = $${idx++}`; params.push(state); }
+    if (city)  { query += ` AND ca.city = $${idx++}`; params.push(city); }
+    if (pincode) { query += ` AND ca.pincode = $${idx++}`; params.push(pincode); }
     query += ' ORDER BY ca.id';
 
-    const [customers] = await pool.query(query, params);
-
-    // Format response
-    const formatted = customers.map(c => ({
+    const result = await pool.query(query, params);
+    const formatted = result.rows.map(c => ({
       ...c,
       previousReading: c.previousReading ? Number(c.previousReading) : 0,
       lastReadingDate: c.lastReadingDate
@@ -51,191 +40,140 @@ const getAllCustomers = async (req, res) => {
       connectionType: c.category ? c.category.charAt(0).toUpperCase() + c.category.slice(1) : 'Residential',
     }));
 
-    res.json({
-      success: true,
-      data: formatted,
-      total: formatted.length,
-    });
+    res.json({ success: true, data: formatted, total: formatted.length });
   } catch (error) {
     console.error('Error fetching customers:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Helper: calculate bill from tariff rates or fallback
+// Helper: calculate bill from system settings (flat rate fallback)
 async function calculateBill(consumption, consumerId) {
   try {
-    // Get consumer account details
-    const [accounts] = await pool.query(
-      'SELECT state, city, category FROM electricity_consumer_accounts WHERE id = ?',
+    const settingsRes = await pool.query(
+      `SELECT setting_key, setting_value FROM electricity_system_settings
+       WHERE setting_key LIKE 'tariff_%' OR setting_key = 'tax_rate'`
+    );
+    const s = {};
+    settingsRes.rows.forEach(r => { s[r.setting_key] = parseFloat(r.setting_value); });
+
+    const accRes = await pool.query(
+      'SELECT category FROM electricity_consumer_accounts WHERE id = $1',
       [consumerId]
     );
-    if (accounts.length === 0) {
-      const total = consumption * 8.0;
-      return { consumptionCharges: total, fixedCharges: 0, taxAmount: 0, totalAmount: total, category: 'residential' };
-    }
-    const { state, city, category } = accounts[0];
+    const category = accRes.rows[0]?.category || 'residential';
+    const catKey = category.toLowerCase().replace(/[^a-z]/g, '_');
 
-    // Look up tariff rates
-    const [rates] = await pool.query(
-      `SELECT slab_from, slab_to, rate_per_unit, fixed_charge, tax_percentage
-       FROM electricity_tariff_rates
-       WHERE state = ? AND city = ? AND category = ?
-       ORDER BY slab_from ASC`,
-      [state, city, category]
-    );
-
-    if (rates.length === 0) {
-      // No tariff found, use flat rate
-      const total = consumption * 8.0;
-      return { consumptionCharges: total, fixedCharges: 0, taxAmount: 0, totalAmount: total, category };
+    let energyCharges = 0;
+    const rate = s[`tariff_${catKey}`] || 8.0;
+    if (catKey === 'residential' || catKey.includes('lt_i')) {
+      if (consumption <= 100)
+        energyCharges = consumption * (s.tariff_residential_upto_100 || 4.0);
+      else if (consumption <= 300)
+        energyCharges = (100 * (s.tariff_residential_upto_100 || 4.0)) +
+          ((consumption - 100) * (s.tariff_residential_101_300 || 6.0));
+      else
+        energyCharges = (100 * (s.tariff_residential_upto_100 || 4.0)) +
+          (200 * (s.tariff_residential_101_300 || 6.0)) +
+          ((consumption - 300) * (s.tariff_residential_above_300 || 8.0));
+    } else {
+      energyCharges = consumption * rate;
     }
 
-    let consumptionCharges = 0;
-    let remaining = consumption;
-    let fixedCharges = rates[0].fixed_charge ? Number(rates[0].fixed_charge) : 0;
-    let taxPercentage = rates[0].tax_percentage ? Number(rates[0].tax_percentage) : 0;
+    const fixedCharges = s[`fixed_charge_${catKey}`] || 50;
+    const taxRate = s.tax_rate || 5;
+    const taxAmount = Math.round((energyCharges + fixedCharges) * (taxRate / 100) * 100) / 100;
+    const totalAmount = Math.round((energyCharges + fixedCharges + taxAmount) * 100) / 100;
 
-    for (const slab of rates) {
-      const slabFrom = slab.slab_from || 0;
-      const slabTo = slab.slab_to || Infinity;
-      const slabSize = slabTo - slabFrom;
-      const ratePerUnit = Number(slab.rate_per_unit);
-
-      if (remaining <= 0) break;
-
-      const unitsInSlab = Math.min(remaining, slabSize);
-      consumptionCharges += unitsInSlab * ratePerUnit;
-      remaining -= unitsInSlab;
-    }
-
-    consumptionCharges = Math.round(consumptionCharges * 100) / 100;
-    const taxAmount = Math.round((consumptionCharges + fixedCharges) * (taxPercentage / 100) * 100) / 100;
-    const totalAmount = Math.round((consumptionCharges + fixedCharges + taxAmount) * 100) / 100;
-
-    return { consumptionCharges, fixedCharges, taxAmount, totalAmount, category };
+    return {
+      energyCharges: Math.round(energyCharges * 100) / 100,
+      fixedCharges,
+      taxAmount,
+      totalAmount,
+      category,
+    };
   } catch (err) {
-    console.error('Tariff calculation error, using fallback:', err.message);
-    const total = consumption * 8.0;
-    return { consumptionCharges: total, fixedCharges: 0, taxAmount: 0, totalAmount: total, category: 'domestic' };
+    console.error('Bill calculation error, using fallback:', err.message);
+    const total = Math.round(consumption * 8.0 * 100) / 100;
+    return { energyCharges: total, fixedCharges: 0, taxAmount: 0, totalAmount: total, category: 'domestic' };
   }
 }
 
 // Helper: generate bill number
-function generateBillNumber(customerId, readingDate) {
+function generateBillNumber(consumerId, readingDate) {
   const d = new Date(readingDate);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  return `BILL-${customerId}-${year}${month}`;
+  return `BILL-${consumerId}-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// Helper: create bill in electricity_bills table
-async function createBill(customerId, meterNumber, consumption, billData, readingDate) {
+// Helper: create or update bill in electricity_bills
+async function createBill(consumerId, consumption, billData, readingDate) {
   const d = new Date(readingDate);
-  const billMonth = d.getMonth() + 1;
-  const billYear = d.getFullYear();
-  const billNumber = generateBillNumber(customerId, readingDate);
-
-  // Billing period: from 1st of the month to the reading date
-  const periodStart = `${billYear}-${String(billMonth).padStart(2, '0')}-01`;
-  const periodEnd = readingDate;
-
-  // Due date: 15 days after issue
+  const billingMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const billNumber = generateBillNumber(consumerId, readingDate);
   const dueDate = new Date(d.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // Check if bill already exists for this customer/month/year
-  const [existing] = await pool.query(
-    'SELECT id FROM electricity_bills WHERE customer_id = ? AND bill_month = ? AND bill_year = ?',
-    [customerId, billMonth, billYear]
+  const existRes = await pool.query(
+    'SELECT id FROM electricity_bills WHERE consumer_account_id = $1 AND billing_month = $2',
+    [consumerId, billingMonth]
   );
 
-  if (existing.length > 0) {
-    // Update existing bill
+  if (existRes.rows.length > 0) {
     await pool.query(
-      `UPDATE electricity_bills SET
-        meter_number = ?, units_consumed = ?, slab_category = ?,
-        consumption_charges = ?, fixed_charges = ?, tax_amount = ?,
-        total_amount = ?, billing_period_start = ?, billing_period_end = ?,
-        issue_date = ?, due_date = ?, bill_status = 'issued'
-       WHERE customer_id = ? AND bill_month = ? AND bill_year = ?`,
-      [meterNumber, consumption, billData.category,
-       billData.consumptionCharges, billData.fixedCharges, billData.taxAmount,
-       billData.totalAmount, periodStart, periodEnd,
-       readingDate, dueDate,
-       customerId, billMonth, billYear]
+      `UPDATE electricity_bills
+       SET units_consumed = $1, energy_charges = $2, fixed_charges = $3,
+           tax_amount = $4, total_amount = $5, due_date = $6, status = 'unpaid'
+       WHERE id = $7`,
+      [consumption, billData.energyCharges, billData.fixedCharges,
+       billData.taxAmount, billData.totalAmount, dueDate, existRes.rows[0].id]
     );
-    return existing[0].id;
+    return existRes.rows[0].id;
   }
 
-  // Insert new bill
-  const [result] = await pool.query(
+  const insertRes = await pool.query(
     `INSERT INTO electricity_bills
-     (bill_number, customer_id, meter_number, billing_period_start, billing_period_end,
-      bill_month, bill_year, units_consumed, slab_category,
-      consumption_charges, fixed_charges, tax_amount, total_amount,
-      bill_status, issue_date, due_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, ?)`,
-    [billNumber, customerId, meterNumber, periodStart, periodEnd,
-     billMonth, billYear, consumption, billData.category,
-     billData.consumptionCharges, billData.fixedCharges, billData.taxAmount,
-     billData.totalAmount, readingDate, dueDate]
+     (bill_number, consumer_account_id, billing_month, units_consumed,
+      energy_charges, fixed_charges, tax_amount, total_amount, due_date, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'unpaid') RETURNING id`,
+    [billNumber, consumerId, billingMonth, consumption,
+     billData.energyCharges, billData.fixedCharges,
+     billData.taxAmount, billData.totalAmount, dueDate]
   );
-  return result.insertId;
+  return insertRes.rows[0].id;
 }
 
-// Submit single meter reading
+// Submit single meter reading and generate bill
 const submitMeterReading = async (req, res) => {
   try {
-    const { customerId, currentReading, previousReading, readingDate, meterNumber } = req.body;
+    const { customerId, currentReading, previousReading, readingDate } = req.body;
 
-    // Validate reading
-    if (currentReading <= previousReading) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current reading must be greater than previous reading',
-      });
+    if (Number(currentReading) <= Number(previousReading)) {
+      return res.status(400).json({ success: false, message: 'Current reading must be greater than previous reading' });
     }
 
-    const consumption = currentReading - previousReading;
-
-    // Calculate bill from tariff rates
+    const consumption = Number(currentReading) - Number(previousReading);
     const billData = await calculateBill(consumption, customerId);
 
-    // Save meter reading to database
     await pool.query(
-      `INSERT INTO electricity_meter_readings 
-       (customer_id, meter_number, reading_date, previous_reading, current_reading, units_consumed, 
-        reading_type, status, submitted_by)
-       VALUES (?, ?, ?, ?, ?, ?, 'meter_visit', 'verified', ?)`,
-      [customerId, meterNumber, readingDate, previousReading, currentReading, consumption,
-       req.user?.name || 'Admin']
+      `INSERT INTO electricity_meter_readings
+       (consumer_account_id, reading_date, reading_value, reading_type, submitted_by)
+       VALUES ($1, $2, $3, 'official', $4)`,
+      [customerId, readingDate, currentReading, req.user?.id || null]
     );
 
-    // Create bill in electricity_bills table
-    await createBill(customerId, meterNumber, consumption, billData, readingDate);
+    await createBill(customerId, consumption, billData, readingDate);
 
     res.json({
       success: true,
       message: 'Meter reading submitted and bill generated successfully',
       data: {
-        customerId,
-        meterNumber,
-        consumption,
+        customerId, consumption,
         calculatedBill: billData.totalAmount,
-        readingDate,
-        previousReading,
-        currentReading,
+        readingDate, previousReading, currentReading,
       },
     });
   } catch (error) {
     console.error('Error submitting meter reading:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -243,12 +181,8 @@ const submitMeterReading = async (req, res) => {
 const submitBulkMeterReadings = async (req, res) => {
   try {
     const { readings } = req.body;
-
     if (!readings || !Array.isArray(readings) || readings.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No readings provided',
-      });
+      return res.status(400).json({ success: false, message: 'No readings provided' });
     }
 
     const results = [];
@@ -256,115 +190,80 @@ const submitBulkMeterReadings = async (req, res) => {
 
     for (const reading of readings) {
       try {
-        if (reading.currentReading <= reading.previousReading) {
-          errors.push({
-            customerId: reading.customerId,
-            error: 'Current reading must be greater than previous reading',
-          });
+        if (Number(reading.currentReading) <= Number(reading.previousReading)) {
+          errors.push({ customerId: reading.customerId, error: 'Current reading must be greater than previous reading' });
           continue;
         }
 
-        const consumption = reading.currentReading - reading.previousReading;
+        const consumption = Number(reading.currentReading) - Number(reading.previousReading);
         const billData = await calculateBill(consumption, reading.customerId);
 
-        // Save to database
         await pool.query(
-          `INSERT INTO electricity_meter_readings 
-           (customer_id, meter_number, reading_date, previous_reading, current_reading, units_consumed,
-            reading_type, status, submitted_by)
-           VALUES (?, ?, ?, ?, ?, ?, 'meter_visit', 'verified', ?)`,
-          [reading.customerId, reading.meterNumber, reading.readingDate,
-           reading.previousReading, reading.currentReading, consumption,
-           req.user?.name || 'Admin']
+          `INSERT INTO electricity_meter_readings
+           (consumer_account_id, reading_date, reading_value, reading_type, submitted_by)
+           VALUES ($1, $2, $3, 'official', $4)`,
+          [reading.customerId, reading.readingDate, reading.currentReading, req.user?.id || null]
         );
 
-        // Create bill
-        await createBill(reading.customerId, reading.meterNumber, consumption, billData, reading.readingDate);
+        await createBill(reading.customerId, consumption, billData, reading.readingDate);
 
         results.push({
           customerId: reading.customerId,
-          meterNumber: reading.meterNumber,
-          consumption,
-          calculatedBill: billData.totalAmount,
+          consumption, calculatedBill: billData.totalAmount,
           readingDate: reading.readingDate,
           previousReading: reading.previousReading,
           currentReading: reading.currentReading,
           status: 'success',
         });
       } catch (err) {
-        errors.push({
-          customerId: reading.customerId,
-          error: err.message,
-        });
+        errors.push({ customerId: reading.customerId, error: err.message });
       }
     }
 
     res.json({
       success: true,
-      message: `${results.length} readings submitted successfully${errors.length > 0 ? `, ${errors.length} errors` : ''}`,
-      data: {
-        successful: results,
-        failed: errors,
-        totalProcessed: results.length + errors.length,
-        successCount: results.length,
-        errorCount: errors.length,
-      },
+      message: `${results.length} readings submitted${errors.length > 0 ? `, ${errors.length} errors` : ''}`,
+      data: { successful: results, failed: errors, totalProcessed: results.length + errors.length, successCount: results.length, errorCount: errors.length },
     });
   } catch (error) {
     console.error('Error submitting bulk readings:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Get meter reading history from database
+// Get meter reading history for a consumer
 const getMeterReadingHistory = async (req, res) => {
   try {
     const { customerId } = req.params;
 
-    const [history] = await pool.query(
-      `SELECT mr.id, mr.customer_id AS customerId, 
-              mr.current_reading AS reading,
+    const result = await pool.query(
+      `SELECT mr.id,
+              mr.consumer_account_id AS "customerId",
+              mr.reading_value AS reading,
               mr.reading_date AS date,
-              mr.units_consumed AS consumption,
-              COALESCE(b.total_amount, mr.units_consumed * 8.0) AS bill
+              COALESCE(b.total_amount, 0) AS bill
        FROM electricity_meter_readings mr
-       LEFT JOIN electricity_bills b ON b.customer_id = mr.customer_id 
-         AND b.bill_month = MONTH(mr.reading_date)
-         AND b.bill_year = YEAR(mr.reading_date)
-       WHERE mr.customer_id = ?
+       LEFT JOIN electricity_bills b
+         ON b.consumer_account_id = mr.consumer_account_id
+         AND b.billing_month = TO_CHAR(mr.reading_date, 'YYYY-MM')
+       WHERE mr.consumer_account_id = $1
        ORDER BY mr.reading_date DESC
        LIMIT 12`,
       [customerId]
     );
 
-    // Format dates
-    const formatted = history.map(h => ({
+    const formatted = result.rows.map(h => ({
       ...h,
       reading: Number(h.reading),
-      consumption: Number(h.consumption),
       bill: Number(h.bill),
       date: h.date ? new Date(h.date).toISOString().split('T')[0] : null,
     }));
 
-    res.json({
-      success: true,
-      data: formatted,
-    });
+    res.json({ success: true, data: formatted });
   } catch (error) {
     console.error('Error fetching meter reading history:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = {
-  getAllCustomers,
-  submitMeterReading,
-  submitBulkMeterReadings,
-  getMeterReadingHistory,
-};
+module.exports = { getAllCustomers, submitMeterReading, submitBulkMeterReadings, getMeterReadingHistory };

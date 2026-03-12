@@ -4,9 +4,6 @@ import {
   Typography,
   TextField,
   Button,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   MenuItem,
   Paper,
   Chip,
@@ -23,6 +20,7 @@ import {
   Tooltip,
   IconButton,
   Collapse,
+  Container,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -70,14 +68,12 @@ const TrackingForm = ({ onClose }) => {
         ? `/electricity/applications/track/${trimmedReference}`
         : `/electricity/complaints/track/${trimmedReference}`;
 
-      console.log('Tracking:', endpoint);
       const response = await api.get(endpoint);
       // Extract actual data from nested response format
       const data = response.data.application || response.data.complaint || response.data;
       setTrackingData(data);
       toast.success('Record found!');
     } catch (error) {
-      console.error('Tracking error:', error);
       toast.error(error.response?.data?.error || 'No record found with this reference number');
       setTrackingData(null);
     } finally {
@@ -138,22 +134,19 @@ const TrackingForm = ({ onClose }) => {
   };
 
   return (
-    <Box>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600} color="primary" gutterBottom>
-              Track Application/Complaint Status
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Enter your reference number to check the real-time status and track progress
-            </Typography>
-          </Box>
-          <Search sx={{ fontSize: 40, color: 'primary.main', opacity: 0.3 }} />
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+        <Box>
+          <Typography variant="h5" fontWeight={600} color="primary" gutterBottom>
+            Track Application / Complaint
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Enter your reference number to check real-time status and track progress
+          </Typography>
         </Box>
-      </DialogTitle>
-
-      <DialogContent sx={{ mt: 2 }}>
+        <Search sx={{ fontSize: 50, color: 'primary.main', opacity: 0.2 }} />
+      </Box>
         <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2, mb: 3 }}>
           <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary">
             Search Criteria
@@ -496,7 +489,7 @@ const TrackingForm = ({ onClose }) => {
             )}
 
             {/* Help Section */}
-            <Paper elevation={0} sx={{ p: 3, bgcolor: 'info.lighter', borderRadius: 2, border: '1px solid', borderColor: 'info.light' }}>
+            <Paper elevation={0} sx={{ p: 3, bgcolor: 'info.lighter', borderRadius: 2, border: '1px solid', borderColor: 'info.light', mb: 3 }}>
               <Box display="flex" alignItems="flex-start" gap={2}>
                 <Info color="info" />
                 <Box>
@@ -509,6 +502,15 @@ const TrackingForm = ({ onClose }) => {
                 </Box>
               </Box>
             </Paper>
+
+            <Button
+              variant="outlined"
+              size="large"
+              fullWidth
+              onClick={() => { setTrackingData(null); setReferenceNumber(''); }}
+            >
+              Track Another Application / Complaint
+            </Button>
           </Box>
         )}
 
@@ -523,25 +525,7 @@ const TrackingForm = ({ onClose }) => {
             </Typography>
           </Paper>
         )}
-      </DialogContent>
-
-      <DialogActions sx={{ px: 3, py: 2, bgcolor: 'background.default' }}>
-        <Button onClick={onClose} variant="outlined">
-          Close
-        </Button>
-        {trackingData && (
-          <Button
-            onClick={() => {
-              setTrackingData(null);
-              setReferenceNumber('');
-            }}
-            variant="contained"
-          >
-            Track Another
-          </Button>
-        )}
-      </DialogActions>
-    </Box>
+      </Container>
   );
 };
 

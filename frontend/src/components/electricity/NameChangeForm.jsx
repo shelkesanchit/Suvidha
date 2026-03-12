@@ -24,8 +24,11 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { CheckCircle, CloudUpload } from '@mui/icons-material';
+import { CheckCircle, CloudUpload, Print as PrintIcon } from '@mui/icons-material';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const steps = ['Consumer & Applicant Details', 'Name Change Information', 'Documents Upload', 'Review & Submit'];
 
@@ -51,6 +54,10 @@ const NameChangeForm = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState({
     electricity_bill: null,
     identity_proof_old: null,
@@ -222,8 +229,12 @@ const NameChangeForm = ({ onClose }) => {
     setActiveStep((prev) => prev - 1);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
+  };
+
+  const handleSubmit = async (email) => {
     setLoading(true);
 
     try {
@@ -248,23 +259,27 @@ const NameChangeForm = ({ onClose }) => {
         submission_date: new Date().toISOString(),
       };
 
-      const response = await fetch('http://localhost:5000/api/applications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(applicationData),
+      const response = await api.post('/electricity/applications/submit', {
+        application_type: 'name_change',
+        application_data: formData,
+        documents: documentsArray,
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setApplicationNumber(data.data.application_number);
-        setSuccess(true);
-        toast.success('Application submitted successfully!');
-      } else {
-        toast.error(data.message || 'Failed to submit application');
-      }
+      const appNum = response.data.application_number;
+      const ts = new Date().toISOString();
+      setApplicationNumber(appNum);
+      setSuccess(true);
+      setVerifiedEmail(email);
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      toast.success('Application submitted successfully!');
+      api.post('/electricity/otp/send-receipt', {
+        email,
+        application_number: appNum,
+        application_type: 'change_of_name',
+        application_data: formData,
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch (error) {
       console.error('Error submitting application:', error);
       toast.error('Failed to submit application. Please try again.');
@@ -1101,11 +1116,7 @@ const NameChangeForm = ({ onClose }) => {
 
   if (success) {
     return (
-      <Dialog open={true} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ textAlign: 'center', bgcolor: 'success.main', color: 'white' }}>
-          <CheckCircle sx={{ fontSize: 60, mb: 1 }} />
-          <Typography variant="subtitle1">Application Submitted Successfully!</Typography>
-        </DialogTitle>
+      <Box>
         <DialogContent sx={{ mt: 3 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>
             <Typography variant="h6" color="primary" gutterBottom>
@@ -1183,26 +1194,29 @@ const NameChangeForm = ({ onClose }) => {
             </Typography>
           </Paper>
         </DialogContent>
-        <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
+        <DialogActions sx={{ justifyContent: 'center', pb: 3, gap: 1.5, flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => setShowReceipt(true)}>
+            Print Receipt
+          </Button>
           <Button variant="contained" size="large" onClick={onClose}>
             Close
           </Button>
         </DialogActions>
-      </Dialog>
+        <ApplicationReceipt
+          open={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          applicationNumber={applicationNumber}
+          applicationType="change_of_name"
+          formData={formData}
+          email={verifiedEmail}
+          submittedAt={submittedAt}
+        />
+      </Box>
     );
   }
 
   return (
     <Box sx={{ width: '100%', p: 3 }}>
-      <Paper sx={{ p: 3, mb: 3, bgcolor: 'primary.main', color: 'white' }}>
-        <Typography variant="h5" fontWeight="bold" gutterBottom>
-          Name Change Application
-        </Typography>
-        <Typography variant="body2">
-          Application for Change of Consumer Name on Electricity Connection
-        </Typography>
-      </Paper>
-
       <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
         {steps.map((label) => (
           <Step key={label}>
@@ -1211,7 +1225,7 @@ const NameChangeForm = ({ onClose }) => {
         ))}
       </Stepper>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={e => e.preventDefault()}>
         {renderStepContent(activeStep)}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
@@ -1230,7 +1244,7 @@ const NameChangeForm = ({ onClose }) => {
             {activeStep === steps.length - 1 ? (
               <Button
                 variant="contained"
-                onClick={handleSubmit}
+                onClick={() => setShowOtpDialog(true)}
                 disabled={loading}
                 startIcon={loading && <CircularProgress size={20} />}
               >
@@ -1244,6 +1258,12 @@ const NameChangeForm = ({ onClose }) => {
           </Box>
         </Box>
       </form>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.new_consumer_email || formData.email || ''}
+      />
     </Box>
   );
 };

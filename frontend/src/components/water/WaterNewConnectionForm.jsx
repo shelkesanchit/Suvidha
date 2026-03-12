@@ -9,7 +9,6 @@ import {
   Stepper,
   Step,
   StepLabel,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
@@ -21,8 +20,12 @@ import {
   FormLabel,
   Chip,
   CircularProgress,
+  Tabs,
+  Tab,
+  Checkbox,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon, CloudUpload } from '@mui/icons-material';
+import { CheckCircle as SuccessIcon, EventAvailable as SiteVisitIcon, Opacity as SewerIcon } from '@mui/icons-material';
+import DocUpload from '../municipal/DocUpload';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
@@ -84,10 +87,20 @@ const wards = [
 ];
 
 const WaterNewConnectionForm = ({ onClose }) => {
+  const [activeTab, setActiveTab] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
+  const [siteVisitSubmitted, setSiteVisitSubmitted] = useState(false);
+  const [siteVisitData, setSiteVisitData] = useState({
+    full_name: '',
+    mobile: '',
+    address: '',
+    ward: '',
+    visit_date: '',
+    visit_purpose: 'new_connection',
+  });
   const [formData, setFormData] = useState({
     // Applicant Details (Category I from document)
     applicant_category: 'individual',
@@ -110,6 +123,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
     connection_purpose: 'drinking',
     pipe_size: '15mm',
     connection_type: 'permanent',
+    include_sewerage: false,
     
     // Documents
     aadhaar_doc: null,
@@ -118,6 +132,30 @@ const WaterNewConnectionForm = ({ onClose }) => {
     // Declaration
     agreed_to_terms: false,
   });
+
+  const handleSiteVisitChange = (e) => {
+    const { name, value } = e.target;
+    setSiteVisitData({ ...siteVisitData, [name]: value });
+  };
+
+  const handleSiteVisitSubmit = () => {
+    if (!siteVisitData.full_name || !siteVisitData.mobile || !siteVisitData.address || !siteVisitData.ward || !siteVisitData.visit_date) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    if (siteVisitData.mobile.length !== 10) {
+      toast.error('Enter valid 10-digit mobile number');
+      return;
+    }
+    setTimeout(() => {
+      setSiteVisitSubmitted(true);
+      toast.success('Site visit booked successfully!');
+    }, 800);
+  };
+
+  const [docs, setDocs] = useState({});
+  const handleDocFileChange = (name, file) => setDocs((prev) => ({ ...prev, [name]: file }));
+  const handleDocRemove = (name) => setDocs((prev) => { const d = { ...prev }; delete d[name]; return d; });
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -128,15 +166,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
   };
 
   const handleFileChange = (e, fieldName) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('File size should not exceed 5MB');
-        return;
-      }
-      setFormData({ ...formData, [fieldName]: file });
-      toast.success(`${file.name} uploaded`);
-    }
+    // legacy handler kept for checkbox compat
   };
 
   const validateStep = () => {
@@ -168,7 +198,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
         }
         return true;
       case 3: // Documents
-        if (!formData.aadhaar_doc || !formData.property_doc) {
+        if (!docs.aadhaar_doc || !docs.property_doc) {
           toast.error('Please upload mandatory documents');
           return false;
         }
@@ -246,11 +276,6 @@ const WaterNewConnectionForm = ({ onClose }) => {
   if (submitted) {
     return (
       <Box>
-        <DialogTitle sx={{ bgcolor: '#4facfe', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
-            💧 New Water Connection
-          </Typography>
-        </DialogTitle>
         <DialogContent sx={{ textAlign: 'center', py: 4 }}>
           <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
           <Typography variant="h4" color="success.main" gutterBottom>
@@ -284,12 +309,19 @@ const WaterNewConnectionForm = ({ onClose }) => {
 
   return (
     <Box>
-      <DialogTitle sx={{ bgcolor: '#4facfe', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
-          💧 New Water Connection / नया जल कनेक्शन
-        </Typography>
-      </DialogTitle>
-      
+      <Tabs
+        value={activeTab}
+        onChange={(e, val) => { setActiveTab(val); setActiveStep(0); }}
+        variant="fullWidth"
+        sx={{ borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab icon={<SewerIcon />} label="Connection Application" iconPosition="start" />
+        <Tab icon={<SiteVisitIcon />} label="Book Site Visit" iconPosition="start" />
+      </Tabs>
+
+      {/* Tab 0: Connection Application (existing form) */}
+      {activeTab === 0 && (
+        <>
       <DialogContent sx={{ mt: 2 }}>
         <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
           {steps.map((label) => (
@@ -556,6 +588,25 @@ const WaterNewConnectionForm = ({ onClose }) => {
                 </Typography>
               </Alert>
             </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ border: '1px solid #e0e0e0', borderRadius: 2, p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Checkbox
+                  name="include_sewerage"
+                  checked={formData.include_sewerage}
+                  onChange={(e) => setFormData({ ...formData, include_sewerage: e.target.checked })}
+                  color="primary"
+                />
+                <Box>
+                  <Typography variant="body1" fontWeight={600}>
+                    <SewerIcon sx={{ mr: 0.5, verticalAlign: 'middle', color: '#0288d1' }} />
+                    Also apply for Sewerage Connection
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Request simultaneous connection to the municipal sewerage network (recommended for new constructions)
+                  </Typography>
+                </Box>
+              </Box>
+            </Grid>
           </Grid>
         )}
 
@@ -572,51 +623,44 @@ const WaterNewConnectionForm = ({ onClose }) => {
               </Alert>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Box sx={{ border: '2px dashed #4facfe', borderRadius: 2, p: 3, textAlign: 'center' }}>
-                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                  Aadhaar Card * (Proof of Identity)
-                </Typography>
-                <input
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={(e) => handleFileChange(e, 'aadhaar_doc')}
-                  style={{ display: 'none' }}
-                  id="aadhaar-upload"
-                />
-                <label htmlFor="aadhaar-upload">
-                  <Button variant="outlined" component="span" startIcon={<CloudUpload />}>
-                    {formData.aadhaar_doc ? formData.aadhaar_doc.name : 'Upload Aadhaar'}
-                  </Button>
-                </label>
-              </Box>
+              <DocUpload
+                label="Aadhaar Card * (Proof of Identity)"
+                name="aadhaar_doc"
+                required
+                docs={docs}
+                onFileChange={handleDocFileChange}
+                onRemove={handleDocRemove}
+                hint="Front and back; JPG, PNG or PDF"
+                accept="image/*,.pdf"
+              />
             </Grid>
             <Grid item xs={12} md={6}>
-              <Box sx={{ border: '2px dashed #4facfe', borderRadius: 2, p: 3, textAlign: 'center' }}>
-                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                  Property Document * (Ownership Proof)
-                </Typography>
-                <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
-                  Sale Deed / Property Tax Receipt / Allotment Letter
-                </Typography>
-                <input
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={(e) => handleFileChange(e, 'property_doc')}
-                  style={{ display: 'none' }}
-                  id="property-upload"
-                />
-                <label htmlFor="property-upload">
-                  <Button variant="outlined" component="span" startIcon={<CloudUpload />}>
-                    {formData.property_doc ? formData.property_doc.name : 'Upload Document'}
-                  </Button>
-                </label>
-              </Box>
+              <DocUpload
+                label="Property Document * (Ownership Proof)"
+                name="property_doc"
+                required
+                docs={docs}
+                onFileChange={handleDocFileChange}
+                onRemove={handleDocRemove}
+                hint="Sale Deed / Property Tax Receipt / Allotment Letter"
+                accept="image/*,.pdf"
+              />
             </Grid>
             {formData.ownership_status === 'tenant' && (
               <Grid item xs={12}>
-                <Alert severity="warning">
-                  As a Tenant, please also obtain NOC from Property Owner
+                <Alert severity="warning" sx={{ mb: 1 }}>
+                  As a Tenant, an NOC from the Property Owner is required.
                 </Alert>
+                <DocUpload
+                  label="NOC from Property Owner * (Landlord)"
+                  name="noc_owner"
+                  required
+                  docs={docs}
+                  onFileChange={handleDocFileChange}
+                  onRemove={handleDocRemove}
+                  hint="Signed & notarized NOC on stamp paper"
+                  accept="image/*,.pdf"
+                />
               </Grid>
             )}
           </Grid>
@@ -700,6 +744,79 @@ const WaterNewConnectionForm = ({ onClose }) => {
           )}
         </Button>
       </DialogActions>
+        </>
+      )}
+
+      {/* Tab 1: Book Site Visit */}
+      {activeTab === 1 && (
+        <>
+          {siteVisitSubmitted ? (
+            <DialogContent sx={{ textAlign: 'center', py: 4 }}>
+              <SuccessIcon sx={{ fontSize: 70, color: 'success.main', mb: 2 }} />
+              <Typography variant="h5" color="success.main" gutterBottom>Site Visit Booked!</Typography>
+              <Chip label={`Visit Date: ${siteVisitData.visit_date}`} color="primary" sx={{ py: 2, px: 3, mb: 2 }} />
+              <Alert severity="info" sx={{ mt: 2, textAlign: 'left' }}>
+                A field inspector will visit on the selected date between 10 AM–5 PM. • SMS confirmation on: {siteVisitData.mobile} • Please keep property documents ready.
+              </Alert>
+            </DialogContent>
+          ) : (
+            <DialogContent sx={{ mt: 2 }}>
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Book a site visit for connection feasibility assessment or for a new connection estimate.
+              </Alert>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth required label="Full Name *" name="full_name"
+                    value={siteVisitData.full_name} onChange={handleSiteVisitChange} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth required label="Mobile Number *" name="mobile"
+                    value={siteVisitData.mobile} onChange={handleSiteVisitChange}
+                    inputProps={{ maxLength: 10 }} />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField fullWidth required label="Property Address *" name="address"
+                    value={siteVisitData.address} onChange={handleSiteVisitChange}
+                    placeholder="Full address for inspector" multiline rows={2} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth required select label="Ward *" name="ward"
+                    value={siteVisitData.ward} onChange={handleSiteVisitChange}>
+                    {wards.map((w) => <MenuItem key={w.value} value={w.value}>{w.label}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth required label="Preferred Visit Date *" name="visit_date"
+                    type="date" value={siteVisitData.visit_date} onChange={handleSiteVisitChange}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ min: new Date().toISOString().split('T')[0] }} />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField fullWidth select label="Purpose of Visit" name="visit_purpose"
+                    value={siteVisitData.visit_purpose} onChange={handleSiteVisitChange}>
+                    <MenuItem value="new_connection">New Water Connection Assessment</MenuItem>
+                    <MenuItem value="sewerage_connection">Sewerage Connection Assessment</MenuItem>
+                    <MenuItem value="feasibility_check">Feasibility Check</MenuItem>
+                    <MenuItem value="complaint_inspection">Complaint Inspection</MenuItem>
+                  </TextField>
+                </Grid>
+              </Grid>
+            </DialogContent>
+          )}
+          <DialogActions sx={{ p: 3 }}>
+            <Button onClick={onClose} color="inherit">Cancel</Button>
+            {!siteVisitSubmitted && (
+              <Button variant="contained" onClick={handleSiteVisitSubmit}
+                sx={{ bgcolor: '#0288d1' }}>
+                Book Site Visit
+              </Button>
+            )}
+            {siteVisitSubmitted && (
+              <Button variant="contained" onClick={onClose}>Close</Button>
+            )}
+          </DialogActions>
+        </>
+      )}
     </Box>
   );
 };

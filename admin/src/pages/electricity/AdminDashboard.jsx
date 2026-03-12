@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -17,6 +17,7 @@ import {
   MenuItem,
   Divider,
   Badge,
+  Chip,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -31,21 +32,12 @@ import {
   Power as PowerIcon,
   Receipt as BillIcon,
   FlashOn as ElectricityIcon,
+  ContactMail as ConsumersIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../utils/electricity/api';
 
 const drawerWidth = 260;
-
-const menuItems = [
-  { text: 'Dashboard', icon: DashboardIcon, path: '/electricity' },
-  { text: 'Applications', icon: ApplicationIcon, path: '/electricity/applications', badge: 0 },
-  { text: 'Complaints', icon: ComplaintIcon, path: '/electricity/complaints', badge: 0 },
-  { text: 'Meter Readings', icon: ElectricityIcon, path: '/electricity/meter-readings', badge: 0 },
-  { text: 'Users', icon: AccountIcon, path: '/electricity/users' },
-  { text: 'Reports', icon: ReportsIcon, path: '/electricity/reports' },
-  { text: 'Tariffs', icon: BillIcon, path: '/electricity/tariff' },
-  { text: 'Settings', icon: SettingsIcon, path: '/electricity/settings' },
-];
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -53,6 +45,32 @@ const AdminDashboard = () => {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [badges, setBadges] = useState({ applications: 0, complaints: 0 });
+
+  useEffect(() => {
+    // Fetch live badge counts
+    api.get('/admin/dashboard/stats')
+      .then((res) => {
+        const data = res.data.data || res.data;
+        setBadges({
+          applications: data.pending_applications || 0,
+          complaints: data.open_complaints || 0,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  const menuItems = [
+    { text: 'Dashboard', icon: DashboardIcon, path: '/electricity' },
+    { text: 'Applications', icon: ApplicationIcon, path: '/electricity/applications', badge: badges.applications },
+    { text: 'Complaints', icon: ComplaintIcon, path: '/electricity/complaints', badge: badges.complaints },
+    { text: 'Meter Readings', icon: ElectricityIcon, path: '/electricity/meter-readings' },
+    { text: 'Consumers', icon: ConsumersIcon, path: '/electricity/consumers' },
+    { text: 'Users', icon: AccountIcon, path: '/electricity/users' },
+    { text: 'Reports', icon: ReportsIcon, path: '/electricity/reports' },
+    { text: 'Tariffs', icon: BillIcon, path: '/electricity/tariff' },
+    { text: 'Settings', icon: SettingsIcon, path: '/electricity/settings' },
+  ];
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);

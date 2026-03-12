@@ -15,9 +15,11 @@ import {
   DialogActions,
   Divider,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon } from '@mui/icons-material';
+import { CheckCircle as SuccessIcon, Print as PrintIcon } from '@mui/icons-material';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 
 // More granular steps for a guided experience
@@ -45,6 +47,10 @@ const SolarRooftopForm = ({ onClose }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
 
   const [formData, setFormData] = useState({
     // Applicant Details
@@ -73,16 +79,33 @@ const SolarRooftopForm = ({ onClose }) => {
     setActiveStep((prevStep) => prevStep - 1);
   };
 
-  const handleSubmit = async () => {
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
+  };
+
+  const handleSubmit = async (email) => {
     try {
       const response = await api.post('/electricity/applications/submit', {
         application_type: 'solar_rooftop',
         application_data: formData,
       });
 
-      setApplicationNumber(response.data.application_number);
+      const appNum = response.data.application_number;
+      const ts = new Date().toISOString();
+      setApplicationNumber(appNum);
       setSubmitted(true);
+      setVerifiedEmail(email);
+      setSubmittedAt(ts);
+      setShowReceipt(true);
       toast.success('Solar rooftop application submitted successfully!');
+      api.post('/electricity/otp/send-receipt', {
+        email,
+        application_number: appNum,
+        application_type: 'solar_rooftop',
+        application_data: formData,
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to submit application');
     }
@@ -323,24 +346,29 @@ const SolarRooftopForm = ({ onClose }) => {
             5. Please note down your application number for future reference
           </Typography>
         </Alert>
-        <Button variant="contained" onClick={onClose} size="large">
-          Close
-        </Button>
+        <Box sx={{ mt: 2, display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => setShowReceipt(true)}>
+            Print Receipt
+          </Button>
+          <Button variant="contained" onClick={onClose} size="large">
+            Close
+          </Button>
+        </Box>
+        <ApplicationReceipt
+          open={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          applicationNumber={applicationNumber}
+          applicationType="solar_rooftop"
+          formData={formData}
+          email={verifiedEmail}
+          submittedAt={submittedAt}
+        />
       </Box>
     );
   }
 
   return (
     <Box>
-      <DialogTitle>
-        <Typography component="span" variant="body1" fontWeight={600}>
-          Solar Rooftop Installation Application
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Please fill all required fields marked with *
-        </Typography>
-      </DialogTitle>
-      
       <DialogContent>
         <Stepper activeStep={activeStep} sx={{ mb: 4 }} alternativeLabel>
           {steps.map((label) => (
@@ -365,7 +393,7 @@ const SolarRooftopForm = ({ onClose }) => {
           Back
         </Button>
         {activeStep === steps.length - 1 ? (
-          <Button variant="contained" onClick={handleSubmit} size="large">
+          <Button variant="contained" onClick={() => setShowOtpDialog(true)} size="large">
             Submit Application
           </Button>
         ) : (
@@ -374,6 +402,12 @@ const SolarRooftopForm = ({ onClose }) => {
           </Button>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.email || ''}
+      />
     </Box>
   );
 };

@@ -41,7 +41,7 @@ import {
   Close as CloseIcon,
   Download as DownloadIcon,
 } from '@mui/icons-material';
-import api from '../../utils/api';
+import api from '../../utils/electricity/api';
 import toast from 'react-hot-toast';
 
 const ManageApplications = () => {
@@ -65,9 +65,7 @@ const ManageApplications = () => {
     try {
       setLoading(true);
       const params = filterStatus ? `?status=${filterStatus}` : '';
-      console.log('Fetching applications from:', `/admin/applications${params}`);
       const response = await api.get(`/admin/applications${params}`);
-      console.log('Received applications:', response.data);
       // Handle both old array format and new {success, data} format
       const appData = Array.isArray(response.data) ? response.data : (response.data.data || []);
       setApplications(appData);
@@ -84,7 +82,8 @@ const ManageApplications = () => {
     setSelectedApp(app);
     setActionData({
       status: app.status,
-      remarks: app.remarks || ''
+      remarks: app.remarks || '',
+      current_stage: app.current_stage || ''
     });
     setDialogOpen(true);
   };
@@ -260,7 +259,7 @@ const ManageApplications = () => {
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary">Applicant</Typography>
-                      <Typography variant="body1">{app.applicant_name || app.full_name || 'N/A'}</Typography>
+                      <Typography variant="body1">{app.applicant_name || app.user_name || app.full_name || 'N/A'}</Typography>
                       <Typography variant="body2">{app.email || 'N/A'}</Typography>
                       <Typography variant="body2">{app.mobile || app.phone || 'N/A'}</Typography>
                     </Grid>
@@ -400,6 +399,21 @@ const ManageApplications = () => {
                     Rejected
                   </Box>
                 </MenuItem>
+              </TextField>
+
+              {/* Current Stage */}
+              <TextField
+                fullWidth
+                select
+                label="Current Stage"
+                value={actionData.current_stage}
+                onChange={(e) => setActionData({ ...actionData, current_stage: e.target.value })}
+                sx={{ mb: 3 }}
+                helperText="Visible to applicant as their application progress"
+              >
+                {stageOptions.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                ))}
               </TextField>
 
               {/* Remarks */}
