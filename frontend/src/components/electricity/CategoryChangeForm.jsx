@@ -19,6 +19,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
+import QrUploadButton from './QrUploadButton';
 
 const CategoryChangeForm = ({ onClose }) => {
   const [formData, setFormData] = useState({
@@ -290,6 +291,13 @@ const CategoryChangeForm = ({ onClose }) => {
                       Upload {doc.required ? '(Required)' : '(Optional)'}
                       <input type="file" hidden accept="image/*,.pdf" onChange={handleDocUpload(doc.id)} />
                     </Button>
+                  )}
+                  {!uploadedDocs[doc.id] && (
+                    <QrUploadButton
+                      docKey={doc.id}
+                      docLabel={doc.label}
+                      onFileReceived={(f) => setUploadedDocs(prev => ({ ...prev, [doc.id]: f }))}
+                    />
                   )}
                 </Paper>
               </Grid>

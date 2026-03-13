@@ -1,93 +1,82 @@
 const express = require('express');
 const router = express.Router();
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 
-// =====================================================
-// WATER BILLS ROUTES
-// =====================================================
-
-// Fetch bill by consumer number
-router.get('/fetch/:consumerNumber', async (req, res) => {
+// Fetch bill by consumer number (via query param or path param)
+router.get('/fetch', async (req, res) => {
   try {
-    const { consumerNumber } = req.params;
+    const consumerNumber = req.query.consumer_number || req.query.consumerNumber;
     
-    // Get consumer details
-    const [consumers] = await promisePool.query(
-      `SELECT * FROM water_consumers WHERE consumer_number = ?`,
+    if (!consumerNumber) {
+      return res.status(400).json({ success: false, message: 'consumer_number is required' });
+    }
+
+    const consumerResult = await pool.query(
+      'SELECT * FROM water_consumers WHERE consumer_number = $1',
       [consumerNumber]
     );
-    
-    if (consumers.length === 0) {
+    if (consumerResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Consumer not found' });
     }
-    
-    const consumer = consumers[0];
-    
+
+    const consumer = consumerResult.rows[0];
+
     // Get latest unpaid bill
-    const [bills] = await promisePool.query(
-      `SELECT * FROM water_bills 
-       WHERE consumer_number = ? AND payment_status != 'paid'
-       ORDER BY bill_date DESC
-       LIMIT 1`,
-      [consumerNumber]
+    const billResult = await pool.query(
+      `SELECT * FROM water_bills
+       WHERE consumer_id = $1 AND status != 'paid'
+       ORDER BY created_at DESC LIMIT 1`,
+      [consumer.id]
     );
-    
+
     let billData;
-    if (bills.length > 0) {
-      billData = bills[0];
+    if (billResult.rows.length > 0) {
+      billData = billResult.rows[0];
     } else {
-      // Generate mock bill data for demo
-      const currentDate = new Date();
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 15);
-      
-      // Calculate charges based on consumption
-      const consumption = Math.floor(Math.random() * 20) + 5; // 5-25 KL
-      const waterCharges = consumption * 10; // Rs 10 per KL for demo
-      const sewerageCharges = waterCharges * 0.2;
-      const serviceTax = (waterCharges + sewerageCharges) * 0.06;
-      
+      // Auto-generate current bill if none exists
+      const prevReading = parseFloat(consumer.last_reading || 0);
+      const consumption = 15;
+      const currentReading = prevReading + consumption;
+      const waterCharges = consumption * 5;
+      const sewerageCharges = waterCharges * 0.3;
+      const serviceTax = (waterCharges + sewerageCharges) * 0.05;
+      const arrears = parseFloat(consumer.total_dues || 0);
+      const totalAmount = waterCharges + sewerageCharges + serviceTax + arrears;
+      const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 15);
+      const now = new Date();
+
       billData = {
-        bill_number: `WB${currentDate.getFullYear()}${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`,
+        bill_number: `WB${now.getFullYear()}${String(consumer.id).padStart(6, '0')}`,
         consumer_number: consumerNumber,
-        consumer_name: consumer.full_name,
-        address: consumer.address,
-        property_id: consumer.property_id,
-        connection_type: `${consumer.property_type} / ${consumer.meter_number ? 'Metered' : 'Unmetered'}`,
-        meter_no: consumer.meter_number,
-        bill_month: currentDate.toLocaleString('default', { month: 'long', year: 'numeric' }),
-        bill_date: currentDate.toISOString().split('T')[0],
-        due_date: dueDate.toISOString().split('T')[0],
-        previous_reading: consumer.last_meter_reading || 0,
-        current_reading: (consumer.last_meter_reading || 0) + consumption,
+        bill_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+        previous_reading: prevReading,
+        current_reading: currentReading,
         consumption_kl: consumption,
         water_charges: waterCharges,
         sewerage_charges: sewerageCharges,
         service_tax: serviceTax,
-        meter_rent: 10,
-        arrears: consumer.outstanding_amount || 0,
+        arrears,
         late_fee: 0,
-        total_amount: waterCharges + sewerageCharges + serviceTax + 10 + (consumer.outstanding_amount || 0),
-        status: 'Unpaid'
+        total_amount: totalAmount,
+        due_date: dueDate.toISOString().split('T')[0],
+        status: 'unpaid'
       };
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: {
         consumer: {
           consumer_number: consumer.consumer_number,
           full_name: consumer.full_name,
-          father_spouse_name: consumer.father_spouse_name,
           address: consumer.address,
-          property_id: consumer.property_id,
-          connection_type: consumer.property_type,
-          meter_number: consumer.meter_number
+          category: consumer.category,
+          meter_number: consumer.meter_number,
+          connection_status: consumer.connection_status
         },
         bill: billData
       }
     });
-    
   } catch (error) {
     console.error('Fetch water bill error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -95,24 +84,27 @@ router.get('/fetch/:consumerNumber', async (req, res) => {
 });
 
 // Get bill history
-router.get('/history/:consumerNumber', async (req, res) => {
+router.get('/history', async (req, res) => {
   try {
-    const { consumerNumber } = req.params;
-    
-    const [bills] = await promisePool.query(
-      `SELECT bill_number, bill_month, bill_year, bill_date, due_date, 
-              consumption_kl, total_amount, payment_status, paid_at
-       FROM water_bills 
-       WHERE consumer_number = ?
-       ORDER BY bill_date DESC
-       LIMIT 12`,
-      [consumerNumber]
+    const consumerNumber = req.query.consumer_number || req.query.consumerNumber;
+    if (!consumerNumber) {
+      return res.status(400).json({ success: false, message: 'consumer_number is required' });
+    }
+    const consumerResult = await pool.query(
+      'SELECT id FROM water_consumers WHERE consumer_number = $1', [consumerNumber]
     );
-    
-    res.json({ success: true, data: bills });
-    
+    if (consumerResult.rows.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+    const consumerId = consumerResult.rows[0].id;
+    const result = await pool.query(
+      `SELECT bill_number, bill_month, consumption_kl, total_amount, status, payment_date, due_date, created_at
+       FROM water_bills WHERE consumer_id = $1 ORDER BY created_at DESC LIMIT 12`,
+      [consumerId]
+    );
+    res.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Get bill history error:', error);
+    console.error('Get water bill history error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

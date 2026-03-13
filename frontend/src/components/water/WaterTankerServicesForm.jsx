@@ -16,6 +16,7 @@ import {
   CircularProgress,
   Divider,
 } from '@mui/material';
+import EmailOtpVerification from './EmailOtpVerification';
 import {
   CheckCircle as SuccessIcon,
   ReportProblem as EmergencyIcon,
@@ -61,7 +62,9 @@ const WaterTankerServicesForm = ({ onClose }) => {
   const [selectedService, setSelectedService] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
   const [bookingNumber, setBookingNumber] = useState('');
+  const [verifiedEmail, setVerifiedEmail] = useState('');
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -88,42 +91,72 @@ const WaterTankerServicesForm = ({ onClose }) => {
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = async () => {
+  const validateForm = () => {
     if (!formData.mobile || formData.mobile.length !== 10) {
       toast.error('Enter valid 10-digit mobile number');
-      return;
+      return false;
     }
     if (selectedService !== 'recycled_water' && (!formData.full_name || !formData.address || !formData.ward)) {
       toast.error('Please fill Name, Address, and Ward');
-      return;
+      return false;
     }
     if (selectedService === 'bulk_supply' && !formData.volume_kl) {
       toast.error('Please enter volume required');
-      return;
+      return false;
     }
     if (selectedService === 'recycled_water' && !formData.consumer_number) {
       toast.error('Please enter Consumer Number');
-      return;
+      return false;
     }
+
+    return true;
+  };
+
+  const handleSubmit = async (email) => {
 
     setSubmitting(true);
     try {
+      const applicationData = { service_type: selectedService, email, ...formData };
       const response = await api.post('/water/applications/submit', {
         application_type: 'tanker_service',
-        application_data: { service_type: selectedService, ...formData },
+        application_data: applicationData,
       });
       const num = response.data?.data?.application_number || ('WTK' + Date.now());
       setBookingNumber(num);
+      setVerifiedEmail(email);
       setSubmitted(true);
       toast.success('Tanker booking confirmed!');
+
+      api.post('/water/otp/send-receipt', {
+        email,
+        application_number: num,
+        application_type: 'tanker_service',
+        application_data: applicationData,
+        submitted_at: new Date().toISOString(),
+      }).catch(() => {
+        toast.error('Booking saved, but receipt email could not be sent.');
+      });
     } catch (error) {
       const num = 'WTK' + Date.now();
       setBookingNumber(num);
+      setVerifiedEmail(email);
       setSubmitted(true);
       toast.success('Tanker booking confirmed!');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmitWithOtp = () => {
+    if (!validateForm()) {
+      return;
+    }
+    setShowOtpDialog(true);
+  };
+
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
   };
 
   if (submitted) {
@@ -140,6 +173,7 @@ const WaterTankerServicesForm = ({ onClose }) => {
             {formData.full_name && <Typography variant="body1" gutterBottom><strong>Name:</strong> {formData.full_name}</Typography>}
             <Typography variant="body1" gutterBottom><strong>Mobile:</strong> {formData.mobile}</Typography>
             {formData.ward && <Typography variant="body1"><strong>Ward:</strong> {formData.ward}</Typography>}
+            <Typography variant="body1"><strong>Email:</strong> {verifiedEmail}</Typography>
           </Box>
           <Alert severity={selectedService === 'emergency' ? 'warning' : 'info'} sx={{ mt: 3, textAlign: 'left' }}>
             {selectedService === 'emergency'
@@ -227,10 +261,9 @@ const WaterTankerServicesForm = ({ onClose }) => {
                     value={formData.address} onChange={handleChange} multiline rows={2} />
                 </Grid>
                 <Grid item xs={12} md={4}>
-                  <TextField fullWidth required select label="Ward *" name="ward"
-                    value={formData.ward} onChange={handleChange}>
-                    {wardOptions.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                  </TextField>
+                  <TextField fullWidth required label="Ward *" name="ward"
+                    value={formData.ward} onChange={handleChange}
+                    placeholder="Enter ward number/name" />
                 </Grid>
                 <Grid item xs={12}>
                   <TextField fullWidth label="Reason for Emergency" name="emergency_reason"
@@ -257,10 +290,9 @@ const WaterTankerServicesForm = ({ onClose }) => {
                     value={formData.organization_name} onChange={handleChange} />
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <TextField fullWidth required select label="Ward *" name="ward"
-                    value={formData.ward} onChange={handleChange}>
-                    {wardOptions.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                  </TextField>
+                  <TextField fullWidth required label="Ward *" name="ward"
+                    value={formData.ward} onChange={handleChange}
+                    placeholder="Enter ward number/name" />
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField fullWidth required label="Volume Required (KL) *" name="volume_kl"
@@ -323,10 +355,9 @@ const WaterTankerServicesForm = ({ onClose }) => {
                   </TextField>
                 </Grid>
                 <Grid item xs={12} md={4}>
-                  <TextField fullWidth select label="Ward" name="ward"
-                    value={formData.ward} onChange={handleChange}>
-                    {wardOptions.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                  </TextField>
+                  <TextField fullWidth label="Ward" name="ward"
+                    value={formData.ward} onChange={handleChange}
+                    placeholder="Enter ward number/name" />
                 </Grid>
                 <Grid item xs={12}>
                   <TextField fullWidth required label="Delivery Address *" name="delivery_address"
@@ -341,12 +372,19 @@ const WaterTankerServicesForm = ({ onClose }) => {
       <DialogActions sx={{ p: 3 }}>
         <Button onClick={onClose} color="inherit">Cancel</Button>
         {selectedService && (
-          <Button variant="contained" onClick={handleSubmit} disabled={submitting}
+          <Button variant="contained" onClick={handleSubmitWithOtp} disabled={submitting}
             sx={{ bgcolor: '#0277bd', '&:hover': { bgcolor: '#01579b' } }}>
             {submitting ? <CircularProgress size={24} color="inherit" /> : 'Confirm Booking'}
           </Button>
         )}
       </DialogActions>
+
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        title="Confirm Booking via OTP"
+      />
     </Box>
   );
 };

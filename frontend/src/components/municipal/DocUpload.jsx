@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Typography, Button, Chip, IconButton, Paper } from '@mui/material';
 import { CloudUpload as UploadIcon, Close as CloseIcon, CheckCircle as CheckIcon } from '@mui/icons-material';
+import QrUploadButton from '../electricity/QrUploadButton';
 
 /**
  * Reusable document / photo upload field for municipal forms.
@@ -23,8 +24,11 @@ const DocUpload = ({
   onRemove,
   accept = '.pdf,.jpg,.jpeg,.png',
   hint,
+  enableQr = true,
+  qrLabel,
 }) => {
   const file = docs[name];
+  const fileName = file?.name || file?.file_name || null;
   return (
     <Paper
       variant="outlined"
@@ -58,7 +62,7 @@ const DocUpload = ({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <CheckIcon fontSize="small" color="success" />
           <Chip
-            label={file.name.length > 32 ? file.name.substring(0, 29) + '…' : file.name}
+            label={fileName && fileName.length > 32 ? fileName.substring(0, 29) + '…' : fileName}
             size="small"
             color="success"
             variant="outlined"
@@ -73,7 +77,7 @@ const DocUpload = ({
           </IconButton>
         </Box>
       ) : (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Button
             component="label"
             startIcon={<UploadIcon />}
@@ -94,6 +98,15 @@ const DocUpload = ({
           <Typography variant="caption" color="text.disabled">
             PDF / JPG / PNG
           </Typography>
+          {enableQr && (
+            <Box sx={{ width: '100%' }}>
+              <QrUploadButton
+                docKey={name}
+                docLabel={qrLabel || label}
+                onFileReceived={(f) => onFileChange(name, f)}
+              />
+            </Box>
+          )}
         </Box>
       )}
     </Paper>

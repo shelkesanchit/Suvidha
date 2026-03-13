@@ -17,6 +17,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import DocUpload from '../municipal/DocUpload';
+import EmailOtpVerification from './EmailOtpVerification';
 import {
   CheckCircle as SuccessIcon,
   Build as MeterIcon,
@@ -85,7 +86,9 @@ const WaterConnectionManagementForm = ({ onClose }) => {
   const [selectedService, setSelectedService] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
   const [requestNumber, setRequestNumber] = useState('');
+  const [verifiedEmail, setVerifiedEmail] = useState('');
   const [formData, setFormData] = useState({
     consumer_number: '',
     full_name: '',
@@ -117,23 +120,28 @@ const WaterConnectionManagementForm = ({ onClose }) => {
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = async () => {
+  const validateForm = () => {
     if (!formData.consumer_number || !formData.full_name || !formData.mobile) {
       toast.error('Please fill Consumer Number, Name, and Mobile');
-      return;
+      return false;
     }
     if (formData.mobile.length !== 10) {
       toast.error('Enter valid 10-digit mobile number');
-      return;
+      return false;
     }
     if (selectedService === 'meter_change' && !formData.meter_change_reason) {
       toast.error('Please select reason for meter change');
-      return;
+      return false;
     }
     if (selectedService === 'ownership_transfer' && (!formData.new_owner_name || !formData.new_owner_mobile)) {
       toast.error('Please fill new owner details');
-      return;
+      return false;
     }
+
+    return true;
+  };
+
+  const handleSubmit = async (email) => {
 
     setSubmitting(true);
     try {
@@ -142,6 +150,7 @@ const WaterConnectionManagementForm = ({ onClose }) => {
         consumer_number: formData.consumer_number,
         full_name: formData.full_name,
         mobile: formData.mobile,
+        email,
         ...formData,
       };
       const response = await api.post('/water/applications/submit', {
@@ -150,17 +159,41 @@ const WaterConnectionManagementForm = ({ onClose }) => {
       });
       const reqNo = response.data?.data?.application_number || ('WCM' + Date.now());
       setRequestNumber(reqNo);
+      setVerifiedEmail(email);
       setSubmitted(true);
       toast.success('Request submitted successfully!');
+
+      api.post('/water/otp/send-receipt', {
+        email,
+        application_number: reqNo,
+        application_type: 'connection_management',
+        application_data: request_data,
+        submitted_at: new Date().toISOString(),
+      }).catch(() => {
+        toast.error('Request saved, but receipt email could not be sent.');
+      });
     } catch (error) {
       // Fallback to local success for demo
       const reqNo = 'WCM' + Date.now();
       setRequestNumber(reqNo);
+      setVerifiedEmail(email);
       setSubmitted(true);
       toast.success('Request submitted successfully!');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmitWithOtp = () => {
+    if (!validateForm()) {
+      return;
+    }
+    setShowOtpDialog(true);
+  };
+
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
   };
 
   if (submitted) {
@@ -179,6 +212,7 @@ const WaterConnectionManagementForm = ({ onClose }) => {
               <strong>Consumer No:</strong> {formData.consumer_number}
             </Typography>
             <Typography variant="body1"><strong>Mobile:</strong> {formData.mobile}</Typography>
+            <Typography variant="body1"><strong>Email:</strong> {verifiedEmail}</Typography>
           </Box>
           <Alert severity="info" sx={{ mt: 3, textAlign: 'left' }}>
             Processing time: 5–10 working days • A field inspector may visit for verification • SMS updates sent to {formData.mobile}
@@ -447,12 +481,19 @@ const WaterConnectionManagementForm = ({ onClose }) => {
       <DialogActions sx={{ p: 3 }}>
         <Button onClick={onClose} color="inherit">Cancel</Button>
         {selectedService && (
-          <Button variant="contained" onClick={handleSubmit} disabled={submitting}
+          <Button variant="contained" onClick={handleSubmitWithOtp} disabled={submitting}
             sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' } }}>
             {submitting ? <CircularProgress size={24} color="inherit" /> : 'Submit Request'}
           </Button>
         )}
       </DialogActions>
+
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        title="Confirm Request via OTP"
+      />
     </Box>
   );
 };

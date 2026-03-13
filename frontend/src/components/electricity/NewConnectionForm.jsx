@@ -26,6 +26,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
+import DocUpload from '../municipal/DocUpload';
 
 const steps = ['Applicant Details', 'Premises Information', 'Connection Details', 'Documents', 'Review & Submit'];
 
@@ -823,20 +824,30 @@ const NewConnectionForm = ({ onClose }) => {
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
                     {doc.description}
                   </Typography>
-                  <Button
-                    variant={uploadedDocs[doc.key] ? "contained" : "outlined"}
-                    component="label"
-                    color={uploadedDocs[doc.key] ? "success" : "primary"}
-                    fullWidth
-                  >
-                    {uploadedDocs[doc.key] ? `✓ ${uploadedDocs[doc.key].name}` : `Upload ${doc.label}`}
-                    <input
-                      type="file"
-                      hidden
-                      accept="image/*,application/pdf"
-                      onChange={handleFileChange(doc.key)}
-                    />
-                  </Button>
+                  <DocUpload
+                    label={`${index + 1}. ${doc.label}`}
+                    name={doc.key}
+                    required={doc.required}
+                    docs={uploadedDocs}
+                    onFileChange={(name, file) => {
+                      if (!file) return;
+                      if (file instanceof File) {
+                        handleFileChange(name)({ target: { files: [file] } });
+                      } else {
+                        setUploadedDocs(prev => ({ ...prev, [name]: file }));
+                        toast.success(`${file.name || 'File'} uploaded`);
+                      }
+                    }}
+                    onRemove={(name) => setUploadedDocs(prev => {
+                      const next = { ...prev };
+                      delete next[name];
+                      return next;
+                    })}
+                    accept="image/*,application/pdf"
+                    hint={doc.description}
+                    enableQr
+                    qrLabel={doc.label}
+                  />
                 </Box>
               </Grid>
             ))}
@@ -973,19 +984,26 @@ const NewConnectionForm = ({ onClose }) => {
 
   return (
     <Box>
-      <DialogTitle>
+      <DialogTitle
+        sx={{
+          px: 3,
+          py: 2,
+          bgcolor: '#eaf2ff',
+          borderBottom: '1px solid #cfe0ff',
+        }}
+      >
         <Box>
-          <Typography variant="subtitle1" fontWeight={600}>
+          <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.2, color: '#0f4aa6' }}>
             New Electricity Connection Application
           </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Please fill all required fields marked with *
+          <Typography variant="body2" sx={{ mt: 0.75, color: '#2a436f', fontWeight: 500 }}>
+            Fill all required fields marked with *
           </Typography>
         </Box>
       </DialogTitle>
 
-      <DialogContent>
-        <Stepper activeStep={activeStep} sx={{ mb: 4 }} alternativeLabel>
+      <DialogContent sx={{ pt: 3, px: 3, pb: 2 }}>
+        <Stepper activeStep={activeStep} sx={{ mb: 4, mt: 0.5 }} alternativeLabel>
           {steps.map((label) => (
             <Step key={label}>
               <StepLabel>{label}</StepLabel>
@@ -993,7 +1011,7 @@ const NewConnectionForm = ({ onClose }) => {
           ))}
         </Stepper>
 
-        <Box sx={{ minHeight: 400 }}>
+        <Box sx={{ minHeight: 400, pt: 1 }}>
           {renderStepContent(activeStep)}
         </Box>
       </DialogContent>

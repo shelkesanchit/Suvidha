@@ -15,6 +15,22 @@ router.post('/submit', async (req, res) => {
   try {
     const { complaint_data } = req.body;
 
+    if (!complaint_data) {
+      return res.status(400).json({ success: false, message: 'complaint_data is required' });
+    }
+
+    if (!complaint_data.description || !complaint_data.complaint_category || !complaint_data.contact_name) {
+      return res.status(400).json({ success: false, message: 'contact_name, complaint_category and description are required' });
+    }
+
+    if (!complaint_data.consumer_id && !complaint_data.mobile) {
+      return res.status(400).json({ success: false, message: 'consumer_id or mobile is required' });
+    }
+
+    if (complaint_data.mobile && !/^\d{10}$/.test(String(complaint_data.mobile))) {
+      return res.status(400).json({ success: false, message: 'mobile must be 10 digits' });
+    }
+
     // Generate complaint number
     const year = new Date().getFullYear();
     const [countResult] = await promisePool.query(
@@ -58,16 +74,23 @@ router.post('/submit', async (req, res) => {
     const priorityMap = { 'critical': 'urgent', 'high': 'high', 'medium': 'medium', 'low': 'low' };
     const priority = priorityMap[complaint_data.urgency] || 'medium';
 
+    const detailsSuffix = complaint_data.additional_info
+      ? `\n\n[Additional Info]\n${JSON.stringify(complaint_data.additional_info)}`
+      : '';
+
+    const description = `${complaint_data.description || ''}${detailsSuffix}`;
+
     // Insert complaint (only columns that exist in gas_complaints)
     const [result] = await promisePool.query(
       `INSERT INTO gas_complaints 
-      (complaint_number, customer_id, complaint_type, description, status, priority) 
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      (complaint_number, customer_id, complaint_type, description, attachment_url, status, priority) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         complaintNumber,
         customerId,
         complaintType,
-        complaint_data.description,
+        description,
+        complaint_data.attachment_url || null,
         'open',
         priority
       ]
@@ -92,6 +115,7 @@ router.post('/submit', async (req, res) => {
 router.get('/track/:complaintNumber', async (req, res) => {
   try {
     const { complaintNumber } = req.params;
+    const { mobile, email } = req.query;
 
     const [complaints] = await promisePool.query(
       `SELECT gc.complaint_number, gc.consumer_id, gc.complaint_type,
@@ -108,7 +132,17 @@ router.get('/track/:complaintNumber', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Complaint not found' });
     }
 
-    res.json({ success: true, data: complaints[0] });
+    const complaint = complaints[0];
+
+    if (mobile && String(complaint.mobile || '') !== String(mobile)) {
+      return res.status(403).json({ success: false, message: 'Mobile verification failed for this complaint' });
+    }
+
+    if (email && String(complaint.email || '').toLowerCase() !== String(email).toLowerCase()) {
+      return res.status(403).json({ success: false, message: 'Email verification failed for this complaint' });
+    }
+
+    res.json({ success: true, data: complaint });
 
   } catch (error) {
     console.error('Track complaint error:', error);
@@ -122,8 +156,8 @@ router.get('/my-complaints/:mobile', async (req, res) => {
     const { mobile } = req.params;
 
     const [complaints] = await promisePool.query(
-      `SELECT gc.id, gc.complaint_number, gc.complaint_type, gc.status, gc.priority,
-              gc.submitted_ as created_at, gc.resolved_at
+            `SELECT gc.id, gc.complaint_number, gc.complaint_type, gc.status, gc.priority,
+              gc.submitted_at as created_at, gc.resolved_at
        FROM gas_complaints gc
        INNER JOIN gas_consumers c ON gc.consumer_id = c.id
        WHERE c.phone = ?

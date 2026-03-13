@@ -22,10 +22,11 @@ import {
   CircularProgress,
   Tabs,
   Tab,
-  Checkbox,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon, EventAvailable as SiteVisitIcon, Opacity as SewerIcon } from '@mui/icons-material';
+import { CheckCircle as SuccessIcon, EventAvailable as SiteVisitIcon, Opacity as SewerIcon, Print as PrintIcon } from '@mui/icons-material';
 import DocUpload from '../municipal/DocUpload';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
@@ -92,6 +93,10 @@ const WaterNewConnectionForm = ({ onClose }) => {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
   const [siteVisitSubmitted, setSiteVisitSubmitted] = useState(false);
   const [siteVisitData, setSiteVisitData] = useState({
     full_name: '',
@@ -109,7 +114,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
     aadhaar_number: '',
     mobile: '',
     email: '',
-    
+
     // Property Details (Category II from document)
     property_id: '', // Property Index Number - Most Critical Field
     house_flat_no: '',
@@ -118,19 +123,16 @@ const WaterNewConnectionForm = ({ onClose }) => {
     landmark: '',
     property_type: '',
     ownership_status: 'owner',
-    
+
     // Connection Details (Category III from document)
     connection_purpose: 'drinking',
     pipe_size: '15mm',
     connection_type: 'permanent',
     include_sewerage: false,
-    
+
     // Documents
     aadhaar_doc: null,
     property_doc: null, // Sale Deed / Property Tax Receipt
-    
-    // Declaration
-    agreed_to_terms: false,
   });
 
   const handleSiteVisitChange = (e) => {
@@ -204,10 +206,6 @@ const WaterNewConnectionForm = ({ onClose }) => {
         }
         return true;
       case 4: // Review
-        if (!formData.agreed_to_terms) {
-          toast.error('Please accept the declaration');
-          return false;
-        }
         return true;
       default:
         return true;
@@ -217,7 +215,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
   const handleNext = () => {
     if (validateStep()) {
       if (activeStep === steps.length - 1) {
-        handleSubmit();
+        setShowOtpDialog(true);
       } else {
         setActiveStep((prev) => prev + 1);
       }
@@ -228,10 +226,33 @@ const WaterNewConnectionForm = ({ onClose }) => {
     setActiveStep((prev) => prev - 1);
   };
 
-  const handleSubmit = async () => {
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    handleSubmit(email);
+  };
+
+  const handleSubmit = async (email) => {
     try {
       setSubmitting(true);
-      
+
+      // Convert uploaded files to base64 for Supabase storage
+      const docsArray = await Promise.all(
+        Object.entries(docs).map(([documentType, file]) =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: reader.result.split(',')[1],
+              documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+        )
+      );
+
       // Prepare the application data
       const application_data = {
         applicant_category: formData.applicant_category,
@@ -239,7 +260,7 @@ const WaterNewConnectionForm = ({ onClose }) => {
         father_spouse_name: formData.father_spouse_name,
         aadhaar_number: formData.aadhaar_number,
         mobile: formData.mobile,
-        email: formData.email,
+        email,
         property_id: formData.property_id,
         house_flat_no: formData.house_flat_no,
         building_name: formData.building_name,
@@ -250,21 +271,33 @@ const WaterNewConnectionForm = ({ onClose }) => {
         connection_purpose: formData.connection_purpose,
         pipe_size: formData.pipe_size,
         connection_type: formData.connection_type,
+        include_sewerage: formData.include_sewerage,
       };
-      
-      // Submit to API with correct format
+
+      // Submit to API with documents
       const response = await api.post('/water/applications/submit', {
         application_type: 'new_connection',
-        application_data
+        application_data,
+        documents: docsArray,
       });
-      
-      if (response.data && response.data.data && response.data.data.application_number) {
-        setApplicationNumber(response.data.data.application_number);
-        setSubmitted(true);
-        toast.success('Application submitted successfully!');
-      } else {
-        throw new Error('Failed to get application number');
-      }
+
+      const appNum = response.data.data.application_number;
+      const ts = new Date().toISOString();
+      setApplicationNumber(appNum);
+      setSubmitted(true);
+      setVerifiedEmail(email);
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      toast.success('Application submitted successfully!');
+
+      // Send receipt email
+      api.post('/water/otp/send-receipt', {
+        email,
+        application_number: appNum,
+        application_type: 'new_connection',
+        application_data: formData,
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch (error) {
       console.error('Submit error:', error);
       toast.error(error.response?.data?.error || 'Failed to submit application. Please try again.');
@@ -298,11 +331,23 @@ const WaterNewConnectionForm = ({ onClose }) => {
             </Typography>
           </Alert>
         </DialogContent>
-        <DialogActions>
-          <Button variant="contained" onClick={onClose} fullWidth>
+        <DialogActions sx={{ justifyContent: 'center', gap: 1, pb: 3 }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => setShowReceipt(true)}>
+            Print Receipt
+          </Button>
+          <Button variant="contained" onClick={onClose} sx={{ bgcolor: '#0288d1', '&:hover': { bgcolor: '#0277bd' } }}>
             Close
           </Button>
         </DialogActions>
+        <ApplicationReceipt
+          open={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          applicationNumber={applicationNumber}
+          applicationType="new_connection"
+          formData={formData}
+          email={verifiedEmail}
+          submittedAt={submittedAt}
+        />
       </Box>
     );
   }
@@ -462,17 +507,13 @@ const WaterNewConnectionForm = ({ onClose }) => {
               <TextField
                 fullWidth
                 required
-                select
                 label="Ward *"
                 name="ward"
                 value={formData.ward}
                 onChange={handleChange}
+                placeholder="Enter ward number/name"
                 helperText="Determines jurisdiction"
-              >
-                {wards.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                ))}
-              </TextField>
+              />
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
@@ -589,23 +630,17 @@ const WaterNewConnectionForm = ({ onClose }) => {
               </Alert>
             </Grid>
             <Grid item xs={12}>
-              <Box sx={{ border: '1px solid #e0e0e0', borderRadius: 2, p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Checkbox
-                  name="include_sewerage"
-                  checked={formData.include_sewerage}
-                  onChange={(e) => setFormData({ ...formData, include_sewerage: e.target.checked })}
-                  color="primary"
-                />
-                <Box>
-                  <Typography variant="body1" fontWeight={600}>
-                    <SewerIcon sx={{ mr: 0.5, verticalAlign: 'middle', color: '#0288d1' }} />
-                    Also apply for Sewerage Connection
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Request simultaneous connection to the municipal sewerage network (recommended for new constructions)
-                  </Typography>
-                </Box>
-              </Box>
+              <TextField
+                fullWidth
+                select
+                label="Include Sewerage Connection"
+                value={formData.include_sewerage ? 'yes' : 'no'}
+                onChange={(e) => setFormData({ ...formData, include_sewerage: e.target.value === 'yes' })}
+                helperText="Select Yes if you want sewerage connection along with water connection"
+              >
+                <MenuItem value="no">No</MenuItem>
+                <MenuItem value="yes">Yes</MenuItem>
+              </TextField>
             </Grid>
           </Grid>
         )}
@@ -704,20 +739,6 @@ const WaterNewConnectionForm = ({ onClose }) => {
                 <strong>Estimated Charges:</strong> Application Fee + Security Deposit + Road Cutting (if applicable)
               </Alert>
             </Grid>
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <input
-                    type="checkbox"
-                    name="agreed_to_terms"
-                    checked={formData.agreed_to_terms}
-                    onChange={handleChange}
-                    style={{ marginRight: 8, width: 20, height: 20 }}
-                  />
-                }
-                label="I declare that all information is true and correct. I agree to abide by municipal water supply bylaws."
-              />
-            </Grid>
           </Grid>
         )}
       </DialogContent>
@@ -780,10 +801,9 @@ const WaterNewConnectionForm = ({ onClose }) => {
                     placeholder="Full address for inspector" multiline rows={2} />
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <TextField fullWidth required select label="Ward *" name="ward"
-                    value={siteVisitData.ward} onChange={handleSiteVisitChange}>
-                    {wards.map((w) => <MenuItem key={w.value} value={w.value}>{w.label}</MenuItem>)}
-                  </TextField>
+                  <TextField fullWidth required label="Ward *" name="ward"
+                    value={siteVisitData.ward} onChange={handleSiteVisitChange}
+                    placeholder="Enter ward number/name" />
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <TextField fullWidth required label="Preferred Visit Date *" name="visit_date"
@@ -817,6 +837,12 @@ const WaterNewConnectionForm = ({ onClose }) => {
           </DialogActions>
         </>
       )}
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.email || ''}
+      />
     </Box>
   );
 };

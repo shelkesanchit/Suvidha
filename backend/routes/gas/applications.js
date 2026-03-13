@@ -46,7 +46,27 @@ router.post('/submit', async (req, res) => {
   try {
     await connection.beginTransaction();
     
-    const { application_type, application_data } = req.body;
+    const { application_type, application_data, documents = [], additional_info = {} } = req.body;
+
+    if (!application_type || !application_data) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'application_type and application_data are required' });
+    }
+
+    if (!application_data.mobile || !application_data.applicant_name) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'applicant_name and mobile are required' });
+    }
+
+    if (!/^\d{10}$/.test(String(application_data.mobile))) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'mobile must be 10 digits' });
+    }
+
+    if (application_data.pincode && !/^\d{6}$/.test(String(application_data.pincode))) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'pincode must be 6 digits' });
+    }
     
     // Generate application number
     const year = new Date().getFullYear();
@@ -87,6 +107,21 @@ router.post('/submit', async (req, res) => {
     const applicantPhone = application_data.mobile || application_data.contact_number || application_data.phone || '';
     const applicantEmail = application_data.email || null;
     
+    const applicationPayload = {
+      ...application_data,
+      additional_info,
+    };
+
+    const documentsPayload = Array.isArray(documents)
+      ? documents.map((d) => ({
+          document_type: d.document_type,
+          file_name: d.file_name,
+          mime_type: d.mime_type,
+          size: d.size,
+          file_data: d.file_data,
+        }))
+      : [];
+
     // Insert application using actual schema columns
     const [result] = await connection.query(
       `INSERT INTO gas_applications 
@@ -101,8 +136,8 @@ router.post('/submit', async (req, res) => {
         applicantName,
         applicantPhone,
         applicantEmail,
-        JSON.stringify(application_data),
-        JSON.stringify([])
+        JSON.stringify(applicationPayload),
+        JSON.stringify(documentsPayload)
       ]
     );
     
@@ -130,6 +165,7 @@ router.post('/submit', async (req, res) => {
 router.get('/track/:applicationNumber', async (req, res) => {
   try {
     const { applicationNumber } = req.params;
+    const { mobile, email } = req.query;
     
     const [applications] = await promisePool.query(
       `SELECT a.application_number, a.applicant_name as full_name, a.applicant_phone as mobile, a.applicant_email as email,
@@ -147,6 +183,14 @@ router.get('/track/:applicationNumber', async (req, res) => {
     }
     
     const app = applications[0];
+
+    if (mobile && String(app.mobile || '') !== String(mobile)) {
+      return res.status(403).json({ success: false, message: 'Mobile verification failed for this application' });
+    }
+
+    if (email && String(app.email || '').toLowerCase() !== String(email).toLowerCase()) {
+      return res.status(403).json({ success: false, message: 'Email verification failed for this application' });
+    }
     
     res.json({ success: true, data: app });
     
@@ -209,27 +253,48 @@ router.post('/cylinder-booking', async (req, res) => {
   try {
     await connection.beginTransaction();
     
-    const { consumer_number, mobile, cylinder_type, quantity = 1, delivery_preference } = req.body;
-    
-    // Find consumer - first try by consumer_number, then by mobile
-    let consumers = [];
-    if (consumer_number) {
-      [consumers] = await connection.query(
-        'SELECT * FROM gas_consumers WHERE consumer_number = ?',
-        [consumer_number]
-      );
+    const { consumer_number, mobile, cylinder_type, quantity = 1, delivery_preference = 'home_delivery' } = req.body;
+
+    if (!consumer_number || !mobile) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'consumer_number and mobile are required' });
+    }
+
+    if (!/^\d{10}$/.test(String(mobile))) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'mobile must be 10 digits' });
+    }
+
+    const allowedCylinderTypes = new Set(['domestic_14.2kg', 'domestic_5kg', 'commercial_19kg', 'commercial_47.5kg']);
+    const allowedDeliveryTypes = new Set(['home_delivery', 'self_pickup']);
+
+    if (cylinder_type && !allowedCylinderTypes.has(cylinder_type)) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Invalid cylinder type' });
+    }
+
+    if (!allowedDeliveryTypes.has(delivery_preference)) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Invalid delivery preference' });
+    }
+
+    const parsedQuantity = Number.parseInt(quantity, 10);
+    if (!Number.isFinite(parsedQuantity) || parsedQuantity < 1 || parsedQuantity > 2) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'quantity must be between 1 and 2' });
     }
     
-    // If not found by consumer_number, try by mobile
-    if (consumers.length === 0 && mobile) {
-      [consumers] = await connection.query(
-        'SELECT * FROM gas_consumers WHERE phone = ? AND connection_status = "active"',
-        [mobile]
-      );
-    }
+    // Find active consumer by both consumer number and mobile for stricter matching
+    const [consumers] = await connection.query(
+      `SELECT id, connection_type
+       FROM gas_consumers
+       WHERE consumer_number = ? AND phone = ? AND connection_status = 'active'`,
+      [consumer_number, mobile]
+    );
     
     if (consumers.length === 0) {
-      return res.status(404).json({ success: false, message: 'Consumer not found. Please ensure you have an active gas connection.' });
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Active consumer not found for given consumer number and mobile' });
     }
     
     const consumer = consumers[0];
@@ -254,7 +319,7 @@ router.post('/cylinder-booking', async (req, res) => {
       'commercial_47.5kg': 5200
     };
     const pricePerUnit = cylinderPrices[actualCylinderType] || 850;
-    const totalAmount = pricePerUnit * quantity;
+    const totalAmount = pricePerUnit * parsedQuantity;
     
     // Map to valid ENUM values
     const cylBookingMap = {
@@ -277,9 +342,9 @@ router.post('/cylinder-booking', async (req, res) => {
         bookingNumber,
         consumer.id,
         cylBookingMap[actualCylinderType] || '14kg',
-        quantity,
+        parsedQuantity,
         totalAmount,
-        delivery_preference || 'home_delivery',
+        delivery_preference,
         'placed'
       ]
     );

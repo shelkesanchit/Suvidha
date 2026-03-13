@@ -1,358 +1,139 @@
 import React, { useState } from 'react';
 import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Alert,
-  Chip,
-  CircularProgress,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
-  Paper,
+  Box,
+  Button,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
-  Tabs,
+  Paper,
   Tab,
+  Tabs,
+  TextField,
+  Typography,
+  CircularProgress,
+  Chip,
+  Divider,
 } from '@mui/material';
-import {
-  Search as SearchIcon,
-  CheckCircle,
-  HourglassEmpty,
-  LocalShipping,
-  Assignment,
-} from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
-// Updated Tracking Form - OTP-based authentication per spec
 const GasTrackingForm = ({ onClose, gasType = 'lpg' }) => {
   const isPNG = gasType === 'png';
-  const [tabValue, setTabValue] = useState(0);
+  const [tab, setTab] = useState(0); // 0 application, 1 complaint
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState('input'); // input -> otp -> result
-  const [searchValue, setSearchValue] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [trackingData, setTrackingData] = useState(null);
-  const [error, setError] = useState('');
+  const [referenceNo, setReferenceNo] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
+  const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // Send OTP for verification
-  const handleSendOtp = async () => {
-    if (!searchValue) {
-      toast.error(`Please enter ${tabValue === 0 ? 'Application' : 'Complaint'} Number`);
+  const handleTrack = async () => {
+    if (!referenceNo.trim()) {
+      toast.error('Enter reference number');
       return;
     }
-    if (!mobileNumber || mobileNumber.length !== 10) {
-      toast.error('Please enter valid 10-digit mobile number');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // In production, send actual OTP
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setOtpSent(true);
-      setStep('otp');
-      toast.success('OTP sent to your mobile number');
-    } catch (err) {
-      toast.error('Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Verify OTP and fetch tracking data
-  const handleVerifyAndTrack = async () => {
-    if (!otp || otp.length !== 6) {
-      toast.error('Please enter valid 6-digit OTP');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    setTrackingData(null);
 
     try {
-      // Simulate OTP verification
-      await new Promise(resolve => setTimeout(resolve, 500));
+      setLoading(true);
+      setErrorMsg('');
+      setResult(null);
 
-      let response;
-      if (tabValue === 0) {
-        response = await api.get(`/gas/applications/track/${searchValue}`);
-      } else {
-        response = await api.get(`/gas/complaints/track/${searchValue}`);
+      const normalized = referenceNo.trim().toUpperCase();
+      const endpoint = tab === 0 ? `/gas/applications/track/${normalized}` : `/gas/complaints/track/${normalized}`;
+      const query = new URLSearchParams();
+      if (mobile) query.set('mobile', mobile);
+      if (email) query.set('email', email);
+      const url = query.toString() ? `${endpoint}?${query.toString()}` : endpoint;
+      const response = await api.get(url);
+
+      if (!response?.data?.success) {
+        throw new Error('Record not found');
       }
 
-      if (response.data.success) {
-        setTrackingData(response.data.data);
-        setStep('result');
-        toast.success('Tracking data fetched successfully');
-      } else {
-        setError(response.data.message || 'Not found');
-      }
+      setResult(response.data.data);
+      toast.success('Tracking details loaded');
     } catch (error) {
-      console.error('Tracking error:', error);
-      setError(error.response?.data?.message || 'Not found. Please check the number and try again.');
+      setErrorMsg(error?.response?.data?.message || 'Unable to fetch tracking details');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReset = () => {
-    setStep('input');
-    setSearchValue('');
-    setMobileNumber('');
-    setOtp('');
-    setOtpSent(false);
-    setTrackingData(null);
-    setError('');
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      submitted: 'info',
-      document_verification: 'warning',
-      site_inspection: 'warning',
-      approval_pending: 'warning',
-      approved: 'success',
-      rejected: 'error',
-      work_in_progress: 'info',
-      completed: 'success',
-      open: 'error',
-      assigned: 'warning',
-      in_progress: 'info',
-      resolved: 'success',
-      closed: 'default',
-    };
-    return colors[status] || 'default';
-  };
-
-  const getStatusIcon = (status) => {
-    if (['completed', 'approved', 'resolved', 'closed'].includes(status)) {
-      return <CheckCircle color="success" />;
-    }
-    if (['work_in_progress', 'in_progress', 'assigned'].includes(status)) {
-      return <LocalShipping color="info" />;
-    }
-    return <HourglassEmpty color="warning" />;
-  };
-
-  const renderApplicationTracking = () => {
-    if (!trackingData) return null;
-    const stageHistory = trackingData.stage_history || [];
-
-    return (
-      <Box sx={{ mt: 3 }}>
-        <Paper sx={{ p: 3, mb: 3, bgcolor: isPNG ? '#e3f2fd' : '#fff3e0' }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Application Number</Typography>
-              <Typography variant="h6" fontWeight="bold">{trackingData.application_number}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Status</Typography>
-              <Chip 
-                label={trackingData.status?.replace(/_/g, ' ').toUpperCase()} 
-                color={getStatusColor(trackingData.status)}
-                icon={getStatusIcon(trackingData.status)}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Applicant Name</Typography>
-              <Typography fontWeight="bold">{trackingData.full_name}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Connection Type</Typography>
-              <Typography fontWeight="bold">{trackingData.connection_type || trackingData.gas_type?.toUpperCase()}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Application Type</Typography>
-              <Typography fontWeight="bold">{trackingData.application_type?.replace(/_/g, ' ')}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Submitted Date</Typography>
-              <Typography fontWeight="bold">{new Date(trackingData.submitted_at).toLocaleDateString()}</Typography>
-            </Grid>
-          </Grid>
-        </Paper>
-
-        <Typography variant="h6" gutterBottom>Application Progress</Typography>
-        <Stepper orientation="vertical" activeStep={stageHistory.length - 1}>
-          {stageHistory.map((stage, index) => (
-            <Step key={index} completed>
-              <StepLabel><Typography fontWeight="bold">{stage.stage}</Typography></StepLabel>
-              <StepContent>
-                <Typography variant="body2" color="text.secondary">{new Date(stage.timestamp).toLocaleString()}</Typography>
-                {stage.remarks && <Typography variant="body2">{stage.remarks}</Typography>}
-              </StepContent>
-            </Step>
-          ))}
-        </Stepper>
-
-        {trackingData.remarks && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            <Typography variant="body2"><strong>Remarks:</strong> {trackingData.remarks}</Typography>
-          </Alert>
-        )}
-      </Box>
-    );
-  };
-
-  const renderComplaintTracking = () => {
-    if (!trackingData) return null;
-
-    return (
-      <Box sx={{ mt: 3 }}>
-        <Paper sx={{ p: 3, mb: 3, bgcolor: isPNG ? '#e3f2fd' : '#fff3e0' }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Complaint Number</Typography>
-              <Typography variant="h6" fontWeight="bold">{trackingData.complaint_number}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Status</Typography>
-              <Chip 
-                label={trackingData.status?.toUpperCase()} 
-                color={getStatusColor(trackingData.status)}
-                icon={getStatusIcon(trackingData.status)}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Category</Typography>
-              <Chip label={trackingData.complaint_category?.replace(/-/g, ' ').toUpperCase()} color="warning" size="small" />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Registered Date</Typography>
-              <Typography fontWeight="bold">{new Date(trackingData.created_at).toLocaleDateString()}</Typography>
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">Description</Typography>
-              <Typography>{trackingData.description}</Typography>
-            </Grid>
-          </Grid>
-        </Paper>
-
-        {trackingData.assigned_engineer && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            <Typography variant="body2"><strong>Assigned Engineer:</strong> {trackingData.assigned_engineer}</Typography>
-          </Alert>
-        )}
-        {trackingData.resolution_notes && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            <Typography variant="body2"><strong>Resolution:</strong> {trackingData.resolution_notes}</Typography>
-          </Alert>
-        )}
-        {trackingData.resolved_at && (
-          <Alert severity="success">
-            <Typography variant="body2"><strong>Resolved on:</strong> {new Date(trackingData.resolved_at).toLocaleString()}</Typography>
-          </Alert>
-        )}
-      </Box>
-    );
-  };
+  const statusText = result?.application_status || result?.status || 'N/A';
 
   return (
     <Box>
-      <DialogTitle sx={{ bgcolor: isPNG ? '#1565c0' : '#f57c00', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
-          {isPNG ? '🔵 Track PNG Application / Complaint' : '🔥 Track LPG Application / Complaint'}
+      <DialogTitle sx={{ px: 3, py: 2, bgcolor: isPNG ? '#eaf2ff' : '#fff1e6', borderBottom: isPNG ? '1px solid #cfe0ff' : '1px solid #ffd9bf', pb: 0 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ color: isPNG ? '#0f4aa6' : '#b45309' }}>
+          Track {isPNG ? 'PNG' : 'LPG'} Application / Complaint
         </Typography>
-        <Typography variant="body2" sx={{ opacity: 0.9 }}>OTP-based verification</Typography>
+        <Typography variant="body2" sx={{ mt: 0.75, color: isPNG ? '#2a436f' : '#7c3e0a', fontWeight: 500 }}>
+          Enter reference number to check current status
+        </Typography>
+        <Tabs
+          value={tab}
+          onChange={(_, value) => { setTab(value); setResult(null); setErrorMsg(''); }}
+          sx={{
+            mt: 1,
+            '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, color: isPNG ? '#2a436f' : '#7c3e0a' },
+            '& .Mui-selected': { color: isPNG ? '#0f4aa6' : '#b45309' },
+            '& .MuiTabs-indicator': { bgcolor: isPNG ? '#0f4aa6' : '#b45309' },
+          }}
+        >
+          <Tab label="Track Application" />
+          <Tab label="Track Complaint" />
+        </Tabs>
       </DialogTitle>
 
-      <DialogContent sx={{ mt: 2 }}>
-        {step !== 'result' && (
-          <Tabs 
-            value={tabValue} 
-            onChange={(e, v) => { setTabValue(v); handleReset(); }}
-            sx={{ mb: 3 }}
-            textColor="inherit"
-            TabIndicatorProps={{ style: { backgroundColor: isPNG ? '#1565c0' : '#f57c00' } }}
-          >
-            <Tab label="Track Application" icon={<Assignment />} iconPosition="start" />
-            <Tab label="Track Complaint" icon={<SearchIcon />} iconPosition="start" />
-          </Tabs>
-        )}
-
-        {/* Step 1: Enter Number + Mobile */}
-        {step === 'input' && (
-          <Box>
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Enter your {tabValue === 0 ? 'Application' : 'Complaint'} Number and registered mobile to receive OTP.
-            </Alert>
+      <DialogContent sx={{ pt: 4, px: 3, pb: 2, minHeight: 500 }}>
+        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+          <Grid item xs={12} sm={8}>
             <TextField
               fullWidth
-              label={tabValue === 0 ? "Application Number / आवेदन संख्या" : "Complaint Number / शिकायत संख्या"}
-              placeholder={tabValue === 0 ? "e.g., GNC2024000001" : "e.g., GCP2024000001"}
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value.toUpperCase())}
-              sx={{ mb: 2 }}
+              required
+              label={tab === 0 ? 'Application Number *' : 'Complaint Number *'}
+              value={referenceNo}
+              onChange={(e) => setReferenceNo(e.target.value.toUpperCase())}
+              placeholder={tab === 0 ? 'GNC2024XXXXXX' : 'GCP2024XXXXXX'}
             />
-            <TextField
-              fullWidth
-              label="Registered Mobile Number / पंजीकृत मोबाइल नंबर"
-              placeholder="Enter 10-digit mobile number"
-              value={mobileNumber}
-              onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              inputProps={{ maxLength: 10 }}
-              sx={{ mb: 2 }}
-            />
-            <Button
-              fullWidth variant="contained" size="large" color={isPNG ? 'primary' : 'warning'}
-              onClick={handleSendOtp} disabled={loading}
-            >
-              {loading ? <CircularProgress size={24} /> : 'Send OTP & Track'}
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <Button fullWidth variant="contained" sx={{ height: '56px' }} onClick={handleTrack} disabled={loading}>
+              {loading ? <CircularProgress size={22} color="inherit" /> : 'Track'}
             </Button>
-          </Box>
-        )}
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth label="Registered Mobile (for verification)" value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth label="Registered Email (optional verification)" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Grid>
+        </Grid>
 
-        {/* Step 2: Enter OTP */}
-        {step === 'otp' && (
-          <Box>
-            <Alert severity="success" sx={{ mb: 3 }}>
-              OTP sent to {mobileNumber}. Please enter the 6-digit code.
-            </Alert>
-            <TextField
-              fullWidth
-              label="Enter OTP / ओटीपी दर्ज करें"
-              placeholder="6-digit OTP"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              inputProps={{ maxLength: 6 }}
-              sx={{ mb: 2 }}
-            />
-            <Button
-              fullWidth variant="contained" size="large" color={isPNG ? 'primary' : 'warning'}
-              onClick={handleVerifyAndTrack} disabled={loading}
-            >
-              {loading ? <CircularProgress size={24} /> : 'Verify & View Status'}
-            </Button>
-            <Button fullWidth sx={{ mt: 1 }} onClick={handleSendOtp} disabled={loading}>
-              Resend OTP
-            </Button>
-          </Box>
-        )}
+        {errorMsg && <Alert severity="error" sx={{ mt: 2 }}>{errorMsg}</Alert>}
 
-        {/* Step 3: Results */}
-        {step === 'result' && (
-          <Box>
-            <Button variant="outlined" color={isPNG ? 'primary' : 'warning'} onClick={handleReset} sx={{ mb: 2 }}>
-              ← Track Another
-            </Button>
-            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            {tabValue === 0 ? renderApplicationTracking() : renderComplaintTracking()}
-          </Box>
+        {result && (
+          <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="subtitle1" fontWeight={700}>Tracking Result</Typography>
+              <Chip label={String(statusText).toUpperCase()} color={statusText === 'approved' || statusText === 'resolved' ? 'success' : 'info'} />
+            </Box>
+            <Divider sx={{ my: 1.5 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}><Typography variant="body2" color="text.secondary">Reference</Typography><Typography>{result.application_number || result.complaint_number || referenceNo}</Typography></Grid>
+              <Grid item xs={12} sm={6}><Typography variant="body2" color="text.secondary">Status</Typography><Typography>{statusText}</Typography></Grid>
+              <Grid item xs={12} sm={6}><Typography variant="body2" color="text.secondary">Name</Typography><Typography>{result.full_name || result.applicant_name || 'N/A'}</Typography></Grid>
+              <Grid item xs={12} sm={6}><Typography variant="body2" color="text.secondary">Mobile</Typography><Typography>{result.mobile || result.applicant_phone || 'N/A'}</Typography></Grid>
+              <Grid item xs={12}><Typography variant="body2" color="text.secondary">Description</Typography><Typography>{result.description || 'N/A'}</Typography></Grid>
+            </Grid>
+          </Paper>
         )}
       </DialogContent>
 
       <DialogActions sx={{ p: 3 }}>
-        <Button onClick={onClose} variant="outlined" color={isPNG ? 'primary' : 'warning'}>Close</Button>
+        <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Box>
   );

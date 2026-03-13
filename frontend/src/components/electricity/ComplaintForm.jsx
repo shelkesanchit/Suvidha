@@ -29,6 +29,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
+import QrUploadButton from './QrUploadButton';
 
 const steps = ['Complainant Details', 'Complaint Information', 'Review & Submit'];
 
@@ -691,6 +692,13 @@ const ComplaintForm = ({ onClose }) => {
                               onChange={(e) => handleDocumentUpload(e, doc.id)}
                             />
                           </Button>
+                        )}
+                        {!uploadedDocuments[doc.id] && (
+                          <QrUploadButton
+                            docKey={doc.id}
+                            docLabel={doc.label}
+                            onFileReceived={(f) => setUploadedDocuments(prev => ({ ...prev, [doc.id]: f }))}
+                          />
                         )}
                       </Paper>
                     </Grid>

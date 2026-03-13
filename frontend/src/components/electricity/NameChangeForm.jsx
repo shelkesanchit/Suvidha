@@ -29,6 +29,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
+import QrUploadButton from './QrUploadButton';
 
 const steps = ['Consumer & Applicant Details', 'Name Change Information', 'Documents Upload', 'Review & Submit'];
 
@@ -879,6 +880,11 @@ const NameChangeForm = ({ onClose }) => {
                             ✓ {uploadedDocs[doc.key].name}
                           </Typography>
                         )}
+                        <QrUploadButton
+                          docKey={doc.key}
+                          docLabel={doc.label}
+                          onFileReceived={(f) => setUploadedDocs(prev => ({ ...prev, [doc.key]: f }))}
+                        />
                       </Box>
                     </Grid>
                   ))}

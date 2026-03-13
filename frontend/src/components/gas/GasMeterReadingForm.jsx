@@ -1,190 +1,107 @@
 import React, { useState } from 'react';
 import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Grid,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Alert,
+  Box,
+  Button,
   Chip,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  MenuItem,
+  TextField,
+  Typography,
   CircularProgress,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableRow,
-  Paper,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon, CloudUpload, Calculate } from '@mui/icons-material';
+import { CheckCircle as SuccessIcon } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import { buildDocumentPayload, validateFile } from './formUtils';
+import DocUpload from '../municipal/DocUpload';
 
 const GasMeterReadingForm = ({ onClose }) => {
-  const [step, setStep] = useState('search');
-  const [loading, setLoading] = useState(false);
-  const [consumerNumber, setConsumerNumber] = useState('');
-  const [consumerData, setConsumerData] = useState(null);
-  const [currentReading, setCurrentReading] = useState('');
-  const [meterPhoto, setMeterPhoto] = useState(null);
-  const [billPreview, setBillPreview] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [reference, setReference] = useState('');
+  const [meterPhoto, setMeterPhoto] = useState(null);
+  const docs = { meter_photo: meterPhoto };
+  const [formData, setFormData] = useState({
+    consumer_number: '',
+    mobile: '',
+    meter_number: '',
+    previous_reading: '',
+    current_reading: '',
+    reading_date: '',
+    reading_unit: 'SCM',
+    reader_name: '',
+    notes: '',
+  });
 
-  const handleVerifyConsumer = async () => {
-    if (!consumerNumber) {
-      toast.error('Please enter consumer number');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const response = await api.get(`/gas/bills/fetch/${consumerNumber}`);
-      
-      if (response.data.success) {
-        setConsumerData(response.data.data.consumer);
-        setStep('reading');
-      } else {
-        toast.error('Consumer not found');
-      }
-    } catch (error) {
-      console.error('Verify error:', error);
-      // For demo, create mock consumer
-      setConsumerData({
-        consumer_number: consumerNumber,
-        full_name: 'Demo User',
-        address: 'Demo Address, Ward 1, Nashik',
-        gas_type: 'png',
-        meter_number: 'GM2024001',
-        last_meter_reading: 150.50
-      });
-      setStep('reading');
-    } finally {
-      setLoading(false);
-    }
+  const onMeterPhoto = (file) => {
+    if (!file) return;
+    const error = validateFile(file, 5);
+    if (error) return toast.error(error);
+    setMeterPhoto(file);
+    toast.success(`${file.name} selected`);
   };
 
-  const handleCalculateBill = async () => {
-    if (!currentReading) {
-      toast.error('Please enter current meter reading');
+  const handleSubmit = async () => {
+    if (!formData.consumer_number || !formData.mobile || !formData.current_reading || !formData.reading_date) {
+      toast.error('Please fill all required fields');
       return;
     }
 
-    const reading = parseFloat(currentReading);
-    const prevReading = consumerData?.last_meter_reading || 0;
+    if (!/^\d{10}$/.test(formData.mobile)) {
+      toast.error('Enter valid 10-digit mobile number');
+      return;
+    }
 
-    if (reading < prevReading) {
+    if (formData.previous_reading && Number(formData.current_reading) < Number(formData.previous_reading)) {
       toast.error('Current reading cannot be less than previous reading');
       return;
     }
 
-    setLoading(true);
     try {
-      const response = await api.post('/gas/bills/calculate', {
-        consumer_number: consumerNumber,
-        current_reading: reading,
+      setSubmitting(true);
+      const documents = meterPhoto ? await buildDocumentPayload({ meter_photo: meterPhoto }) : [];
+      const response = await api.post('/gas/applications/submit', {
+        application_type: 'conversion',
+        application_data: {
+          service: 'meter_reading_submission',
+          ...formData,
+        },
+        documents,
+        additional_info: {
+          source: 'meter_reading_form',
+          meter_photo_name: meterPhoto?.name || null,
+        },
       });
 
-      if (response.data.success) {
-        setBillPreview(response.data.data);
-        setStep('preview');
-      }
+      const appNo = response?.data?.data?.application_number;
+      setReference(appNo || 'Generated');
+      setSubmitted(true);
+      toast.success('Meter reading submitted');
     } catch (error) {
-      console.error('Calculate error:', error);
-      // For demo, calculate locally
-      const consumption = reading - prevReading;
-      let gasCharges;
-      
-      if (consumption <= 10) {
-        gasCharges = consumption * 40;
-      } else if (consumption <= 25) {
-        gasCharges = 10 * 40 + (consumption - 10) * 45;
-      } else {
-        gasCharges = 10 * 40 + 15 * 45 + (consumption - 25) * 50;
-      }
-
-      setBillPreview({
-        previous_reading: prevReading,
-        current_reading: reading,
-        consumption_scm: consumption,
-        gas_charges: gasCharges,
-        pipeline_rent: 50,
-        service_tax: gasCharges * 0.05,
-        vat: gasCharges * 0.05,
-        total_amount: gasCharges + 50 + (gasCharges * 0.1),
-      });
-      setStep('preview');
+      toast.error(error?.response?.data?.message || 'Failed to submit meter reading');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleSubmitReading = async () => {
-    setSubmitted(true);
-    setStep('success');
-    toast.success('Meter reading submitted successfully!');
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('File size should not exceed 5MB');
-        return;
-      }
-      setMeterPhoto(file);
-      toast.success('Photo uploaded');
-    }
-  };
-
-  if (step === 'success') {
+  if (submitted) {
     return (
       <Box>
-        <DialogTitle sx={{ bgcolor: '#2e7d32', color: 'white' }}>
-          <Typography variant="h5" fontWeight={600}>
-            ✓ Reading Submitted
-          </Typography>
+        <DialogTitle sx={{ px: 3, py: 2, bgcolor: '#f3e8ff', borderBottom: '1px solid #dfc6ff', pb: 0 }}>
+          <Typography variant="h6" fontWeight={700} sx={{ color: '#5b21b6' }}>Submission Complete</Typography>
         </DialogTitle>
-        <DialogContent sx={{ textAlign: 'center', py: 4 }}>
-          <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
-          <Typography variant="h4" color="success.main" gutterBottom>
-            Reading Submitted!
-          </Typography>
-          
-          <Box sx={{ bgcolor: '#f5f5f5', p: 3, borderRadius: 2, mt: 3 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Previous Reading</Typography>
-                <Typography fontWeight="bold">{billPreview?.previous_reading} SCM</Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Current Reading</Typography>
-                <Typography fontWeight="bold">{billPreview?.current_reading} SCM</Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Consumption</Typography>
-                <Typography fontWeight="bold">{billPreview?.consumption_scm?.toFixed(2)} SCM</Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Estimated Bill</Typography>
-                <Typography fontWeight="bold" color="primary">₹ {billPreview?.total_amount?.toFixed(2)}</Typography>
-              </Grid>
-            </Grid>
-          </Box>
-          
-          <Alert severity="info" sx={{ mt: 3, textAlign: 'left' }}>
-            <Typography variant="body2">
-              • Your reading has been recorded<br />
-              • Official bill will be generated after verification<br />
-              • You'll receive notification when bill is ready
-            </Typography>
-          </Alert>
+        <DialogContent sx={{ pt: 3, px: 3, pb: 2, textAlign: 'center' }}>
+          <SuccessIcon sx={{ fontSize: 74, color: 'success.main', mb: 1.5 }} />
+          <Typography variant="h6" gutterBottom>Meter reading submitted</Typography>
+          <Chip label={reference} color="primary" sx={{ px: 2, py: 2.5, fontSize: '1rem', mb: 2 }} />
+          <Alert severity="info" sx={{ textAlign: 'left' }}>Track this request with the reference number.</Alert>
         </DialogContent>
-        <DialogActions>
-          <Button variant="contained" onClick={onClose} fullWidth color="success">
-            Close
-          </Button>
+        <DialogActions sx={{ p: 3 }}>
+          <Button fullWidth variant="contained" onClick={onClose}>Close</Button>
         </DialogActions>
       </Box>
     );
@@ -192,190 +109,53 @@ const GasMeterReadingForm = ({ onClose }) => {
 
   return (
     <Box>
-      <DialogTitle sx={{ bgcolor: '#7b1fa2', color: 'white' }}>
-        <Typography variant="h5" fontWeight={600}>
-          📊 Submit Gas Meter Reading
+      <DialogTitle sx={{ px: 3, py: 2, bgcolor: '#f3e8ff', borderBottom: '1px solid #dfc6ff', pb: 0 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ color: '#5b21b6' }}>Submit Gas Meter Reading</Typography>
+        <Typography variant="body2" sx={{ mt: 0.75, color: '#5f3a9f', fontWeight: 500 }}>
+          Required details only
         </Typography>
       </DialogTitle>
-      
-      <DialogContent sx={{ mt: 2 }}>
-        {step === 'search' && (
-          <Box>
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Submit your PNG meter reading for accurate billing. Only for PNG consumers.
-            </Alert>
-            
-            <TextField
-              fullWidth
-              label="Consumer Number"
-              placeholder="e.g., GC2024000001"
-              value={consumerNumber}
-              onChange={(e) => setConsumerNumber(e.target.value.toUpperCase())}
-              sx={{ mb: 2 }}
-            />
-            
-            <Button
-              fullWidth
-              variant="contained"
-              sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' } }}
-              onClick={handleVerifyConsumer}
-              disabled={loading}
-              size="large"
-            >
-              {loading ? <CircularProgress size={24} /> : 'Verify & Continue'}
-            </Button>
-          </Box>
-        )}
-
-        {step === 'reading' && (
-          <Box>
-            <Box sx={{ bgcolor: '#f3e5f5', p: 2, borderRadius: 2, mb: 3 }}>
-              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                Consumer Details
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Name</Typography>
-                  <Typography fontWeight="bold">{consumerData?.full_name}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Consumer No.</Typography>
-                  <Typography fontWeight="bold">{consumerData?.consumer_number}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Meter No.</Typography>
-                  <Typography fontWeight="bold">{consumerData?.meter_number || 'N/A'}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Last Reading</Typography>
-                  <Typography fontWeight="bold">{consumerData?.last_meter_reading || 0} SCM</Typography>
-                </Grid>
-              </Grid>
-            </Box>
-
-            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-              Enter Current Meter Reading
-            </Typography>
-            
-            <TextField
-              fullWidth
-              label="Current Reading (SCM)"
-              type="number"
-              placeholder="Enter reading from meter"
-              value={currentReading}
-              onChange={(e) => setCurrentReading(e.target.value)}
-              sx={{ mb: 3 }}
-              inputProps={{ step: 0.01 }}
-            />
-
-            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-              Upload Meter Photo (Optional)
-            </Typography>
-            
-            <Box sx={{ border: '2px dashed #ccc', borderRadius: 2, p: 3, textAlign: 'center', mb: 2 }}>
-              <CloudUpload sx={{ fontSize: 40, color: 'grey.500', mb: 1 }} />
-              <input
-                accept="image/*"
-                type="file"
-                id="meter-photo"
-                hidden
-                onChange={handleFileChange}
-              />
-              <label htmlFor="meter-photo">
-                <Button 
-                  variant="outlined" 
-                  component="span"
-                  sx={{ color: '#7b1fa2', borderColor: '#7b1fa2' }}
-                >
-                  {meterPhoto ? meterPhoto.name : 'Choose Photo'}
-                </Button>
-              </label>
-            </Box>
-
-            <Button
-              fullWidth
-              variant="contained"
-              sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' } }}
-              onClick={handleCalculateBill}
-              disabled={loading}
-              startIcon={<Calculate />}
-              size="large"
-            >
-              {loading ? <CircularProgress size={24} /> : 'Calculate Estimated Bill'}
-            </Button>
-          </Box>
-        )}
-
-        {step === 'preview' && billPreview && (
-          <Box>
-            <Alert severity="success" sx={{ mb: 3 }}>
-              Bill calculated based on your reading. Please verify and submit.
-            </Alert>
-
-            <TableContainer component={Paper} sx={{ mb: 3 }}>
-              <Table size="small">
-                <TableBody>
-                  <TableRow>
-                    <TableCell>Previous Reading</TableCell>
-                    <TableCell align="right">{billPreview.previous_reading} SCM</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Current Reading</TableCell>
-                    <TableCell align="right">{billPreview.current_reading} SCM</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Consumption</TableCell>
-                    <TableCell align="right">{billPreview.consumption_scm?.toFixed(2)} SCM</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Gas Charges</TableCell>
-                    <TableCell align="right">₹ {billPreview.gas_charges?.toFixed(2)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Pipeline Rent</TableCell>
-                    <TableCell align="right">₹ {billPreview.pipeline_rent?.toFixed(2)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Taxes (VAT + Service Tax)</TableCell>
-                    <TableCell align="right">₹ {((billPreview.service_tax || 0) + (billPreview.vat || 0)).toFixed(2)}</TableCell>
-                  </TableRow>
-                  <TableRow sx={{ bgcolor: '#f3e5f5' }}>
-                    <TableCell><strong>Estimated Total</strong></TableCell>
-                    <TableCell align="right">
-                      <Typography variant="h6" sx={{ color: '#7b1fa2' }} fontWeight="bold">
-                        ₹ {billPreview.total_amount?.toFixed(2)}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableContainer>
-
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              Note: This is an estimated bill. Final bill may vary after official verification.
-            </Alert>
-          </Box>
-        )}
+      <DialogContent sx={{ pt: 4, px: 3, pb: 2, minHeight: 520 }}>
+        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth required label="Consumer Number *" value={formData.consumer_number} onChange={(e) => setFormData((p) => ({ ...p, consumer_number: e.target.value.toUpperCase() }))} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth required label="Mobile Number *" value={formData.mobile} onChange={(e) => setFormData((p) => ({ ...p, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) }))} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth label="Meter Number" value={formData.meter_number} onChange={(e) => setFormData((p) => ({ ...p, meter_number: e.target.value }))} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth type="date" required InputLabelProps={{ shrink: true }} label="Reading Date *" value={formData.reading_date} onChange={(e) => setFormData((p) => ({ ...p, reading_date: e.target.value }))} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth type="number" label="Previous Reading" value={formData.previous_reading} onChange={(e) => setFormData((p) => ({ ...p, previous_reading: e.target.value }))} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth required type="number" label="Current Reading (SCM) *" value={formData.current_reading} onChange={(e) => setFormData((p) => ({ ...p, current_reading: e.target.value }))} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth select label="Reading Unit" value={formData.reading_unit} onChange={(e) => setFormData((p) => ({ ...p, reading_unit: e.target.value }))}>
+              <MenuItem value="SCM">SCM</MenuItem>
+              <MenuItem value="SM3">SM3</MenuItem>
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth label="Reader Name" value={formData.reader_name} onChange={(e) => setFormData((p) => ({ ...p, reader_name: e.target.value }))} />
+          </Grid>
+          <Grid item xs={12}><DocUpload label="Meter Photo" name="meter_photo" docs={docs} onFileChange={(n, f) => onMeterPhoto(f)} onRemove={() => setMeterPhoto(null)} hint="Capture clear meter reading image" enableQr /></Grid>
+          <Grid item xs={12}>
+            <TextField fullWidth multiline rows={3} label="Notes" value={formData.notes} onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))} />
+          </Grid>
+        </Grid>
       </DialogContent>
-
       <DialogActions sx={{ p: 3 }}>
-        <Button onClick={onClose}>Cancel</Button>
-        {step === 'reading' && (
-          <Button onClick={() => setStep('search')}>Back</Button>
-        )}
-        {step === 'preview' && (
-          <>
-            <Button onClick={() => setStep('reading')}>Back</Button>
-            <Button
-              variant="contained"
-              sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' } }}
-              onClick={handleSubmitReading}
-              disabled={loading}
-            >
-              {loading ? <CircularProgress size={24} /> : 'Submit Reading'}
-            </Button>
-          </>
-        )}
+        <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Box sx={{ flex: '1 1 auto' }} />
+        <Button variant="contained" onClick={handleSubmit} disabled={submitting}>
+          {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit'}
+        </Button>
       </DialogActions>
     </Box>
   );

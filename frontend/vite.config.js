@@ -8,7 +8,16 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        // Allow multipart file uploads up to 10 MB through the proxy
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // Preserve the original Content-Type (including multipart boundary) for file uploads
+            if (req.headers['content-type']) {
+              proxyReq.setHeader('content-type', req.headers['content-type']);
+            }
+          });
+        },
       }
     }
   },

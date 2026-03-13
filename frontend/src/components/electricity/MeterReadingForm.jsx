@@ -32,6 +32,7 @@ import { CheckCircle, CloudUpload, Camera, Info, Print as PrintIcon } from '@mui
 import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
+import QrUploadButton from './QrUploadButton';
 
 const steps = ['Consumer Information', 'Meter Reading Details', 'Photo Upload', 'Review & Submit'];
 
@@ -606,6 +607,13 @@ const MeterReadingForm = ({ onClose }) => {
                       {uploadedPhoto ? 'Photo Uploaded' : 'Choose Photo'}
                     </Button>
                   </label>
+                  {!uploadedPhoto && (
+                    <QrUploadButton
+                      docKey="meter_photo"
+                      docLabel="Meter Photo"
+                      onFileReceived={(f) => setUploadedPhoto(f)}
+                    />
+                  )}
                   {uploadedPhoto && (
                     <Box sx={{ mt: 2 }}>
                       <Chip

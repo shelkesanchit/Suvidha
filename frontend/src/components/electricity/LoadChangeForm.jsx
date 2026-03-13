@@ -28,6 +28,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
+import QrUploadButton from './QrUploadButton';
 
 const steps = ['Consumer Details', 'Load Change Details', 'Documents & Declaration', 'Review & Submit'];
 
@@ -704,6 +705,11 @@ const LoadChangeForm = ({ onClose }) => {
                   onChange={handleFileChange('electricity_bill')}
                 />
               </Button>
+              <QrUploadButton
+                docKey="electricity_bill"
+                docLabel="Electricity Bill"
+                onFileReceived={(f) => setUploadedDocs(prev => ({ ...prev, electricity_bill: f }))}
+              />
             </Grid>
 
             {formData.change_type === 'increase' && (
@@ -729,6 +735,11 @@ const LoadChangeForm = ({ onClose }) => {
                     onChange={handleFileChange('load_calculation')}
                   />
                 </Button>
+                <QrUploadButton
+                  docKey="load_calculation"
+                  docLabel="Load Calculation Sheet"
+                  onFileReceived={(f) => setUploadedDocs(prev => ({ ...prev, load_calculation: f }))}
+                />
               </Grid>
             )}
 
@@ -751,6 +762,11 @@ const LoadChangeForm = ({ onClose }) => {
                   onChange={handleFileChange('building_plan')}
                 />
               </Button>
+              <QrUploadButton
+                docKey="building_plan"
+                docLabel="Building Plan"
+                onFileReceived={(f) => setUploadedDocs(prev => ({ ...prev, building_plan: f }))}
+              />
             </Grid>
 
             <Grid item xs={12}>
@@ -775,6 +791,11 @@ const LoadChangeForm = ({ onClose }) => {
                   onChange={handleFileChange('undertaking')}
                 />
               </Button>
+              <QrUploadButton
+                docKey="undertaking"
+                docLabel="Undertaking / Declaration"
+                onFileReceived={(f) => setUploadedDocs(prev => ({ ...prev, undertaking: f }))}
+              />
             </Grid>
 
             <Grid item xs={12}>

@@ -40,6 +40,8 @@ import {
   Opacity as SewerIcon,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+import api from '../../utils/api';
+import EmailOtpVerification from './EmailOtpVerification';
 
 const paymentMethods = [
   { value: 'upi', label: 'UPI', icon: <QrCode2 /> },
@@ -48,26 +50,23 @@ const paymentMethods = [
   { value: 'cash', label: 'Cash at Counter', icon: <Money /> },
 ];
 
-const mockConsumptionHistory = [
-  { month: 'Jan 2026', reading_prev: 4520, reading_curr: 4680, consumption: 16, amount: 508.80, status: 'Unpaid' },
-  { month: 'Dec 2025', reading_prev: 4360, reading_curr: 4520, consumption: 16, amount: 501.60, status: 'Paid' },
-  { month: 'Nov 2025', reading_prev: 4200, reading_curr: 4360, consumption: 16, amount: 498.40, status: 'Paid' },
-  { month: 'Oct 2025', reading_prev: 4060, reading_curr: 4200, consumption: 14, amount: 463.20, status: 'Paid' },
-  { month: 'Sep 2025', reading_prev: 3920, reading_curr: 4060, consumption: 14, amount: 460.90, status: 'Paid' },
-  { month: 'Aug 2025', reading_prev: 3760, reading_curr: 3920, consumption: 16, amount: 501.60, status: 'Paid' },
-];
-
 const WaterBillPaymentForm = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [billData, setBillData] = useState(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [pendingPaymentType, setPendingPaymentType] = useState('');
+  const [verifiedEmail, setVerifiedEmail] = useState('');
   const [transactionId, setTransactionId] = useState('');
+  const [receiptNumber, setReceiptNumber] = useState('');
   const [tankerConsumerNo, setTankerConsumerNo] = useState('');
   const [tankerBill, setTankerBill] = useState(null);
   const [tankerLoading, setTankerLoading] = useState(false);
   const [tankerPaymentSuccess, setTankerPaymentSuccess] = useState(false);
+  const [billHistory, setBillHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [formData, setFormData] = useState({
     consumer_number: '',
     mobile: '',
@@ -85,74 +84,181 @@ const WaterBillPaymentForm = ({ onClose }) => {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const mockBill = {
-        consumer_number: formData.consumer_number,
-        consumer_name: 'Rajesh Kumar',
-        father_name: 'Ramesh Kumar',
-        address: '45-A, Green Valley Apartments, Ward 3',
-        property_id: 'PROP-2024-12345',
-        connection_type: 'Domestic / Metered',
-        meter_no: 'WM-' + formData.consumer_number,
-        bill_month: 'January 2026',
-        bill_date: '01-Jan-2026',
-        due_date: '15-Feb-2026',
-        previous_reading: 4520,
-        current_reading: 4680,
-        consumption_kl: 16,
-        water_charges: 400.00,
-        sewerage_charges: 80.00,
-        service_tax: 28.80,
-        arrears: 0,
-        late_fee: 0,
-        total_amount: 508.80,
-        status: 'Unpaid',
+    try {
+      const response = await api.get(`/water/bills/fetch?consumer_number=${formData.consumer_number}`);
+      const { consumer, bill } = response.data.data;
+      const combined = {
+        consumer_number: consumer.consumer_number,
+        consumer_name: consumer.full_name,
+        address: consumer.address,
+        connection_type: consumer.category,
+        meter_no: consumer.meter_number || 'N/A',
+        bill_number: bill.bill_number,
+        bill_month: bill.bill_month,
+        due_date: bill.due_date,
+        previous_reading: bill.previous_reading,
+        current_reading: bill.current_reading,
+        consumption_kl: bill.consumption_kl,
+        water_charges: parseFloat(bill.water_charges),
+        sewerage_charges: parseFloat(bill.sewerage_charges),
+        service_tax: parseFloat(bill.service_tax),
+        arrears: parseFloat(bill.arrears || 0),
+        late_fee: parseFloat(bill.late_fee || 0),
+        total_amount: parseFloat(bill.total_amount),
+        status: bill.status,
       };
-      setBillData(mockBill);
+      setBillData(combined);
       setStep(2);
-      setLoading(false);
       toast.success('Bill fetched successfully!');
-    }, 1500);
-  };
-
-  const handlePayment = async () => {
-    setLoading(true);
-    setTimeout(() => {
-      const txnId = 'WTR' + Date.now();
-      setTransactionId(txnId);
-      setPaymentSuccess(true);
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Failed to fetch bill. Please check the consumer number.';
+      toast.error(msg);
+    } finally {
       setLoading(false);
-      toast.success('Payment successful!');
-    }, 2000);
+    }
   };
 
-  const fetchTankerBill = () => {
+  const handlePayment = async (email) => {
+    setLoading(true);
+    try {
+      const response = await api.post('/water/payments/process', {
+        consumer_number: billData.consumer_number,
+        bill_number: billData.bill_number || null,
+        amount: billData.total_amount,
+        payment_method: formData.payment_method,
+        mobile: formData.mobile,
+        email,
+      });
+      const { transaction_id, receipt_number } = response.data.data;
+      setTransactionId(transaction_id);
+      setReceiptNumber(receipt_number);
+      setVerifiedEmail(email);
+      setPaymentSuccess(true);
+      toast.success('Payment successful!');
+
+      api.post('/water/otp/send-receipt', {
+        email,
+        application_number: receipt_number || transaction_id,
+        application_type: 'bill_payment',
+        application_data: {
+          consumer_number: billData.consumer_number,
+          bill_number: billData.bill_number || null,
+          bill_month: billData.bill_month,
+          amount: billData.total_amount,
+          payment_method: formData.payment_method,
+          transaction_id,
+          receipt_number,
+          charge_type: activeTab === 1 ? 'sewerage' : 'water',
+        },
+        submitted_at: new Date().toISOString(),
+      }).catch(() => {
+        toast.error('Payment completed, but receipt email could not be sent.');
+      });
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Payment failed. Please try again.';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTankerBill = async () => {
     if (!tankerConsumerNo) {
       toast.error('Please enter Consumer Number');
       return;
     }
     setTankerLoading(true);
-    setTimeout(() => {
+    try {
+      const response = await api.get(`/water/bills/fetch?consumer_number=${tankerConsumerNo}`);
+      const { consumer, bill } = response.data.data;
       setTankerBill({
         consumer_number: tankerConsumerNo,
-        consumer_name: 'Rajesh Kumar',
+        consumer_name: consumer.full_name,
+        bill_number: bill.bill_number,
         tanker_deliveries: [
-          { date: '12-Jan-2026', volume_kl: 4, rate_per_kl: 120, amount: 480, status: 'Unpaid' },
-          { date: '05-Jan-2026', volume_kl: 4, rate_per_kl: 120, amount: 480, status: 'Paid' },
+          { date: bill.bill_month, volume_kl: bill.consumption_kl, rate_per_kl: 120, amount: parseFloat(bill.total_amount), status: bill.status === 'paid' ? 'Paid' : 'Unpaid' }
         ],
-        total_unpaid: 480,
+        total_unpaid: bill.status === 'paid' ? 0 : parseFloat(bill.total_amount),
       });
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Consumer not found.';
+      toast.error(msg);
+    } finally {
       setTankerLoading(false);
-    }, 1200);
+    }
   };
 
-  const handleTankerPayment = () => {
+  const handleTankerPayment = async (email) => {
     setTankerLoading(true);
-    setTimeout(() => {
+    try {
+      const response = await api.post('/water/payments/process', {
+        consumer_number: tankerConsumerNo,
+        bill_number: tankerBill.bill_number || null,
+        amount: tankerBill.total_unpaid,
+        payment_method: 'upi',
+        email,
+      });
+      const transactionId = response.data?.data?.transaction_id || `TKR${Date.now()}`;
+      const receiptNo = response.data?.data?.receipt_number || transactionId;
+      setVerifiedEmail(email);
       setTankerPaymentSuccess(true);
-      setTankerLoading(false);
       toast.success('Tanker charges paid successfully!');
-    }, 1500);
+
+      api.post('/water/otp/send-receipt', {
+        email,
+        application_number: receiptNo,
+        application_type: 'bill_payment',
+        application_data: {
+          consumer_number: tankerConsumerNo,
+          bill_number: tankerBill.bill_number || null,
+          amount: tankerBill.total_unpaid,
+          payment_method: 'upi',
+          transaction_id: transactionId,
+          receipt_number: receiptNo,
+          charge_type: 'tanker',
+        },
+        submitted_at: new Date().toISOString(),
+      }).catch(() => {
+        toast.error('Payment completed, but receipt email could not be sent.');
+      });
+    } catch (error) {
+      toast.error('Payment failed. Please try again.');
+    } finally {
+      setTankerLoading(false);
+    }
+  };
+
+  const handlePayWithOtp = () => {
+    if (!billData) {
+      toast.error('Please fetch bill details first.');
+      return;
+    }
+    setPendingPaymentType('bill');
+    setShowOtpDialog(true);
+  };
+
+  const handleTankerPayWithOtp = () => {
+    if (!tankerBill) {
+      toast.error('Please fetch tanker dues first.');
+      return;
+    }
+    if (!tankerBill.total_unpaid || tankerBill.total_unpaid <= 0) {
+      toast.error('No unpaid tanker dues found.');
+      return;
+    }
+    setPendingPaymentType('tanker');
+    setShowOtpDialog(true);
+  };
+
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    if (pendingPaymentType === 'bill') {
+      handlePayment(email);
+    }
+    if (pendingPaymentType === 'tanker') {
+      handleTankerPayment(email);
+    }
+    setPendingPaymentType('');
   };
 
   if (paymentSuccess) {
@@ -161,12 +267,14 @@ const WaterBillPaymentForm = ({ onClose }) => {
         <DialogContent sx={{ textAlign: 'center', py: 4 }}>
           <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
           <Typography variant="h4" color="success.main" gutterBottom>Payment Successful!</Typography>
-          <Chip label={transactionId} color="primary" sx={{ fontSize: '1.1rem', py: 2, px: 3, mb: 3 }} />
+          <Chip label={`Txn: ${transactionId}`} color="primary" sx={{ fontSize: '1.1rem', py: 2, px: 3, mb: 2 }} />
+          {receiptNumber && <Chip label={`Receipt: ${receiptNumber}`} color="success" sx={{ fontSize: '1rem', py: 2, px: 3, mb: 3, ml: 1 }} />}
           <Box sx={{ bgcolor: '#e8f5e9', p: 3, borderRadius: 2 }}>
             <Typography variant="body1" gutterBottom><strong>Consumer Number:</strong> {billData?.consumer_number}</Typography>
             <Typography variant="body1" gutterBottom><strong>Amount Paid:</strong> ₹{billData?.total_amount?.toFixed(2)}</Typography>
             <Typography variant="body1" gutterBottom><strong>Bill Month:</strong> {billData?.bill_month}</Typography>
             <Typography variant="body1"><strong>Payment Method:</strong> {paymentMethods.find(m => m.value === formData.payment_method)?.label}</Typography>
+            <Typography variant="body1"><strong>Email:</strong> {verifiedEmail}</Typography>
           </Box>
           <Alert severity="info" sx={{ mt: 3, textAlign: 'left' }}>
             Receipt sent to registered mobile • Payment updated within 24 hours • Helpline: 1916
@@ -362,7 +470,7 @@ const WaterBillPaymentForm = ({ onClose }) => {
           <Box>
             {step === 1 && (
               <Box>
-                <Alert severity="info" sx={{ mb: 3 }}>Enter your Consumer Number to view the last 6 months of consumption history</Alert>
+                <Alert severity="info" sx={{ mb: 3 }}>Enter your Consumer Number to view bill history</Alert>
                 <Grid container spacing={3}>
                   <Grid item xs={12}>
                     <TextField fullWidth required label="Consumer Number (CCN) *" name="consumer_number"
@@ -373,38 +481,41 @@ const WaterBillPaymentForm = ({ onClose }) => {
             )}
             {step === 2 && (
               <Box>
-                <Typography variant="h6" gutterBottom color="primary">6-Month Consumption History</Typography>
-                <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
-                  <Table size="small">
-                    <TableHead sx={{ bgcolor: '#e3f2fd' }}>
-                      <TableRow>
-                        <TableCell><strong>Month</strong></TableCell>
-                        <TableCell align="right"><strong>Prev (KL)</strong></TableCell>
-                        <TableCell align="right"><strong>Curr (KL)</strong></TableCell>
-                        <TableCell align="right"><strong>Used (KL)</strong></TableCell>
-                        <TableCell align="right"><strong>Amount</strong></TableCell>
-                        <TableCell align="center"><strong>Status</strong></TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {mockConsumptionHistory.map((row) => (
-                        <TableRow key={row.month} hover>
-                          <TableCell>{row.month}</TableCell>
-                          <TableCell align="right">{row.reading_prev}</TableCell>
-                          <TableCell align="right">{row.reading_curr}</TableCell>
-                          <TableCell align="right">{row.consumption}</TableCell>
-                          <TableCell align="right">₹{row.amount.toFixed(2)}</TableCell>
-                          <TableCell align="center">
-                            <Chip label={row.status} size="small"
-                              color={row.status === 'Paid' ? 'success' : 'error'}
-                              variant={row.status === 'Paid' ? 'outlined' : 'filled'} />
-                          </TableCell>
+                <Typography variant="h6" gutterBottom color="primary">Bill History</Typography>
+                {historyLoading ? (
+                  <Box textAlign="center" py={4}><CircularProgress /></Box>
+                ) : billHistory.length === 0 ? (
+                  <Alert severity="info">No bill history found for this consumer.</Alert>
+                ) : (
+                  <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: '#e3f2fd' }}>
+                        <TableRow>
+                          <TableCell><strong>Month</strong></TableCell>
+                          <TableCell align="right"><strong>Consumption (KL)</strong></TableCell>
+                          <TableCell align="right"><strong>Amount</strong></TableCell>
+                          <TableCell><strong>Due Date</strong></TableCell>
+                          <TableCell align="center"><strong>Status</strong></TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <Alert severity="success" sx={{ mt: 2 }}>Avg. monthly consumption: 15.3 KL &nbsp;|&nbsp; Annual total: 92 KL</Alert>
+                      </TableHead>
+                      <TableBody>
+                        {billHistory.map((row, i) => (
+                          <TableRow key={i} hover>
+                            <TableCell>{row.bill_month}</TableCell>
+                            <TableCell align="right">{row.consumption_kl} KL</TableCell>
+                            <TableCell align="right">₹{parseFloat(row.total_amount).toFixed(2)}</TableCell>
+                            <TableCell>{row.due_date || '—'}</TableCell>
+                            <TableCell align="center">
+                              <Chip label={row.status} size="small"
+                                color={row.status === 'paid' ? 'success' : row.status === 'overdue' ? 'error' : 'warning'}
+                                variant="outlined" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
               </Box>
             )}
           </Box>
@@ -481,7 +592,7 @@ const WaterBillPaymentForm = ({ onClose }) => {
         {activeTab === 0 && step === 2 && (
           <>
             <Button variant="outlined" onClick={() => setStep(1)}>Back</Button>
-            <Button variant="contained" onClick={handlePayment} disabled={loading}
+            <Button variant="contained" onClick={handlePayWithOtp} disabled={loading}
               sx={{ bgcolor: '#4caf50', '&:hover': { bgcolor: '#388e3c' } }}>
               {loading ? <CircularProgress size={24} color="inherit" /> : `Pay ₹${billData?.total_amount?.toFixed(2)}`}
             </Button>
@@ -497,7 +608,7 @@ const WaterBillPaymentForm = ({ onClose }) => {
         {activeTab === 1 && step === 2 && (
           <>
             <Button variant="outlined" onClick={() => setStep(1)}>Back</Button>
-            <Button variant="contained" onClick={handlePayment} disabled={loading}
+            <Button variant="contained" onClick={handlePayWithOtp} disabled={loading}
               sx={{ bgcolor: '#4caf50', '&:hover': { bgcolor: '#388e3c' } }}>
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Pay ₹78.75'}
             </Button>
@@ -505,7 +616,20 @@ const WaterBillPaymentForm = ({ onClose }) => {
         )}
         {/* Tab 2 actions */}
         {activeTab === 2 && step === 1 && (
-          <Button variant="contained" onClick={() => { if (!formData.consumer_number) { toast.error('Enter CCN'); return; } setStep(2); }}
+          <Button variant="contained" onClick={async () => {
+            if (!formData.consumer_number) { toast.error('Enter CCN'); return; }
+            setHistoryLoading(true);
+            setStep(2);
+            try {
+              const res = await api.get(`/water/bills/history?consumer_number=${formData.consumer_number}`);
+              setBillHistory(res.data.data || []);
+            } catch {
+              toast.error('Failed to load bill history');
+              setBillHistory([]);
+            } finally {
+              setHistoryLoading(false);
+            }
+          }}
             sx={{ bgcolor: '#1976d2' }}>
             View History
           </Button>
@@ -523,13 +647,24 @@ const WaterBillPaymentForm = ({ onClose }) => {
         {activeTab === 3 && tankerBill && !tankerPaymentSuccess && (
           <>
             <Button variant="outlined" onClick={() => setTankerBill(null)}>Back</Button>
-            <Button variant="contained" onClick={handleTankerPayment} disabled={tankerLoading}
+            <Button variant="contained" onClick={handleTankerPayWithOtp} disabled={tankerLoading}
               sx={{ bgcolor: '#f57c00', '&:hover': { bgcolor: '#e65100' } }}>
               {tankerLoading ? <CircularProgress size={24} color="inherit" /> : `Pay ₹${tankerBill.total_unpaid}`}
             </Button>
           </>
         )}
       </DialogActions>
+
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => {
+          setShowOtpDialog(false);
+          setPendingPaymentType('');
+        }}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.email || ''}
+        title={pendingPaymentType === 'tanker' ? 'Confirm Tanker Payment via OTP' : 'Confirm Bill Payment via OTP'}
+      />
     </Box>
   );
 };

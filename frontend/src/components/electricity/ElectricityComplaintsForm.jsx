@@ -12,15 +12,23 @@ const ElectricityComplaintsForm = ({ onClose }) => {
 
   return (
     <Box>
-      <Box sx={{ bgcolor: '#c62828' }}>
+      <Box sx={{ bgcolor: '#eaf2ff', borderBottom: '1px solid #cfe0ff' }}>
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
           variant="scrollable"
           scrollButtons="auto"
           textColor="inherit"
-          TabIndicatorProps={{ style: { backgroundColor: 'white' } }}
-          sx={{ '& .MuiTab-root': { color: 'rgba(255,255,255,0.7)', '&.Mui-selected': { color: 'white' } } }}
+          TabIndicatorProps={{ style: { backgroundColor: '#0f4aa6', height: 3 } }}
+          sx={{
+            '& .MuiTab-root': {
+              color: '#2a436f',
+              fontWeight: 700,
+              textTransform: 'none',
+              '&.Mui-selected': { color: '#0f4aa6' },
+            },
+            '& .MuiTabs-scrollButtons': { color: '#2a436f' },
+          }}
         >
           {tabs.map((t, i) => <Tab key={i} label={t.label} />)}
         </Tabs>

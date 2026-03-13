@@ -189,3 +189,209 @@ code {
   cursor: pointer;
   user-select: none;
 }
+
+/* Shared kiosk UI layer for electricity/water form dialogs */
+.kiosk-form-shell {
+  background: linear-gradient(180deg, #f4f8ff 0%, #eef6ff 100%);
+  padding: 12px;
+  scroll-padding-bottom: calc(140px + env(keyboard-inset-height, 0px));
+}
+
+.kiosk-form-shell .MuiDialogContent-root {
+  margin: 14px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #d9e7ff;
+  box-shadow: 0 8px 24px rgba(15, 48, 105, 0.08);
+  padding: 22px;
+}
+
+.kiosk-form-shell .MuiDialogContent-root .MuiDialogContent-root {
+  margin: 0;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.kiosk-form-shell .MuiDialogActions-root {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid #d9e7ff;
+  padding: 14px 16px;
+  margin: 0 14px 14px;
+  border-radius: 14px;
+  gap: 10px;
+}
+
+.kiosk-form-shell .MuiTypography-h6,
+.kiosk-form-shell .MuiTypography-h5 {
+  font-weight: 700;
+  color: #1c2f50;
+}
+
+.kiosk-form-shell .MuiTypography-h4 {
+  color: #16315f;
+  font-weight: 700;
+}
+
+.kiosk-form-shell .MuiFormControl-root,
+.kiosk-form-shell .MuiTextField-root,
+.kiosk-form-shell .MuiInputBase-root,
+.kiosk-form-shell .MuiSelect-select {
+  font-size: 1.03rem;
+}
+
+.kiosk-form-shell .MuiInputBase-root {
+  border-radius: 10px;
+  min-height: 56px;
+}
+
+.kiosk-form-shell .MuiOutlinedInput-root {
+  background: #fbfdff;
+}
+
+.kiosk-form-shell .MuiInputLabel-root {
+  font-weight: 600;
+  color: #3a4e72;
+}
+
+.kiosk-form-shell .MuiFormHelperText-root {
+  color: #5f7396;
+}
+
+.kiosk-form-shell .MuiOutlinedInput-input,
+.kiosk-form-shell .MuiSelect-select {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+.kiosk-form-shell .MuiButton-root {
+  min-height: 52px;
+  border-radius: 12px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+.kiosk-form-shell .MuiButton-contained {
+  background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%) !important;
+  color: #fff !important;
+}
+
+.kiosk-form-shell .MuiButton-contained:hover {
+  filter: brightness(0.96);
+}
+
+.kiosk-form-shell .MuiButton-outlined,
+.kiosk-form-shell .MuiButton-text {
+  border-color: #b8cbee !important;
+  color: #1f3f73 !important;
+}
+
+.kiosk-form-shell .MuiStepper-root {
+  margin-bottom: 28px;
+}
+
+.kiosk-form-shell .MuiGrid-container {
+  row-gap: 4px;
+}
+
+.kiosk-form-shell .MuiAlert-root {
+  border-radius: 12px;
+  border: 1px solid #d7e7ff;
+  background: #f5f9ff;
+}
+
+.kiosk-form-shell .MuiCard-root {
+  border-radius: 14px;
+  border: 1px solid #dbe7fb;
+  background: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(15, 48, 105, 0.08) !important;
+}
+
+.kiosk-form-shell .MuiPaper-root {
+  border-radius: 14px;
+}
+
+.kiosk-form-shell .MuiChip-root {
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.kiosk-form-shell .MuiDivider-root {
+  border-color: #d9e7ff;
+}
+
+.kiosk-form-shell .MuiTabs-root {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: #ffffff;
+  border-bottom: 1px solid #d9e7ff;
+}
+
+.kiosk-form-shell .MuiTab-root {
+  min-height: 56px;
+  text-transform: none;
+  font-weight: 700;
+  color: #35527f;
+}
+
+.kiosk-form-shell .MuiTab-root.Mui-selected {
+  color: #0f4aa6;
+}
+
+.kiosk-form-shell .MuiTabs-indicator {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #1e66c5 0%, #0f4aa6 100%);
+}
+
+.kiosk-form-shell .MuiTableHead-root .MuiTableCell-root {
+  background: #edf4ff !important;
+  color: #1f3f73;
+  border-bottom-color: #d9e7ff;
+}
+
+.kiosk-form-shell .MuiTableCell-root {
+  border-bottom-color: #e4edff;
+}
+
+@media (pointer: coarse) {
+  .kiosk-form-shell {
+    padding: 14px;
+    padding-bottom: calc(26px + env(keyboard-inset-height, 0px));
+  }
+
+  .kiosk-form-shell .MuiInputBase-root {
+    min-height: 62px;
+  }
+
+  .kiosk-form-shell .MuiButton-root {
+    min-height: 58px;
+    font-size: 1.04rem;
+  }
+
+  .kiosk-form-shell .MuiDialogActions-root {
+    padding-bottom: calc(12px + env(keyboard-inset-height, 0px));
+  }
+}
+
+@media (max-width: 900px) {
+  .kiosk-form-shell {
+    padding: 8px;
+  }
+
+  .kiosk-form-shell .MuiDialogContent-root,
+  .kiosk-form-shell .MuiDialogActions-root {
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+}

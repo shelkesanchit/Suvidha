@@ -30,6 +30,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
+import QrUploadButton from './QrUploadButton';
 
 const steps = ['Consumer & Disconnection Details', 'Payment Information', 'Documents Upload', 'Review & Submit'];
 
@@ -792,6 +793,11 @@ const ReconnectionForm = ({ onClose }) => {
                             ✓ {uploadedDocs[doc.key].name}
                           </Typography>
                         )}
+                        <QrUploadButton
+                          docKey={doc.key}
+                          docLabel={doc.label}
+                          onFileReceived={(f) => setUploadedDocs(prev => ({ ...prev, [doc.key]: f }))}
+                        />
                       </Box>
                     </Grid>
                   ))}

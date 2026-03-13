@@ -20,7 +20,8 @@ import {
   Tooltip,
   IconButton,
   Collapse,
-  Container,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -134,19 +135,15 @@ const TrackingForm = ({ onClose }) => {
   };
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
-        <Box>
-          <Typography variant="h5" fontWeight={600} color="primary" gutterBottom>
-            Track Application / Complaint
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Enter your reference number to check real-time status and track progress
-          </Typography>
-        </Box>
-        <Search sx={{ fontSize: 50, color: 'primary.main', opacity: 0.2 }} />
-      </Box>
+    <Box>
+      <DialogContent sx={{ mt: 2 }}>
+        <Typography variant="h6" fontWeight={600} color="primary" gutterBottom>
+          Track Application / Complaint
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Enter your reference number to check real-time status and track progress
+        </Typography>
+
         <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2, mb: 3 }}>
           <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary">
             Search Criteria
@@ -186,18 +183,6 @@ const TrackingForm = ({ onClose }) => {
               />
             </Grid>
 
-            <Grid item xs={12}>
-              <Button
-                variant="contained"
-                onClick={handleTrack}
-                disabled={loading || !referenceNumber.trim()}
-                startIcon={<Search />}
-                fullWidth
-                size="large"
-              >
-                {loading ? 'Searching...' : 'Track Status'}
-              </Button>
-            </Grid>
           </Grid>
         </Paper>
 
@@ -525,7 +510,26 @@ const TrackingForm = ({ onClose }) => {
             </Typography>
           </Paper>
         )}
-      </Container>
+      </DialogContent>
+
+      <DialogActions sx={{ p: 3 }}>
+        {!trackingData ? (
+          <>
+            <Button onClick={onClose} color="inherit">Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleTrack}
+              disabled={loading || !referenceNumber.trim()}
+              startIcon={<Search />}
+            >
+              {loading ? 'Searching...' : 'Track Status'}
+            </Button>
+          </>
+        ) : (
+          <Button variant="contained" onClick={onClose}>Close</Button>
+        )}
+      </DialogActions>
+    </Box>
   );
 };
 
