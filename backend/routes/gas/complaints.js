@@ -1,13 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 
 // =====================================================
 // GAS COMPLAINTS ROUTES
-// Fixed to match actual gas_complaints schema:
-//   id, complaint_number, customer_id, complaint_type, description,
-//   attachment_url, status, priority, assigned_to, created_at,
-//   resolved_at, resolution_notes
 // =====================================================
 
 // Submit new complaint
@@ -33,37 +29,31 @@ router.post('/submit', async (req, res) => {
 
     // Generate complaint number
     const year = new Date().getFullYear();
-    const [countResult] = await promisePool.query(
-      'SELECT COUNT(*) as count FROM gas_complaints WHERE YEAR(submitted_at) = ?',
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as count FROM gas_complaints WHERE EXTRACT(YEAR FROM submitted_at) = $1`,
       [year]
     );
-    const complaintNumber = `GCP${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
+    const complaintNumber = `GCP${year}${String(parseInt(countResult.rows[0].count) + 1).padStart(6, '0')}`;
 
-    // Check if customer exists by consumer_number
+    // Look up consumer by consumer_number or phone
     let customerId = null;
 
     if (complaint_data.consumer_id) {
-      const [customers] = await promisePool.query(
-        'SELECT id, full_name FROM gas_consumers WHERE consumer_number = ?',
+      const res1 = await pool.query(
+        'SELECT id FROM gas_consumers WHERE consumer_number = $1',
         [complaint_data.consumer_id]
       );
-      if (customers.length > 0) {
-        customerId = customers[0].id;
-      }
+      if (res1.rows.length > 0) customerId = res1.rows[0].id;
     }
 
-    // If no customer found, try lookup by mobile/phone
     if (!customerId && complaint_data.mobile) {
-      const [customers] = await promisePool.query(
-        'SELECT id, full_name FROM gas_consumers WHERE phone = ?',
+      const res2 = await pool.query(
+        'SELECT id FROM gas_consumers WHERE phone = $1',
         [complaint_data.mobile]
       );
-      if (customers.length > 0) {
-        customerId = customers[0].id;
-      }
+      if (res2.rows.length > 0) customerId = res2.rows[0].id;
     }
 
-    // Map complaint_category / urgency to actual enum values
     const typeMap = {
       'delivery': 'delivery_issue', 'delivery_issue': 'delivery_issue',
       'billing': 'billing', 'safety': 'safety', 'gas-leak': 'safety',
@@ -77,21 +67,18 @@ router.post('/submit', async (req, res) => {
     const detailsSuffix = complaint_data.additional_info
       ? `\n\n[Additional Info]\n${JSON.stringify(complaint_data.additional_info)}`
       : '';
-
     const description = `${complaint_data.description || ''}${detailsSuffix}`;
 
-    // Insert complaint (only columns that exist in gas_complaints)
-    const [result] = await promisePool.query(
-      `INSERT INTO gas_complaints 
-      (complaint_number, customer_id, complaint_type, description, attachment_url, status, priority) 
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    const result = await pool.query(
+      `INSERT INTO gas_complaints
+       (complaint_number, consumer_id, complaint_type, description, attachment_url, status, priority)
+       VALUES ($1, $2, $3, $4, $5, 'open', $6) RETURNING id`,
       [
         complaintNumber,
         customerId,
         complaintType,
         description,
         complaint_data.attachment_url || null,
-        'open',
         priority
       ]
     );
@@ -101,7 +88,7 @@ router.post('/submit', async (req, res) => {
       message: 'Complaint registered successfully',
       data: {
         complaint_number: complaintNumber,
-        complaint_id: result.insertId
+        complaint_id: result.rows[0].id
       }
     });
 
@@ -117,22 +104,23 @@ router.get('/track/:complaintNumber', async (req, res) => {
     const { complaintNumber } = req.params;
     const { mobile, email } = req.query;
 
-    const [complaints] = await promisePool.query(
+    const result = await pool.query(
       `SELECT gc.complaint_number, gc.consumer_id, gc.complaint_type,
               gc.description, gc.status, gc.priority, gc.assigned_to,
               gc.resolution_notes, gc.submitted_at as created_at, gc.resolved_at,
-              c.full_name, c.phone as mobile, c.email, CONCAT(c.address_line1, ', ', c.city) as address
+              c.full_name, c.phone as mobile, c.email,
+              CONCAT(c.address_line1, ', ', c.city) as address
        FROM gas_complaints gc
        LEFT JOIN gas_consumers c ON gc.consumer_id = c.id
-       WHERE gc.complaint_number = ?`,
+       WHERE gc.complaint_number = $1`,
       [complaintNumber]
     );
 
-    if (complaints.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Complaint not found' });
     }
 
-    const complaint = complaints[0];
+    const complaint = result.rows[0];
 
     if (mobile && String(complaint.mobile || '') !== String(mobile)) {
       return res.status(403).json({ success: false, message: 'Mobile verification failed for this complaint' });
@@ -155,17 +143,17 @@ router.get('/my-complaints/:mobile', async (req, res) => {
   try {
     const { mobile } = req.params;
 
-    const [complaints] = await promisePool.query(
-            `SELECT gc.id, gc.complaint_number, gc.complaint_type, gc.status, gc.priority,
+    const result = await pool.query(
+      `SELECT gc.id, gc.complaint_number, gc.complaint_type, gc.status, gc.priority,
               gc.submitted_at as created_at, gc.resolved_at
        FROM gas_complaints gc
        INNER JOIN gas_consumers c ON gc.consumer_id = c.id
-       WHERE c.phone = ?
+       WHERE c.phone = $1
        ORDER BY gc.submitted_at DESC`,
       [mobile]
     );
 
-    res.json({ success: true, data: complaints });
+    res.json({ success: true, data: result.rows });
 
   } catch (error) {
     console.error('Get my complaints error:', error);
@@ -176,40 +164,32 @@ router.get('/my-complaints/:mobile', async (req, res) => {
 // Report gas leak (Emergency)
 router.post('/emergency-leak', async (req, res) => {
   try {
-    const { contact_name, mobile, address, landmark, description } = req.body;
+    const { mobile, description } = req.body;
 
-    // Generate complaint number
     const year = new Date().getFullYear();
-    const [countResult] = await promisePool.query(
-      'SELECT COUNT(*) as count FROM gas_complaints WHERE YEAR(submitted_at) = ?',
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as count FROM gas_complaints WHERE EXTRACT(YEAR FROM submitted_at) = $1`,
       [year]
     );
-    const complaintNumber = `GLEAK${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
+    const complaintNumber = `GLEAK${year}${String(parseInt(countResult.rows[0].count) + 1).padStart(6, '0')}`;
 
-    // Try to find customer by mobile/phone
     let customerId = null;
     if (mobile) {
-      const [customers] = await promisePool.query(
-        'SELECT id FROM gas_consumers WHERE phone = ?',
+      const res1 = await pool.query(
+        'SELECT id FROM gas_consumers WHERE phone = $1',
         [mobile]
       );
-      if (customers.length > 0) {
-        customerId = customers[0].id;
-      }
+      if (res1.rows.length > 0) customerId = res1.rows[0].id;
     }
 
-    // Insert emergency complaint (only valid columns)
-    const [result] = await promisePool.query(
-      `INSERT INTO gas_complaints 
-      (complaint_number, customer_id, complaint_type, description, status, priority) 
-      VALUES (?, ?, ?, ?, ?, ?)`,
+    const result = await pool.query(
+      `INSERT INTO gas_complaints
+       (complaint_number, consumer_id, complaint_type, description, status, priority)
+       VALUES ($1, $2, 'safety', $3, 'open', 'urgent') RETURNING id`,
       [
         complaintNumber,
         customerId,
-        'safety',
-        description || 'Gas leak reported - Emergency',
-        'open',
-        'urgent'
+        description || 'Gas leak reported - Emergency'
       ]
     );
 
@@ -218,7 +198,7 @@ router.post('/emergency-leak', async (req, res) => {
       message: 'Emergency gas leak reported! Response team will reach shortly.',
       data: {
         complaint_number: complaintNumber,
-        complaint_id: result.insertId,
+        complaint_id: result.rows[0].id,
         priority: 'URGENT',
         estimated_response: '15-30 minutes'
       }

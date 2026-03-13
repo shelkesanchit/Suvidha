@@ -1,12 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 
 // =====================================================
 // GAS BILLS ROUTES
-// NOTE: No gas_bills table exists. Gas billing is LPG cylinder-based.
-// This module works with gas_cylinder_bookings + gas_tariff_rates
-// to provide billing info to the frontend.
+// NOTE: No gas_bills table. Gas billing is LPG cylinder-based.
+// Works with gas_cylinder_bookings + gas_tariff_rates.
 // =====================================================
 
 // Fetch pending charges / outstanding bookings for a customer
@@ -14,39 +13,34 @@ router.get('/fetch/:consumerId', async (req, res) => {
   try {
     const { consumerId } = req.params;
 
-    // Get customer details from gas_consumers (not gas_consumers)
-    const [customers] = await promisePool.query(
-      'SELECT * FROM gas_consumers WHERE consumer_number = ?',
+    const customerResult = await pool.query(
+      'SELECT * FROM gas_consumers WHERE consumer_number = $1',
       [consumerId]
     );
 
-    if (customers.length === 0) {
+    if (customerResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    const customer = customers[0];
+    const customer = customerResult.rows[0];
 
-    // Get pending cylinder bookings (unpaid)
-    const [bookings] = await promisePool.query(
-      `SELECT * FROM gas_cylinder_bookings 
-       WHERE customer_id = ? AND payment_status != 'paid'
-       ORDER BY booking_date DESC
-       LIMIT 1`,
+    const bookingResult = await pool.query(
+      `SELECT * FROM gas_cylinder_bookings
+       WHERE customer_id = $1 AND payment_status != 'paid'
+       ORDER BY booking_date DESC LIMIT 1`,
       [customer.id]
     );
 
-    // Get tariff rate for customer's cylinder type and area
-    const [tariffs] = await promisePool.query(
-      `SELECT * FROM gas_tariff_rates 
-       WHERE state = ? AND city = ? AND cylinder_type = ?
-       ORDER BY effective_from DESC
-       LIMIT 1`,
+    const tariffResult = await pool.query(
+      `SELECT * FROM gas_tariff_rates
+       WHERE state = $1 AND city = $2 AND cylinder_type = $3
+       ORDER BY effective_from DESC LIMIT 1`,
       [customer.state, customer.city, customer.cylinder_type || '14kg']
     );
 
     let billData;
-    if (bookings.length > 0) {
-      const booking = bookings[0];
+    if (bookingResult.rows.length > 0) {
+      const booking = bookingResult.rows[0];
       billData = {
         booking_number: booking.booking_number,
         consumer_id: customer.consumer_number,
@@ -61,8 +55,7 @@ router.get('/fetch/:consumerId', async (req, res) => {
         status: 'Unpaid'
       };
     } else {
-      // No pending bookings - show tariff info
-      const tariff = tariffs.length > 0 ? tariffs[0] : null;
+      const tariff = tariffResult.rows.length > 0 ? tariffResult.rows[0] : null;
       billData = {
         consumer_id: customer.consumer_number,
         customer_name: customer.full_name,
@@ -102,30 +95,27 @@ router.get('/history/:consumerId', async (req, res) => {
   try {
     const { consumerId } = req.params;
 
-    // Look up customer
-    const [customers] = await promisePool.query(
-      'SELECT id FROM gas_consumers WHERE consumer_number = ?',
+    const customerResult = await pool.query(
+      'SELECT id FROM gas_consumers WHERE consumer_number = $1',
       [consumerId]
     );
 
-    if (customers.length === 0) {
+    if (customerResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    // Get payment history joined with bookings
-    const [payments] = await promisePool.query(
+    const result = await pool.query(
       `SELECT gp.transaction_id, gp.amount, gp.subsidy_amount, gp.payment_method,
               gp.payment_status, gp.receipt_number, gp.payment_date,
               cb.booking_number, cb.cylinder_type, cb.quantity
        FROM gas_payments gp
        LEFT JOIN gas_cylinder_bookings cb ON gp.booking_id = cb.id
-       WHERE gp.customer_id = ?
-       ORDER BY gp.payment_date DESC
-       LIMIT 12`,
-      [customers[0].id]
+       WHERE gp.customer_id = $1
+       ORDER BY gp.payment_date DESC LIMIT 12`,
+      [customerResult.rows[0].id]
     );
 
-    res.json({ success: true, data: payments });
+    res.json({ success: true, data: result.rows });
 
   } catch (error) {
     console.error('Get bill history error:', error);
@@ -138,50 +128,44 @@ router.post('/calculate', async (req, res) => {
   try {
     const { consumer_id, cylinder_type, quantity } = req.body;
 
-    // Get customer from gas_consumers
-    const [customers] = await promisePool.query(
-      'SELECT * FROM gas_consumers WHERE consumer_number = ?',
+    const customerResult = await pool.query(
+      'SELECT * FROM gas_consumers WHERE consumer_number = $1',
       [consumer_id]
     );
 
-    if (customers.length === 0) {
+    if (customerResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    const customer = customers[0];
+    const customer = customerResult.rows[0];
     const cylType = cylinder_type || customer.cylinder_type || '14kg';
     const qty = quantity || 1;
 
-    // Get tariff rate
-    let [tariffs] = await promisePool.query(
-      `SELECT * FROM gas_tariff_rates 
-       WHERE state = ? AND city = ? AND cylinder_type = ?
-       ORDER BY effective_from DESC
-       LIMIT 1`,
+    let tariffResult = await pool.query(
+      `SELECT * FROM gas_tariff_rates
+       WHERE state = $1 AND city = $2 AND cylinder_type = $3
+       ORDER BY effective_from DESC LIMIT 1`,
       [customer.state, customer.city, cylType]
     );
 
-    if (tariffs.length === 0) {
-      // Fallback: get any tariff for this cylinder type
-      [tariffs] = await promisePool.query(
-        `SELECT * FROM gas_tariff_rates 
-         WHERE cylinder_type = ?
-         ORDER BY effective_from DESC
-         LIMIT 1`,
+    if (tariffResult.rows.length === 0) {
+      tariffResult = await pool.query(
+        `SELECT * FROM gas_tariff_rates
+         WHERE cylinder_type = $1
+         ORDER BY effective_from DESC LIMIT 1`,
         [cylType]
       );
 
-      if (tariffs.length === 0) {
+      if (tariffResult.rows.length === 0) {
         return res.status(404).json({ success: false, message: 'Tariff rate not found for this cylinder type' });
       }
     }
 
-    const tariff = tariffs[0];
+    const tariff = tariffResult.rows[0];
     const pricePerCylinder = parseFloat(tariff.price_per_cylinder);
     const subsidyAmount = parseFloat(tariff.subsidy_amount || 0);
     const basePrice = parseFloat(tariff.base_price || pricePerCylinder);
 
-    // PMUY and domestic connections get subsidy
     const isSubsidyEligible = customer.connection_type === 'pmuy' || customer.connection_type === 'domestic';
     const effectiveSubsidy = isSubsidyEligible ? subsidyAmount : 0;
 

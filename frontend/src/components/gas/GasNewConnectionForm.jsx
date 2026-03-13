@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -19,11 +18,12 @@ import {
   Typography,
   CircularProgress,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { buildDocumentPayload, validateFile } from './formUtils';
 import DocUpload from '../municipal/DocUpload';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
   const isPNG = gasType === 'png';
@@ -31,8 +31,11 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
 
   const [activeStep, setActiveStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
+  const [otpDialogOpen, setOtpDialogOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [submittedAt, setSubmittedAt] = useState('');
 
   const [formData, setFormData] = useState({
     applicant_name: '',
@@ -153,13 +156,21 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
     return true;
   };
 
-  const handleNext = async () => {
+  const handleNext = () => {
     if (!validateCurrentStep()) return;
 
     if (activeStep < steps.length - 1) {
       setActiveStep((prev) => prev + 1);
       return;
     }
+
+    // Last step — open OTP verification
+    setOtpDialogOpen(true);
+  };
+
+  const handleSubmitAfterOtp = async (email) => {
+    setOtpDialogOpen(false);
+    setVerifiedEmail(email);
 
     try {
       setSubmitting(true);
@@ -171,6 +182,7 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
         application_data: {
           gas_type: gasType,
           ...formData,
+          email,
         },
         documents,
         additional_info: {
@@ -184,8 +196,10 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
       const appNo = response?.data?.data?.application_number;
       if (!appNo) throw new Error('Application number not received');
 
+      const now = new Date().toISOString();
       setApplicationNumber(appNo);
-      setSubmitted(true);
+      setSubmittedAt(now);
+      setReceiptOpen(true);
       toast.success('Application submitted successfully');
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Failed to submit application');
@@ -193,23 +207,6 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
       setSubmitting(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <Box>
-        <DialogTitle sx={{ px: 3, py: 2, bgcolor: '#eaf2ff', borderBottom: '1px solid #cfe0ff', pb: 0 }}>
-          <Typography variant="h6" fontWeight={700} sx={{ color: '#0f4aa6' }}>Application Submitted</Typography>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3, px: 3, pb: 2, textAlign: 'center' }}>
-          <SuccessIcon sx={{ fontSize: 74, color: 'success.main', mb: 1.5 }} />
-          <Typography variant="h6" gutterBottom>Your {isPNG ? 'PNG' : 'LPG'} application is registered</Typography>
-          <Chip label={applicationNumber} color="primary" sx={{ px: 2, py: 2.5, fontSize: '1rem', mb: 2 }} />
-          <Alert severity="info" sx={{ textAlign: 'left' }}>Use this number for tracking and future communication.</Alert>
-        </DialogContent>
-        <DialogActions sx={{ p: 3 }}><Button fullWidth variant="contained" onClick={onClose}>Close</Button></DialogActions>
-      </Box>
-    );
-  }
 
   return (
     <Box>
@@ -298,8 +295,28 @@ const GasNewConnectionForm = ({ onClose, gasType = 'lpg' }) => {
         <Button onClick={onClose} disabled={submitting}>Cancel</Button>
         <Box sx={{ flex: '1 1 auto' }} />
         <Button disabled={activeStep === 0 || submitting} onClick={() => setActiveStep((prev) => prev - 1)}>Back</Button>
-        <Button variant="contained" onClick={handleNext} disabled={submitting}>{submitting ? <CircularProgress size={22} color="inherit" /> : activeStep === steps.length - 1 ? 'Submit Application' : 'Next'}</Button>
+        <Button variant="contained" onClick={handleNext} disabled={submitting}>
+          {submitting ? <CircularProgress size={22} color="inherit" /> : activeStep === steps.length - 1 ? 'Submit Application' : 'Next'}
+        </Button>
       </DialogActions>
+
+      <EmailOtpVerification
+        open={otpDialogOpen}
+        onClose={() => setOtpDialogOpen(false)}
+        onVerified={handleSubmitAfterOtp}
+        initialEmail={formData.email}
+        title="Verify Email to Submit Application"
+      />
+
+      <ApplicationReceipt
+        open={receiptOpen}
+        onClose={() => { setReceiptOpen(false); onClose(); }}
+        applicationNumber={applicationNumber}
+        applicationType="new_connection"
+        formData={{ gas_type: gasType, ...formData, email: verifiedEmail }}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 };

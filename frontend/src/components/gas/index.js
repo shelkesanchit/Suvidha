@@ -6,3 +6,5 @@ export { default as GasCylinderBookingForm } from './GasCylinderBookingForm';
 export { default as GasConnectionManagementForm } from './GasConnectionManagementForm';
 export { default as GasSafetyInfoForm } from './GasSafetyInfoForm';
 // GasMeterReadingForm removed - LPG does not use meter readings
+export { default as EmailOtpVerification } from './EmailOtpVerification';
+export { default as ApplicationReceipt } from './ApplicationReceipt';

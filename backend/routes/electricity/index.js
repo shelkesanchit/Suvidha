@@ -11,7 +11,6 @@ const consumerRoutes = require('./consumer');
 const settingsRoutes = require('./settings');
 const otpRoutes = require('./otp');
 const mobileUploadRoutes = require('./mobileUpload');
-const adminRoutes = require('../../admin/routes/index');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -23,6 +22,6 @@ router.use('/consumer', consumerRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/otp', otpRoutes);
 router.use('/mobile-upload', mobileUploadRoutes);
-router.use('/admin', adminRoutes);
+
 
 module.exports = router;

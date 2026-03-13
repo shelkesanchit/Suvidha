@@ -74,12 +74,6 @@ app.use('/api/water', require('./routes/water/index'));
 // Gas Distribution Routes (Separate)
 app.use('/api/gas', require('./routes/gas/index'));
 
-// Municipal Corporation Routes
-app.use('/api/municipal', require('./routes/municipal/index'));
-
-// Government Services Routes (Integrates with Dummy API)
-app.use('/api/gov-services', require('./routes/governmentServices/index'));
-
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

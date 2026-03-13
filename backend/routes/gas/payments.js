@@ -1,81 +1,64 @@
 const express = require('express');
 const router = express.Router();
-const { promisePool } = require('../../config/database');
+const { pool } = require('../../config/database');
 
 // =====================================================
 // GAS PAYMENTS ROUTES
-// Fixed to match actual gas_payments schema:
-//   id, booking_id, customer_id, payment_date, payment_method,
-//   amount, subsidy_amount, transaction_id, payment_status, receipt_number
 // =====================================================
 
 // Process payment
 router.post('/process', async (req, res) => {
-  const connection = await promisePool.getConnection();
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
     const { consumer_id, booking_number, amount, payment_method } = req.body;
 
-    // Generate transaction ID
     const transactionId = `GTR${Date.now()}`;
     const receiptNumber = `GRCP${new Date().getFullYear()}${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`;
 
-    // Get customer by consumer_id
-    const [customers] = await connection.query(
-      'SELECT id FROM gas_consumers WHERE consumer_number = ?',
+    const customerResult = await client.query(
+      'SELECT id FROM gas_consumers WHERE consumer_number = $1',
       [consumer_id]
     );
 
-    if (customers.length === 0) {
-      await connection.rollback();
+    if (customerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    const customerId = customers[0].id;
+    const customerId = customerResult.rows[0].id;
 
-    // Get booking if provided
     let bookingId = null;
     if (booking_number) {
-      const [bookings] = await connection.query(
-        'SELECT id FROM gas_cylinder_bookings WHERE booking_number = ?',
+      const bookingResult = await client.query(
+        'SELECT id FROM gas_cylinder_bookings WHERE booking_number = $1',
         [booking_number]
       );
-      bookingId = bookings.length > 0 ? bookings[0].id : null;
+      bookingId = bookingResult.rows.length > 0 ? bookingResult.rows[0].id : null;
     }
 
-    // Map payment_method to valid enum ('cash','online','bank_transfer')
     const methodMap = {
       'cash': 'cash', 'online': 'online', 'upi': 'online',
       'card': 'online', 'bank_transfer': 'bank_transfer', 'neft': 'bank_transfer'
     };
     const validMethod = methodMap[payment_method] || 'online';
 
-    // Insert payment record (only columns that exist in gas_payments)
-    const [result] = await connection.query(
-      `INSERT INTO gas_payments 
-      (booking_id, customer_id, payment_method, amount, transaction_id, payment_status, receipt_number) 
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        bookingId,
-        customerId,
-        validMethod,
-        amount,
-        transactionId,
-        'success',
-        receiptNumber
-      ]
+    await client.query(
+      `INSERT INTO gas_payments
+       (booking_id, customer_id, payment_method, amount, transaction_id, payment_status, receipt_number)
+       VALUES ($1, $2, $3, $4, $5, 'success', $6)`,
+      [bookingId, customerId, validMethod, amount, transactionId, receiptNumber]
     );
 
-    // Update booking payment_status if booking exists
     if (bookingId) {
-      await connection.query(
-        `UPDATE gas_cylinder_bookings SET payment_status = 'paid' WHERE id = ?`,
+      await client.query(
+        `UPDATE gas_cylinder_bookings SET payment_status = 'paid' WHERE id = $1`,
         [bookingId]
       );
     }
 
-    await connection.commit();
+    await client.query('COMMIT');
 
     res.json({
       success: true,
@@ -90,11 +73,11 @@ router.post('/process', async (req, res) => {
     });
 
   } catch (error) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error('Process gas payment error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    connection.release();
+    client.release();
   }
 });
 
@@ -103,29 +86,27 @@ router.get('/history/:consumerId', async (req, res) => {
   try {
     const { consumerId } = req.params;
 
-    // Look up customer by consumer_id
-    const [customers] = await promisePool.query(
-      'SELECT id FROM gas_consumers WHERE consumer_number = ?',
+    const customerResult = await pool.query(
+      'SELECT id FROM gas_consumers WHERE consumer_number = $1',
       [consumerId]
     );
 
-    if (customers.length === 0) {
+    if (customerResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    const [payments] = await promisePool.query(
+    const result = await pool.query(
       `SELECT gp.transaction_id, gp.amount, gp.subsidy_amount, gp.payment_method,
               gp.payment_status, gp.receipt_number, gp.payment_date,
               cb.booking_number
        FROM gas_payments gp
        LEFT JOIN gas_cylinder_bookings cb ON gp.booking_id = cb.id
-       WHERE gp.customer_id = ?
-       ORDER BY gp.payment_date DESC
-       LIMIT 20`,
-      [customers[0].id]
+       WHERE gp.customer_id = $1
+       ORDER BY gp.payment_date DESC LIMIT 20`,
+      [customerResult.rows[0].id]
     );
 
-    res.json({ success: true, data: payments });
+    res.json({ success: true, data: result.rows });
 
   } catch (error) {
     console.error('Get payment history error:', error);
@@ -135,59 +116,53 @@ router.get('/history/:consumerId', async (req, res) => {
 
 // Pay for cylinder booking
 router.post('/cylinder-payment', async (req, res) => {
-  const connection = await promisePool.getConnection();
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
     const { booking_number, payment_method } = req.body;
 
-    // Get booking
-    const [bookings] = await connection.query(
-      'SELECT * FROM gas_cylinder_bookings WHERE booking_number = ?',
+    const bookingResult = await client.query(
+      'SELECT * FROM gas_cylinder_bookings WHERE booking_number = $1',
       [booking_number]
     );
 
-    if (bookings.length === 0) {
-      await connection.rollback();
+    if (bookingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    const booking = bookings[0];
+    const booking = bookingResult.rows[0];
 
-    // Generate transaction ID
     const transactionId = `GCTR${Date.now()}`;
     const receiptNumber = `GCRCP${new Date().getFullYear()}${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`;
 
-    // Map payment method
     const methodMap = {
       'cash': 'cash', 'online': 'online', 'upi': 'online',
       'card': 'online', 'bank_transfer': 'bank_transfer', 'neft': 'bank_transfer'
     };
     const validMethod = methodMap[payment_method] || 'online';
 
-    // Insert payment record (booking.customer_id is the FK)
-    await connection.query(
-      `INSERT INTO gas_payments 
-      (booking_id, customer_id, payment_method, amount, transaction_id, payment_status, receipt_number) 
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    await client.query(
+      `INSERT INTO gas_payments
+       (booking_id, customer_id, payment_method, amount, transaction_id, payment_status, receipt_number)
+       VALUES ($1, $2, $3, $4, $5, 'success', $6)`,
       [
         booking.id,
         booking.customer_id,
         validMethod,
         booking.total_amount,
         transactionId,
-        'success',
         receiptNumber
       ]
     );
 
-    // Update booking payment status
-    await connection.query(
-      `UPDATE gas_cylinder_bookings SET payment_status = 'paid' WHERE id = ?`,
+    await client.query(
+      `UPDATE gas_cylinder_bookings SET payment_status = 'paid' WHERE id = $1`,
       [booking.id]
     );
 
-    await connection.commit();
+    await client.query('COMMIT');
 
     res.json({
       success: true,
@@ -201,11 +176,11 @@ router.post('/cylinder-payment', async (req, res) => {
     });
 
   } catch (error) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error('Cylinder payment error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    connection.release();
+    client.release();
   }
 });
 

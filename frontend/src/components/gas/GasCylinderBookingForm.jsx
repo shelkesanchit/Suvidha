@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -13,19 +12,24 @@ import {
   Typography,
   CircularProgress,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const GasCylinderBookingForm = ({ onClose }) => {
   const [loadingConsumer, setLoadingConsumer] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [bookingNumber, setBookingNumber] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [otpDialogOpen, setOtpDialogOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [submittedAt, setSubmittedAt] = useState('');
 
   const [formData, setFormData] = useState({
     mobile: '',
     consumer_number: '',
+    email: '',
     cylinder_type: 'domestic_14.2kg',
     quantity: 1,
     delivery_preference: 'home_delivery',
@@ -60,15 +64,26 @@ const GasCylinderBookingForm = ({ onClose }) => {
     }
   };
 
-  const handleSubmit = async () => {
+  const validateForm = () => {
     if (!/^\d{10}$/.test(formData.mobile)) {
       toast.error('Enter valid 10-digit mobile number');
-      return;
+      return false;
     }
     if (!formData.consumer_number) {
       toast.error('Enter consumer number to proceed');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const handleSubmitClick = () => {
+    if (!validateForm()) return;
+    setOtpDialogOpen(true);
+  };
+
+  const handleSubmitAfterOtp = async (email) => {
+    setOtpDialogOpen(false);
+    setVerifiedEmail(email);
 
     try {
       setSubmitting(true);
@@ -76,6 +91,7 @@ const GasCylinderBookingForm = ({ onClose }) => {
       const payload = {
         consumer_number: formData.consumer_number,
         mobile: formData.mobile,
+        email,
         cylinder_type: formData.cylinder_type,
         quantity: Number(formData.quantity) || 1,
         delivery_preference: formData.delivery_preference,
@@ -88,8 +104,10 @@ const GasCylinderBookingForm = ({ onClose }) => {
       const bookingNo = response?.data?.data?.booking_number;
       if (!bookingNo) throw new Error('Booking number not received');
 
+      const now = new Date().toISOString();
       setBookingNumber(bookingNo);
-      setSubmitted(true);
+      setSubmittedAt(now);
+      setReceiptOpen(true);
       toast.success('Cylinder booked successfully');
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Failed to book cylinder');
@@ -97,23 +115,6 @@ const GasCylinderBookingForm = ({ onClose }) => {
       setSubmitting(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <Box>
-        <DialogTitle sx={{ px: 3, py: 2, bgcolor: '#fff0f5', borderBottom: '1px solid #ffd0e1', pb: 0 }}>
-          <Typography variant="h6" fontWeight={700} sx={{ color: '#ad1457' }}>Booking Confirmed</Typography>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3, px: 3, pb: 2, textAlign: 'center' }}>
-          <SuccessIcon sx={{ fontSize: 74, color: 'success.main', mb: 1.5 }} />
-          <Typography variant="h6" gutterBottom>LPG refill booking submitted</Typography>
-          <Chip label={bookingNumber} color="secondary" sx={{ px: 2, py: 2.5, fontSize: '1rem', mb: 2 }} />
-          <Alert severity="info" sx={{ textAlign: 'left' }}>Save this booking number for payment and tracking.</Alert>
-        </DialogContent>
-        <DialogActions sx={{ p: 3 }}><Button fullWidth variant="contained" onClick={onClose}>Close</Button></DialogActions>
-      </Box>
-    );
-  }
 
   return (
     <Box>
@@ -131,6 +132,8 @@ const GasCylinderBookingForm = ({ onClose }) => {
           <Grid item xs={12}><TextField fullWidth required label="Consumer Number *" value={formData.consumer_number} onChange={(e) => setFormData((p) => ({ ...p, consumer_number: e.target.value.toUpperCase() }))} /></Grid>
           {consumer && <Grid item xs={12}><Alert severity="success">Verified: {consumer.full_name} ({consumer.consumer_number})</Alert></Grid>}
 
+          <Grid item xs={12}><TextField fullWidth label="Email" value={formData.email} onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))} placeholder="For booking receipt" /></Grid>
+
           <Grid item xs={12} sm={6}><TextField fullWidth select required label="Cylinder Type *" value={formData.cylinder_type} onChange={(e) => setFormData((p) => ({ ...p, cylinder_type: e.target.value }))}><MenuItem value="domestic_14.2kg">Domestic 14.2 KG</MenuItem><MenuItem value="domestic_5kg">Domestic 5 KG</MenuItem><MenuItem value="commercial_19kg">Commercial 19 KG</MenuItem><MenuItem value="commercial_47.5kg">Commercial 47.5 KG</MenuItem></TextField></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth required type="number" label="Quantity *" value={formData.quantity} inputProps={{ min: 1, max: 2 }} onChange={(e) => setFormData((p) => ({ ...p, quantity: Math.max(1, Math.min(2, Number(e.target.value) || 1)) }))} /></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth select required label="Delivery Preference *" value={formData.delivery_preference} onChange={(e) => setFormData((p) => ({ ...p, delivery_preference: e.target.value }))}><MenuItem value="home_delivery">Home Delivery</MenuItem><MenuItem value="self_pickup">Self Pickup</MenuItem></TextField></Grid>
@@ -141,8 +144,28 @@ const GasCylinderBookingForm = ({ onClose }) => {
       <DialogActions sx={{ p: 3 }}>
         <Button onClick={onClose} disabled={submitting}>Cancel</Button>
         <Box sx={{ flex: '1 1 auto' }} />
-        <Button variant="contained" onClick={handleSubmit} disabled={submitting}>{submitting ? <CircularProgress size={22} color="inherit" /> : 'Book Refill'}</Button>
+        <Button variant="contained" onClick={handleSubmitClick} disabled={submitting}>
+          {submitting ? <CircularProgress size={22} color="inherit" /> : 'Book Refill'}
+        </Button>
       </DialogActions>
+
+      <EmailOtpVerification
+        open={otpDialogOpen}
+        onClose={() => setOtpDialogOpen(false)}
+        onVerified={handleSubmitAfterOtp}
+        initialEmail={formData.email}
+        title="Verify Email to Confirm Booking"
+      />
+
+      <ApplicationReceipt
+        open={receiptOpen}
+        onClose={() => { setReceiptOpen(false); onClose(); }}
+        applicationNumber={bookingNumber}
+        applicationType="cylinder_booking"
+        formData={{ ...formData, email: verifiedEmail }}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 };

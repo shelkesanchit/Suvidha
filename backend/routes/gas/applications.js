@@ -1,40 +1,49 @@
 const express = require('express');
 const router = express.Router();
-const { promisePool } = require('../../config/database');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { pool } = require('../../config/database');
+const supabase = require('../../config/supabase');
 
-// Configure multer for gas document uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/gas-documents');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, `gas-doc-${uniqueSuffix}${ext}`);
-  }
-});
+const BUCKET = process.env.GAS_STORAGE_BUCKET || 'gas-documents';
 
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|pdf/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only images (JPEG, PNG) and PDF files are allowed'));
+async function ensureBucket() {
+  try {
+    const { data: list } = await supabase.storage.listBuckets();
+    if (list && !list.some(b => b.name === BUCKET)) {
+      const { error } = await supabase.storage.createBucket(BUCKET, { public: true });
+      if (error && !error.message.includes('already exists')) {
+        console.warn('Gas bucket auto-create warning:', error.message);
+      }
+    }
+  } catch (e) {
+    console.warn('ensureBucket warning:', e.message);
+  }
+}
+
+async function uploadDocuments(applicationId, documents) {
+  if (!documents || documents.length === 0) return [];
+  await ensureBucket();
+  const processed = [];
+  for (const doc of documents) {
+    try {
+      if (doc.data) {
+        const buffer = Buffer.from(doc.data, 'base64');
+        const ext = (doc.name || 'file').split('.').pop().toLowerCase() || 'bin';
+        const filename = `applications/${applicationId}/${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
+        const { error } = await supabase.storage
+          .from(BUCKET)
+          .upload(filename, buffer, { contentType: doc.type || 'application/octet-stream', upsert: false });
+        if (error) throw new Error(error.message);
+        const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+        processed.push({ name: doc.name, type: doc.type, size: doc.size, documentType: doc.documentType || '', url: urlData.publicUrl, uploadedAt: new Date().toISOString() });
+      } else if (doc.url) {
+        processed.push({ name: doc.name, type: doc.type, size: doc.size, documentType: doc.documentType || '', url: doc.url, uploadedAt: doc.uploadedAt || new Date().toISOString() });
+      }
+    } catch (err) {
+      console.error('Gas document upload failed for', doc.name, ':', err.message);
     }
   }
-});
+  return processed;
+}
 
 // =====================================================
 // GAS APPLICATIONS ROUTES
@@ -42,33 +51,32 @@ const upload = multer({
 
 // Submit new gas application
 router.post('/submit', async (req, res) => {
-  const connection = await promisePool.getConnection();
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
-    
+    await client.query('BEGIN');
+
     const { application_type, application_data, documents = [], additional_info = {} } = req.body;
 
     if (!application_type || !application_data) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'application_type and application_data are required' });
     }
 
     if (!application_data.mobile || !application_data.applicant_name) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'applicant_name and mobile are required' });
     }
 
     if (!/^\d{10}$/.test(String(application_data.mobile))) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'mobile must be 10 digits' });
     }
 
     if (application_data.pincode && !/^\d{6}$/.test(String(application_data.pincode))) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'pincode must be 6 digits' });
     }
-    
-    // Generate application number
+
     const year = new Date().getFullYear();
     const typePrefix = {
       'new_connection': 'GNC',
@@ -78,86 +86,74 @@ router.post('/submit', async (req, res) => {
       'cylinder_booking': 'GCB',
       'conversion': 'GCV'
     }[application_type] || 'GAPP';
-    
-    const [countResult] = await connection.query(
-      'SELECT COUNT(*) as count FROM gas_applications WHERE YEAR(submission_date) = ?',
-      [year]
-    );
-    const applicationNumber = `${typePrefix}${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
-    
-    // Map connection_type to valid ENUM value
-    const connectionTypeMap = {
-      'domestic': 'domestic',
-      'pmuy': 'pmuy',
-      'commercial': 'commercial',
-      'png_domestic': 'domestic',
-      'png_commercial': 'commercial',
-      'lpg_domestic': 'domestic',
-      'lpg_commercial': 'commercial'
-    };
-    const connType = connectionTypeMap[application_data.connection_type] || 'domestic';
-    
-    // Determine connection_type: 'PNG' or 'LPG' based on application data
-    const connectionType = (application_data.gas_type === 'png' || 
-                           application_data.connection_type?.toLowerCase().includes('png')) 
-                           ? 'PNG' : 'LPG';
-    
-    // Extract applicant details
+
+    // Determine connection_type: 'PNG' or 'LPG'
+    const connectionType = (application_data.gas_type === 'png' ||
+                            application_data.connection_type?.toLowerCase().includes('png'))
+                            ? 'PNG' : 'LPG';
+
     const applicantName = application_data.full_name || application_data.applicant_name || 'Unknown';
     const applicantPhone = application_data.mobile || application_data.contact_number || application_data.phone || '';
     const applicantEmail = application_data.email || null;
-    
-    const applicationPayload = {
-      ...application_data,
-      additional_info,
-    };
 
-    const documentsPayload = Array.isArray(documents)
-      ? documents.map((d) => ({
-          document_type: d.document_type,
-          file_name: d.file_name,
-          mime_type: d.mime_type,
-          size: d.size,
-          file_data: d.file_data,
-        }))
-      : [];
+    const applicationPayload = { ...application_data, additional_info };
 
-    // Insert application using actual schema columns
-    const [result] = await connection.query(
-      `INSERT INTO gas_applications 
-      (application_number, application_type, connection_type, status,
-       applicant_name, applicant_phone, applicant_email, 
-       application_data, documents) 
-      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+    // Insert with placeholder number first to get the ID
+    const insertResult = await client.query(
+      `INSERT INTO gas_applications
+       (application_number, application_type, connection_type, status,
+        applicant_name, applicant_phone, applicant_email,
+        application_data, documents)
+       VALUES ('PENDING', $1, $2, 'pending', $3, $4, $5, $6, $7) RETURNING id`,
       [
-        applicationNumber,
         application_type,
         connectionType,
         applicantName,
         applicantPhone,
         applicantEmail,
         JSON.stringify(applicationPayload),
-        JSON.stringify(documentsPayload)
+        JSON.stringify([])
       ]
     );
-    
-    await connection.commit();
-    
+
+    const applicationId = insertResult.rows[0].id;
+    const countResult = await client.query(
+      `SELECT COUNT(*) as count FROM gas_applications WHERE EXTRACT(YEAR FROM submission_date) = $1`,
+      [year]
+    );
+    const applicationNumber = `${typePrefix}${year}${String(applicationId).padStart(6, '0')}`;
+
+    await client.query(
+      'UPDATE gas_applications SET application_number = $1 WHERE id = $2',
+      [applicationNumber, applicationId]
+    );
+
+    // Upload documents to Supabase Storage
+    const processedDocs = await uploadDocuments(applicationId, Array.isArray(documents) ? documents : []);
+    if (processedDocs.length > 0) {
+      await client.query(
+        'UPDATE gas_applications SET documents = $1 WHERE id = $2',
+        [JSON.stringify(processedDocs), applicationId]
+      );
+    }
+
+    await client.query('COMMIT');
+
     res.status(201).json({
       success: true,
       message: 'Gas connection application submitted successfully',
       data: {
         application_number: applicationNumber,
-        application_id: result.insertId
+        application_id: applicationId
       }
     });
-    
+
   } catch (error) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error('Submit gas application error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    connection.release();
+    client.release();
   }
 });
 
@@ -166,23 +162,23 @@ router.get('/track/:applicationNumber', async (req, res) => {
   try {
     const { applicationNumber } = req.params;
     const { mobile, email } = req.query;
-    
-    const [applications] = await promisePool.query(
-      `SELECT a.application_number, a.applicant_name as full_name, a.applicant_phone as mobile, a.applicant_email as email,
-              a.application_data, a.connection_type, a.status as application_status,
-              a.submission_date as created_at,
+
+    const result = await pool.query(
+      `SELECT a.application_number, a.applicant_name as full_name, a.applicant_phone as mobile,
+              a.applicant_email as email, a.application_data, a.connection_type,
+              a.status as application_status, a.submission_date as created_at,
               c.id as consumer_id, c.connection_status
        FROM gas_applications a
-       LEFT JOIN gas_consumers c ON c.full_name COLLATE utf8mb4_unicode_ci = a.applicant_name COLLATE utf8mb4_unicode_ci AND c.phone COLLATE utf8mb4_unicode_ci = a.applicant_phone COLLATE utf8mb4_unicode_ci
-       WHERE a.application_number = ?`,
+       LEFT JOIN gas_consumers c ON c.full_name = a.applicant_name AND c.phone = a.applicant_phone
+       WHERE a.application_number = $1`,
       [applicationNumber]
     );
-    
-    if (applications.length === 0) {
+
+    if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Application not found' });
     }
-    
-    const app = applications[0];
+
+    const app = result.rows[0];
 
     if (mobile && String(app.mobile || '') !== String(mobile)) {
       return res.status(403).json({ success: false, message: 'Mobile verification failed for this application' });
@@ -191,9 +187,9 @@ router.get('/track/:applicationNumber', async (req, res) => {
     if (email && String(app.email || '').toLowerCase() !== String(email).toLowerCase()) {
       return res.status(403).json({ success: false, message: 'Email verification failed for this application' });
     }
-    
+
     res.json({ success: true, data: app });
-    
+
   } catch (error) {
     console.error('Track application error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -204,18 +200,18 @@ router.get('/track/:applicationNumber', async (req, res) => {
 router.get('/my-applications/:mobile', async (req, res) => {
   try {
     const { mobile } = req.params;
-    
-    const [applications] = await promisePool.query(
-      `SELECT id, application_number, connection_type, status as application_status, 
+
+    const result = await pool.query(
+      `SELECT id, application_number, connection_type, status as application_status,
               submission_date as created_at
-       FROM gas_applications 
-       WHERE applicant_phone = ?
+       FROM gas_applications
+       WHERE applicant_phone = $1
        ORDER BY submission_date DESC`,
       [mobile]
     );
-    
-    res.json({ success: true, data: applications });
-    
+
+    res.json({ success: true, data: result.rows });
+
   } catch (error) {
     console.error('Get my applications error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -226,21 +222,22 @@ router.get('/my-applications/:mobile', async (req, res) => {
 router.get('/consumer-by-mobile/:mobile', async (req, res) => {
   try {
     const { mobile } = req.params;
-    
-    const [consumers] = await promisePool.query(
-      `SELECT id, consumer_number, full_name, phone as mobile, CONCAT(address_line1, ', ', city) as address, 
-              connection_status, connection_type 
-       FROM gas_consumers 
-       WHERE phone = ? AND connection_status = 'active'`,
+
+    const result = await pool.query(
+      `SELECT id, consumer_number, full_name, phone as mobile,
+              CONCAT(address_line1, ', ', city) as address,
+              connection_status, connection_type
+       FROM gas_consumers
+       WHERE phone = $1 AND connection_status = 'active'`,
       [mobile]
     );
-    
-    if (consumers.length === 0) {
+
+    if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'No active consumer found with this mobile number' });
     }
-    
-    res.json({ success: true, data: consumers[0] });
-    
+
+    res.json({ success: true, data: result.rows[0] });
+
   } catch (error) {
     console.error('Consumer lookup error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -249,19 +246,19 @@ router.get('/consumer-by-mobile/:mobile', async (req, res) => {
 
 // Book LPG cylinder
 router.post('/cylinder-booking', async (req, res) => {
-  const connection = await promisePool.getConnection();
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
-    
+    await client.query('BEGIN');
+
     const { consumer_number, mobile, cylinder_type, quantity = 1, delivery_preference = 'home_delivery' } = req.body;
 
     if (!consumer_number || !mobile) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'consumer_number and mobile are required' });
     }
 
     if (!/^\d{10}$/.test(String(mobile))) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'mobile must be 10 digits' });
     }
 
@@ -269,49 +266,45 @@ router.post('/cylinder-booking', async (req, res) => {
     const allowedDeliveryTypes = new Set(['home_delivery', 'self_pickup']);
 
     if (cylinder_type && !allowedCylinderTypes.has(cylinder_type)) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Invalid cylinder type' });
     }
 
     if (!allowedDeliveryTypes.has(delivery_preference)) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Invalid delivery preference' });
     }
 
     const parsedQuantity = Number.parseInt(quantity, 10);
     if (!Number.isFinite(parsedQuantity) || parsedQuantity < 1 || parsedQuantity > 2) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'quantity must be between 1 and 2' });
     }
-    
-    // Find active consumer by both consumer number and mobile for stricter matching
-    const [consumers] = await connection.query(
+
+    const consumerResult = await client.query(
       `SELECT id, connection_type
        FROM gas_consumers
-       WHERE consumer_number = ? AND phone = ? AND connection_status = 'active'`,
+       WHERE consumer_number = $1 AND phone = $2 AND connection_status = 'active'`,
       [consumer_number, mobile]
     );
-    
-    if (consumers.length === 0) {
-      await connection.rollback();
+
+    if (consumerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Active consumer not found for given consumer number and mobile' });
     }
-    
-    const consumer = consumers[0];
-    
-    // Determine cylinder type based on consumer's connection_type or use default
-    const actualCylinderType = cylinder_type || 
+
+    const consumer = consumerResult.rows[0];
+
+    const actualCylinderType = cylinder_type ||
       (consumer.connection_type === 'commercial' ? 'commercial_19kg' : 'domestic_14.2kg');
-    
-    // Generate booking number
+
     const year = new Date().getFullYear();
-    const [countResult] = await connection.query(
-      'SELECT COUNT(*) as count FROM gas_cylinder_bookings WHERE YEAR(booked_at) = ?',
+    const countResult = await client.query(
+      `SELECT COUNT(*) as count FROM gas_cylinder_bookings WHERE EXTRACT(YEAR FROM booked_at) = $1`,
       [year]
     );
-    const bookingNumber = `GCB${year}${String(countResult[0].count + 1).padStart(6, '0')}`;
-    
-    // Calculate price
+    const bookingNumber = `GCB${year}${String(parseInt(countResult.rows[0].count) + 1).padStart(6, '0')}`;
+
     const cylinderPrices = {
       'domestic_14.2kg': 850,
       'domestic_5kg': 450,
@@ -320,105 +313,87 @@ router.post('/cylinder-booking', async (req, res) => {
     };
     const pricePerUnit = cylinderPrices[actualCylinderType] || 850;
     const totalAmount = pricePerUnit * parsedQuantity;
-    
-    // Map to valid ENUM values
+
     const cylBookingMap = {
-      'domestic_14.2kg': '14kg',
-      'domestic_5kg': '14kg',
-      'commercial_19kg': '19kg',
-      'commercial_47.5kg': 'commercial',
-      '14kg': '14kg',
-      '19kg': '19kg',
-      'commercial': 'commercial'
+      'domestic_14.2kg': '14kg', 'domestic_5kg': '14kg',
+      'commercial_19kg': '19kg', 'commercial_47.5kg': 'commercial',
+      '14kg': '14kg', '19kg': '19kg', 'commercial': 'commercial'
     };
-    
-    // Insert booking
-    const [result] = await connection.query(
-      `INSERT INTO gas_cylinder_bookings 
-      (booking_number, customer_id, cylinder_type, quantity, 
-       total_amount, delivery_type, booking_status) 
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+
+    const result = await client.query(
+      `INSERT INTO gas_cylinder_bookings
+       (booking_number, customer_id, cylinder_type, quantity, total_amount, delivery_type, booking_status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'placed') RETURNING id`,
       [
         bookingNumber,
         consumer.id,
         cylBookingMap[actualCylinderType] || '14kg',
         parsedQuantity,
         totalAmount,
-        delivery_preference,
-        'placed'
+        delivery_preference
       ]
     );
-    
-    await connection.commit();
-    
+
+    await client.query('COMMIT');
+
     res.status(201).json({
       success: true,
       message: 'Cylinder booked successfully',
       data: {
         booking_number: bookingNumber,
-        booking_id: result.insertId,
+        booking_id: result.rows[0].id,
         estimated_delivery: '2-3 business days',
         amount: totalAmount
       }
     });
-    
+
   } catch (error) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error('Cylinder booking error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    connection.release();
+    client.release();
   }
 });
 
 // =====================================================
-// DOCUMENT UPLOAD ROUTES
+// DOCUMENT UPLOAD ROUTES (Supabase Storage)
 // =====================================================
 
-// Upload documents for gas application
-router.post('/upload-documents', upload.array('documents', 5), async (req, res) => {
+// Upload documents for gas application (base64 JSON body)
+router.post('/upload-documents', async (req, res) => {
   try {
-    const { application_number } = req.body;
-    
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: 'No files uploaded' });
+    const { application_number, documents } = req.body;
+
+    if (!application_number) {
+      return res.status(400).json({ success: false, message: 'application_number is required' });
     }
 
-    // Check if application exists
-    const [apps] = await promisePool.query(
-      'SELECT id, documents FROM gas_applications WHERE application_number = ?',
+    if (!documents || !Array.isArray(documents) || documents.length === 0) {
+      return res.status(400).json({ success: false, message: 'documents array is required' });
+    }
+
+    const appResult = await pool.query(
+      'SELECT id, documents FROM gas_applications WHERE application_number = $1',
       [application_number]
     );
 
-    if (apps.length === 0) {
-      // Delete uploaded files if application not found
-      req.files.forEach(file => fs.unlinkSync(file.path));
+    if (appResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Application not found' });
     }
 
-    // Parse existing documents
+    const applicationId = appResult.rows[0].id;
     let existingDocs = [];
     try {
-      existingDocs = JSON.parse(apps[0].documents || '[]');
+      const raw = appResult.rows[0].documents;
+      existingDocs = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
     } catch { existingDocs = []; }
 
-    // Add new documents
-    const newDocs = req.files.map((file, index) => ({
-      id: Date.now() + index,
-      filename: file.filename,
-      originalName: file.originalname,
-      documentType: req.body[`documentType_${index}`] || req.body.documentType || 'other',
-      mimeType: file.mimetype,
-      size: file.size,
-      uploadedAt: new Date().toISOString(),
-      path: `/uploads/gas-documents/${file.filename}`
-    }));
-
+    const newDocs = await uploadDocuments(applicationId, documents);
     const allDocs = [...existingDocs, ...newDocs];
 
-    // Update application with document references
-    await promisePool.query(
-      'UPDATE gas_applications SET documents = ? WHERE application_number = ?',
+    await pool.query(
+      'UPDATE gas_applications SET documents = $1 WHERE application_number = $2',
       [JSON.stringify(allDocs), application_number]
     );
 
@@ -430,82 +405,6 @@ router.post('/upload-documents', upload.array('documents', 5), async (req, res) 
 
   } catch (error) {
     console.error('Document upload error:', error);
-    // Clean up uploaded files on error
-    if (req.files) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-      });
-    }
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Upload single document with type
-router.post('/upload-document', upload.single('document'), async (req, res) => {
-  try {
-    const { application_number, documentType } = req.body;
-    
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
-
-    // Check if application exists
-    const [apps] = await promisePool.query(
-      'SELECT id, documents FROM gas_applications WHERE application_number = ?',
-      [application_number]
-    );
-
-    if (apps.length === 0) {
-      fs.unlinkSync(req.file.path);
-      return res.status(404).json({ success: false, message: 'Application not found' });
-    }
-
-    // Parse existing documents
-    let existingDocs = [];
-    try {
-      existingDocs = JSON.parse(apps[0].documents || '[]');
-    } catch { existingDocs = []; }
-
-    // Create new document entry
-    const newDoc = {
-      id: Date.now(),
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      documentType: documentType || 'other',
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      uploadedAt: new Date().toISOString(),
-      path: `/uploads/gas-documents/${req.file.filename}`
-    };
-
-    // Replace existing document of same type or add new
-    const existingIndex = existingDocs.findIndex(d => d.documentType === documentType);
-    if (existingIndex >= 0) {
-      // Delete old file
-      const oldPath = path.join(__dirname, '../../uploads/gas-documents', existingDocs[existingIndex].filename);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      existingDocs[existingIndex] = newDoc;
-    } else {
-      existingDocs.push(newDoc);
-    }
-
-    // Update application with document references
-    await promisePool.query(
-      'UPDATE gas_applications SET documents = ? WHERE application_number = ?',
-      [JSON.stringify(existingDocs), application_number]
-    );
-
-    res.json({
-      success: true,
-      message: 'Document uploaded successfully',
-      data: { document: newDoc }
-    });
-
-  } catch (error) {
-    console.error('Document upload error:', error);
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -514,23 +413,24 @@ router.post('/upload-document', upload.single('document'), async (req, res) => {
 router.get('/documents/:application_number', async (req, res) => {
   try {
     const { application_number } = req.params;
-    
-    const [apps] = await promisePool.query(
-      'SELECT documents FROM gas_applications WHERE application_number = ?',
+
+    const result = await pool.query(
+      'SELECT documents FROM gas_applications WHERE application_number = $1',
       [application_number]
     );
 
-    if (apps.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Application not found' });
     }
 
     let documents = [];
     try {
-      documents = JSON.parse(apps[0].documents || '[]');
+      const raw = result.rows[0].documents;
+      documents = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
     } catch { documents = []; }
 
     res.json({ success: true, data: documents });
-    
+
   } catch (error) {
     console.error('Get documents error:', error);
     res.status(500).json({ success: false, message: error.message });

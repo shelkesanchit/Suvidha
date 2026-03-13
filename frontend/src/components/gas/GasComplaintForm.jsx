@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -13,11 +12,12 @@ import {
   Typography,
   CircularProgress,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { buildDocumentPayload, validateFile } from './formUtils';
 import DocUpload from '../municipal/DocUpload';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const complaintOptionsPNG = [
   { value: 'billing', label: 'Billing Dispute' },
@@ -40,8 +40,11 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
   const complaintOptions = isPNG ? complaintOptionsPNG : complaintOptionsLPG;
 
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [complaintNumber, setComplaintNumber] = useState('');
+  const [otpDialogOpen, setOtpDialogOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [submittedAt, setSubmittedAt] = useState('');
   const [attachment, setAttachment] = useState(null);
   const docs = { attachment };
 
@@ -49,6 +52,7 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
     consumer_id: '',
     mobile: '',
     contact_name: '',
+    email: '',
     complaint_category: '',
     urgency: 'medium',
     preferred_visit_date: '',
@@ -75,19 +79,30 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
     toast.success(`${file.name} selected`);
   };
 
-  const handleSubmit = async () => {
+  const validateForm = () => {
     if (!formData.complaint_category || !formData.description || !formData.contact_name) {
       toast.error('Please fill required complaint fields');
-      return;
+      return false;
     }
     if (!formData.consumer_id && !formData.mobile) {
       toast.error('Provide consumer number or mobile number');
-      return;
+      return false;
     }
     if (formData.mobile && !/^\d{10}$/.test(formData.mobile)) {
       toast.error('Enter valid 10-digit mobile number');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const handleSubmitClick = () => {
+    if (!validateForm()) return;
+    setOtpDialogOpen(true);
+  };
+
+  const handleSubmitAfterOtp = async (email) => {
+    setOtpDialogOpen(false);
+    setVerifiedEmail(email);
 
     try {
       setSubmitting(true);
@@ -98,6 +113,7 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
       const payload = {
         complaint_data: {
           ...formData,
+          email,
           gas_type: gasType,
           attachment_url: attachmentName,
           additional_info: {
@@ -115,8 +131,10 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
       const complaintNo = response?.data?.data?.complaint_number;
       if (!complaintNo) throw new Error('Complaint number missing in response');
 
+      const now = new Date().toISOString();
       setComplaintNumber(complaintNo);
-      setSubmitted(true);
+      setSubmittedAt(now);
+      setReceiptOpen(true);
       toast.success('Complaint registered successfully');
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Failed to submit complaint');
@@ -124,23 +142,6 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
       setSubmitting(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <Box>
-        <DialogTitle sx={{ px: 3, py: 2, bgcolor: '#eaf2ff', borderBottom: '1px solid #cfe0ff', pb: 0 }}>
-          <Typography variant="h6" fontWeight={700} sx={{ color: '#0f4aa6' }}>Complaint Registered</Typography>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3, px: 3, pb: 2, textAlign: 'center' }}>
-          <SuccessIcon sx={{ fontSize: 74, color: 'success.main', mb: 1.5 }} />
-          <Typography variant="h6" gutterBottom>Your complaint has been submitted successfully</Typography>
-          <Chip label={complaintNumber} color="primary" sx={{ px: 2, py: 2.5, fontSize: '1rem', mb: 2 }} />
-          <Alert severity="info" sx={{ textAlign: 'left' }}>Use this complaint number in the tracking form.</Alert>
-        </DialogContent>
-        <DialogActions sx={{ p: 3 }}><Button fullWidth variant="contained" onClick={onClose}>Close</Button></DialogActions>
-      </Box>
-    );
-  }
 
   return (
     <Box>
@@ -158,6 +159,7 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
           <Grid item xs={12} sm={6}><TextField fullWidth label="Consumer Number" name="consumer_id" value={formData.consumer_id} onChange={handleChange} placeholder="GC2024XXXXXX" /></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth label="Mobile Number" name="mobile" value={formData.mobile} onChange={(e) => setFormData((p) => ({ ...p, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) }))} /></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth required label="Contact Name *" name="contact_name" value={formData.contact_name} onChange={handleChange} /></Grid>
+          <Grid item xs={12} sm={6}><TextField fullWidth label="Email" name="email" value={formData.email} onChange={handleChange} placeholder="For receipt delivery" /></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth required select label="Complaint Category *" name="complaint_category" value={formData.complaint_category} onChange={handleChange}>{complaintOptions.map((opt) => <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>)}</TextField></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth select label="Priority" name="urgency" value={formData.urgency} onChange={handleChange}><MenuItem value="low">Low</MenuItem><MenuItem value="medium">Medium</MenuItem><MenuItem value="high">High</MenuItem><MenuItem value="critical">Critical</MenuItem></TextField></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth type="date" InputLabelProps={{ shrink: true }} label="Preferred Visit Date" name="preferred_visit_date" value={formData.preferred_visit_date} onChange={handleChange} /></Grid>
@@ -173,8 +175,28 @@ const GasComplaintForm = ({ onClose, gasType = 'lpg' }) => {
       <DialogActions sx={{ p: 3 }}>
         <Button onClick={onClose} disabled={submitting}>Cancel</Button>
         <Box sx={{ flex: '1 1 auto' }} />
-        <Button variant="contained" onClick={handleSubmit} disabled={submitting}>{submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Complaint'}</Button>
+        <Button variant="contained" onClick={handleSubmitClick} disabled={submitting}>
+          {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Complaint'}
+        </Button>
       </DialogActions>
+
+      <EmailOtpVerification
+        open={otpDialogOpen}
+        onClose={() => setOtpDialogOpen(false)}
+        onVerified={handleSubmitAfterOtp}
+        initialEmail={formData.email}
+        title="Verify Email to Submit Complaint"
+      />
+
+      <ApplicationReceipt
+        open={receiptOpen}
+        onClose={() => { setReceiptOpen(false); onClose(); }}
+        applicationNumber={complaintNumber}
+        applicationType="complaint"
+        formData={{ ...formData, gas_type: gasType, email: verifiedEmail }}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 };
