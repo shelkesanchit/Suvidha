@@ -34,7 +34,6 @@ const PRIORITY_COLOR = {
 };
 
 export default function AdminOverview() {
-  const [stats, setStats] = useState(null);
   const [recentApps, setRecentApps] = useState([]);
   const [recentComplaints, setRecentComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
