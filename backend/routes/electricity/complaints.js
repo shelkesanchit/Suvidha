@@ -12,8 +12,9 @@ router.post('/submit', [
   body('full_name').notEmpty().withMessage('Full name is required'),
   body('mobile').notEmpty().isLength({ min: 10, max: 10 }).withMessage('Valid mobile number is required'),
 ], async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array(), error: errors.array()[0]?.msg });
@@ -92,11 +93,15 @@ router.post('/submit', [
       complaint_id: result.rows[0].id
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Submit complaint error:', error.message);
     res.status(500).json({ error: 'Failed to submit complaint', details: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

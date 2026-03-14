@@ -4,8 +4,9 @@ const { pool } = require('../../config/database');
 
 // Process payment
 router.post('/process', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { consumer_number, bill_number, amount, payment_method, mobile } = req.body;
@@ -60,11 +61,15 @@ router.post('/process', async (req, res) => {
       data: { transaction_id: transactionId, receipt_number: receiptNumber, amount, payment_method, consumer_number }
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Process water payment error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "db:migrate": "node scripts/electricity-migrate.js",
     "db:migrate:water": "node scripts/water-migrate.js",
-    "db:migrate:gas": "node scripts/gas-migrate.js"
+    "db:migrate:gas": "node scripts/gas-migrate.js",
+    "db:migrate:municipal": "node scripts/municipal-migrate.js"
   },
   "keywords": [
     "electricity",

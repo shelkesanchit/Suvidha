@@ -9,6 +9,8 @@ import DocUpload from './DocUpload';
 import { validateFile } from './formUtils';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#37474f';
 const HOVER_COLOR  = '#263238';
@@ -67,6 +69,10 @@ export default function MunicipalGrievanceForm({ onClose }) {
   const [apptSubmitting, setApptSubmitting] = useState(false);
   const [apptSubmitted,  setApptSubmitted]  = useState(false);
   const [apptRef,        setApptRef]        = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptInfo, setReceiptInfo] = useState({ appNum: '', type: '', data: {}, ts: '', email: '' });
 
   /* ── Helpers ───────────────────────────────────────────────────── */
   const handleTabChange = (_, val) => { setActiveTab(val); setActiveStep(0); };
@@ -168,13 +174,37 @@ export default function MunicipalGrievanceForm({ onClose }) {
   const handleLodgeSubmit = async () => {
     setLodgeSubmitting(true);
     try {
+      const docsArray = await Promise.all(
+        Object.entries(lodgeDocs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'grievance_lodge',
+        application_type: 'grievance',
         application_data: lodgeData,
-        documents: lodgeDocs,
+        documents: docsArray,
       });
-      setLodgeRef(res.data?.reference_number || `GRV-${Date.now()}`);
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `GRV-${Date.now()}`;
+      const ts = new Date().toISOString();
+      setLodgeRef(appNum);
       setLodgeSubmitted(true);
+      setReceiptInfo({ appNum, type: 'grievance', data: { ...lodgeData }, ts, email: verifiedEmail || lodgeData.email || '' });
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: verifiedEmail || lodgeData.email || '',
+        application_number: appNum,
+        application_type: 'grievance',
+        application_data: { ...lodgeData },
+        submitted_at: ts,
+      }).catch(console.warn);
       toast.success('Complaint lodged successfully!');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Submission failed. Please try again.');
@@ -187,13 +217,37 @@ export default function MunicipalGrievanceForm({ onClose }) {
     if (!validateStep()) return;
     setRtiSubmitting(true);
     try {
+      const docsArray = await Promise.all(
+        Object.entries(rtiDocs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
       const res = await api.post('/municipal/applications/submit', {
         application_type: 'rti_application',
         application_data: rtiData,
-        documents: rtiDocs,
+        documents: docsArray,
       });
-      setRtiRef(res.data?.reference_number || `RTI-${Date.now()}`);
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `RTI-${Date.now()}`;
+      const ts = new Date().toISOString();
+      setRtiRef(appNum);
       setRtiSubmitted(true);
+      setReceiptInfo({ appNum, type: 'rti_application', data: { ...rtiData }, ts, email: verifiedEmail || rtiData.email || '' });
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: verifiedEmail || rtiData.email || '',
+        application_number: appNum,
+        application_type: 'rti_application',
+        application_data: { ...rtiData },
+        submitted_at: ts,
+      }).catch(console.warn);
       toast.success('RTI Application submitted successfully!');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Submission failed.');
@@ -209,10 +263,21 @@ export default function MunicipalGrievanceForm({ onClose }) {
       const res = await api.post('/municipal/applications/submit', {
         application_type: 'appointment_booking',
         application_data: apptData,
-        documents: {},
+        documents: [],
       });
-      setApptRef(res.data?.reference_number || `APT-${Date.now()}`);
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `APT-${Date.now()}`;
+      const ts = new Date().toISOString();
+      setApptRef(appNum);
       setApptSubmitted(true);
+      setReceiptInfo({ appNum, type: 'appointment_booking', data: { ...apptData }, ts, email: verifiedEmail || apptData.email || '' });
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: verifiedEmail || apptData.email || '',
+        application_number: appNum,
+        application_type: 'appointment_booking',
+        application_data: { ...apptData },
+        submitted_at: ts,
+      }).catch(console.warn);
       toast.success('Appointment booked successfully!');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Booking failed.');
@@ -279,12 +344,7 @@ export default function MunicipalGrievanceForm({ onClose }) {
           <TextField fullWidth label="Address / Residential Area *" value={lodgeData.address} onChange={updLodge('address')} multiline rows={2} />
         </Grid>
         <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={lodgeData.ward} label="Ward *" onChange={updLodge('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
+                    <TextField fullWidth required label="Ward *" value={lodgeData.ward} onChange={updLodge('ward')} />
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth label="District" value={lodgeData.district} onChange={updLodge('district')} />
@@ -422,12 +482,7 @@ export default function MunicipalGrievanceForm({ onClose }) {
           <TextField fullWidth label="Complete Address *" value={rtiData.address} onChange={updRti('address')} multiline rows={2} />
         </Grid>
         <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Ward</InputLabel>
-            <Select value={rtiData.ward} label="Ward" onChange={updRti('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
+                    <TextField fullWidth label="Ward" value={rtiData.ward} onChange={updRti('ward')} />
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth label="Nationality" value={rtiData.nationality} onChange={updRti('nationality')} />
@@ -659,6 +714,12 @@ export default function MunicipalGrievanceForm({ onClose }) {
     activeTab === 3 ? apptSubmitted  : false;
 
   /* ── Render ────────────────────────────────────────────────────── */
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    handleSubmit();
+  };
+
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: HEADER_COLOR, color: '#fff', py: 2 }}>
@@ -764,7 +825,7 @@ export default function MunicipalGrievanceForm({ onClose }) {
             </Button>
           ) : (
             <Button
-              onClick={handleSubmit} variant="contained" disabled={submitting}
+              onClick={() => setShowOtpDialog(true)} variant="contained" disabled={submitting}
               sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
             >
               {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Application'}
@@ -772,6 +833,23 @@ export default function MunicipalGrievanceForm({ onClose }) {
           )}
         </DialogActions>
       )}
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={activeTab === 0 ? lodgeData.email || '' : activeTab === 2 ? rtiData.email || '' : apptData.email || ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptInfo.appNum}
+        applicationType={receiptInfo.type}
+        formData={receiptInfo.data}
+        email={receiptInfo.email}
+        submittedAt={receiptInfo.ts}
+      />
     </Box>
   );
 }
+

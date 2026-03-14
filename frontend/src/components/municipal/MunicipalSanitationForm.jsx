@@ -9,6 +9,8 @@ import DocUpload from './DocUpload';
 import { validateFile } from './formUtils';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#5d4037';
 const HOVER_COLOR  = '#3e2723';
@@ -74,6 +76,13 @@ export default function MunicipalSanitationForm({ onClose }) {
   const [saniSubmitting, setSaniSubmitting] = useState(false);
   const [saniSubmitted,  setSaniSubmitted]  = useState(false);
   const [saniRef,        setSaniRef]        = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [receiptAppType, setReceiptAppType] = useState('');
+  const [receiptFormData, setReceiptFormData] = useState({});
+  const [receiptAppNum, setReceiptAppNum] = useState('');
 
   /* ── Tab switch ────────────────────────────────────────────────── */
   const handleTabChange = (_, val) => { setActiveTab(val); setActiveStep(0); };
@@ -167,17 +176,44 @@ export default function MunicipalSanitationForm({ onClose }) {
   const handleBack = () => setActiveStep(s => s - 1);
 
   /* ── Submit handlers ───────────────────────────────────────────── */
-  const handleGarbSubmit = async () => {
+  const handleGarbSubmit = async (email) => {
     if (!validateStep()) return;
     setGarbSubmitting(true);
     try {
+      const docsArray = await Promise.all(
+        Object.entries(garbDocs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
       const res = await api.post('/municipal/applications/submit', {
         application_type: 'garbage_complaint',
         application_data: garbData,
-        documents: garbDocs,
+        documents: docsArray,
       });
-      setGarbRef(res.data?.reference_number || `GRB-${Date.now()}`);
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `GRB-${Date.now()}`;
+      const ts = new Date().toISOString();
+      setGarbRef(appNum);
       setGarbSubmitted(true);
+      setReceiptAppNum(appNum);
+      setReceiptAppType('garbage_complaint');
+      setReceiptFormData({ ...garbData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'garbage_complaint',
+        application_data: { ...garbData },
+        submitted_at: ts,
+      }).catch(console.warn);
       toast.success('Garbage complaint submitted successfully!');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Submission failed. Please try again.');
@@ -186,17 +222,31 @@ export default function MunicipalSanitationForm({ onClose }) {
     }
   };
 
-  const handleBulkSubmit = async () => {
+  const handleBulkSubmit = async (email) => {
     if (!validateStep()) return;
     setBulkSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
         application_type: 'bulk_waste_pickup',
         application_data: bulkData,
-        documents: {},
+        documents: [],
       });
-      setBulkRef(res.data?.reference_number || `BWP-${Date.now()}`);
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `BWP-${Date.now()}`;
+      const ts = new Date().toISOString();
+      setBulkRef(appNum);
       setBulkSubmitted(true);
+      setReceiptAppNum(appNum);
+      setReceiptAppType('bulk_waste_pickup');
+      setReceiptFormData({ ...bulkData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'bulk_waste_pickup',
+        application_data: { ...bulkData },
+        submitted_at: ts,
+      }).catch(console.warn);
       toast.success('Bulk pickup request submitted!');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Submission failed.');
@@ -205,17 +255,31 @@ export default function MunicipalSanitationForm({ onClose }) {
     }
   };
 
-  const handleSaniSubmit = async () => {
+  const handleSaniSubmit = async (email) => {
     if (!validateStep()) return;
     setSaniSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'sanitation_services_request',
+        application_type: 'sanitation_services',
         application_data: saniData,
-        documents: {},
+        documents: [],
       });
-      setSaniRef(res.data?.reference_number || `SSR-${Date.now()}`);
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `SSR-${Date.now()}`;
+      const ts = new Date().toISOString();
+      setSaniRef(appNum);
       setSaniSubmitted(true);
+      setReceiptAppNum(appNum);
+      setReceiptAppType('sanitation_services');
+      setReceiptFormData({ ...saniData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'sanitation_services',
+        application_data: { ...saniData },
+        submitted_at: ts,
+      }).catch(console.warn);
       toast.success('Sanitation service request submitted!');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Submission failed.');
@@ -224,10 +288,10 @@ export default function MunicipalSanitationForm({ onClose }) {
     }
   };
 
-  const handleSubmit = () => {
-    if (activeTab === 0)      handleGarbSubmit();
-    else if (activeTab === 1) handleBulkSubmit();
-    else if (activeTab === 3) handleSaniSubmit();
+  const handleSubmit = (email) => {
+    if (activeTab === 0)      handleGarbSubmit(email);
+    else if (activeTab === 1) handleBulkSubmit(email);
+    else if (activeTab === 3) handleSaniSubmit(email);
   };
 
   const handleFetchSwBill = async () => {
@@ -294,12 +358,7 @@ export default function MunicipalSanitationForm({ onClose }) {
         <Grid item xs={12} sm={6}><TextField fullWidth label="Aadhaar Number" value={garbData.aadhaar} onChange={updGarb('aadhaar')} inputProps={{ maxLength: 12 }} /></Grid>
         <Grid item xs={12}><TextField fullWidth label="Address *" value={garbData.address} onChange={updGarb('address')} multiline rows={2} /></Grid>
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={garbData.ward} label="Ward *" onChange={updGarb('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
+                    <TextField fullWidth required label="Ward *" value={garbData.ward} onChange={updGarb('ward')} />
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField fullWidth label="Alternative Contact (optional)" value={garbData.altContact} onChange={updGarb('altContact')} inputProps={{ maxLength: 10 }} />
@@ -411,12 +470,7 @@ export default function MunicipalSanitationForm({ onClose }) {
         <Grid item xs={12} sm={6}><TextField fullWidth label="Aadhaar Number" value={bulkData.aadhaar} onChange={updBulk('aadhaar')} inputProps={{ maxLength: 12 }} /></Grid>
         <Grid item xs={12}><TextField fullWidth label="Premises Address *" value={bulkData.premisesAddress} onChange={updBulk('premisesAddress')} multiline rows={2} /></Grid>
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={bulkData.ward} label="Ward *" onChange={updBulk('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
+                    <TextField fullWidth required label="Ward *" value={bulkData.ward} onChange={updBulk('ward')} />
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField fullWidth label="Contact at Premises (Alt. Mobile)" value={bulkData.altMobile} onChange={updBulk('altMobile')} inputProps={{ maxLength: 10 }} />
@@ -651,12 +705,7 @@ export default function MunicipalSanitationForm({ onClose }) {
         <Grid item xs={12} sm={6}><TextField fullWidth label="Aadhaar Number" value={saniData.aadhaar} onChange={updSani('aadhaar')} inputProps={{ maxLength: 12 }} /></Grid>
         <Grid item xs={12}><TextField fullWidth label="Address *" value={saniData.address} onChange={updSani('address')} multiline rows={2} /></Grid>
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={saniData.ward} label="Ward *" onChange={updSani('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
+                    <TextField fullWidth required label="Ward *" value={saniData.ward} onChange={updSani('ward')} />
         </Grid>
       </Grid>
     );
@@ -788,6 +837,12 @@ export default function MunicipalSanitationForm({ onClose }) {
     activeTab === 3 ? saniSubmitted : false;
 
   /* ── Render ────────────────────────────────────────────────────── */
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    handleSubmit(email);
+  };
+
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: HEADER_COLOR, color: '#fff', py: 2 }}>
@@ -832,7 +887,7 @@ export default function MunicipalSanitationForm({ onClose }) {
             </Button>
           ) : (
             <Button
-              onClick={handleSubmit} variant="contained"
+              onClick={() => setShowOtpDialog(true)} variant="contained"
               disabled={submitting || (activeTab === 1 && !bulkDeclaration)}
               sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
             >
@@ -841,6 +896,23 @@ export default function MunicipalSanitationForm({ onClose }) {
           )}
         </DialogActions>
       )}
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={activeTab === 0 ? garbData.email || '' : activeTab === 1 ? bulkData.email || '' : activeTab === 3 ? saniData.email || '' : ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptAppNum}
+        applicationType={receiptAppType}
+        formData={receiptFormData}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 }
+

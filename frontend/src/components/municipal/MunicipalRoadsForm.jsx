@@ -1,104 +1,114 @@
 import React, { useState } from 'react';
 import {
-  Box, Grid, TextField, Select, MenuItem, Button, Tabs, Tab,
+  Box, Grid, TextField, MenuItem, Button, Tabs, Tab,
   Stepper, Step, StepLabel, Alert, Chip, CircularProgress,
   Paper, Divider, Typography, DialogContent, DialogActions,
-  DialogTitle, Switch, FormControlLabel, InputLabel, FormControl,
+  DialogTitle, Switch, FormControlLabel, Select, InputLabel, FormControl,
 } from '@mui/material';
+import { CheckCircle as SuccessIcon } from '@mui/icons-material';
 import DocUpload from './DocUpload';
 import { validateFile } from './formUtils';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#e65100';
 const HOVER_COLOR  = '#bf360c';
-const WARDS        = Array.from({ length: 10 }, (_, i) => `Ward ${i + 1}`);
+const WARDS = Array.from({ length: 10 }, (_, i) => 'Ward ' + (i + 1));
 
-const POT_STEPS   = ['Your Details',    'Damage Information',   'Photos & Submit'];
-const LIGHT_STEPS = ['Reporter Info',   'Streetlight Details',  'Photos & Submit'];
-const DRAIN_STEPS = ['Reporter Info',   'Drain Details',        'Photos & Submit'];
-const CUT_STEPS   = ['Applicant Info',  'Work Details',         'Documents',       'Review'];
+const POT_STEPS   = ['Reporter Details', 'Damage Details',       'Location & Documents'];
+const LIGHT_STEPS = ['Reporter Details', 'Light/Pole Details',   'Location & Documents'];
+const DRAIN_STEPS = ['Reporter Details', 'Issue Details',        'Location & Documents'];
+const CUT_STEPS   = ['Applicant Details','Work Details',         'Traffic & Safety Plan', 'Documents'];
 
 const getTodayPlus = (days) => {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
 };
-const datePlusOne = (iso) => {
-  if (!iso) return getTodayPlus(1);
-  const d = new Date(iso);
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
-};
-const daysBetween = (a, b) => {
-  if (!a || !b) return '';
-  const diff = new Date(b) - new Date(a);
-  const days = Math.ceil(diff / 86400000);
-  return days > 0 ? `${days} days` : '';
-};
 
 export default function MunicipalRoadsForm({ onClose }) {
   const [activeTab,  setActiveTab]  = useState(0);
   const [activeStep, setActiveStep] = useState(0);
 
-  /* ── Pothole / Road Damage ─────────────────────────────────────── */
+  /* ── Tab 0: Pothole / Road Damage ─────────────────────────────────── */
   const [potData, setPotData] = useState({
-    fullName: '', mobile: '', email: '', address: '', ward: '', aadhaar: '',
-    roadName: '', gpsCoords: '', nearestLandmark: '', wardIncident: '',
-    damageType: '', damageSeverity: '', approxSize: '', roadClassification: '',
-    daysDamageNoticed: '', trafficImpact: '', accidentOccurred: '',
-    accidentDescription: '', additionalDetails: '',
+    fullName: '', mobile: '', email: '', aadhaar: '', address: '', ward: '',
+    propertyFront: '',
+    roadName: '', roadType: '', damageType: '', severity: '',
+    damageLength: '', damageWidth: '', potholeDepth: '',
+    accidentsReported: '', damageDuration: '', drainageIssue: '',
+    exactLocation: '', landmark: '', distanceFromLandmark: '', gpsCoords: '',
+    previouslyReported: '', prevComplaintNo: '',
   });
   const [potDocs,       setPotDocs]       = useState({});
   const [potSubmitting, setPotSubmitting] = useState(false);
   const [potSubmitted,  setPotSubmitted]  = useState(false);
   const [potRef,        setPotRef]        = useState('');
 
-  /* ── Streetlight Complaint ─────────────────────────────────────── */
+  /* ── Tab 1: Broken Streetlight ─────────────────────────────────────── */
   const [lightData, setLightData] = useState({
-    fullName: '', mobile: '', email: '', ward: '', address: '',
-    streetName: '', poleId: '', wardIncident: '', nearestLandmark: '',
-    complaintType: '', numNonWorking: '', areaAffected: '',
-    timeNoticed: '', daysPersisting: '', safetyHazard: '', additionalDescription: '',
+    fullName: '', mobile: '', email: '', address: '', ward: '', nearestLandmark: '',
+    complaintType: '', poleId: '', streetName: '', areaType: '',
+    numLightsAffected: '', issueDuration: '', safetyRisk: '',
+    exactLocation: '', gpsCoords: '', nearbyJunction: '',
+    previouslyReported: '', prevComplaintNo: '',
   });
   const [lightDocs,       setLightDocs]       = useState({});
   const [lightSubmitting, setLightSubmitting] = useState(false);
   const [lightSubmitted,  setLightSubmitted]  = useState(false);
   const [lightRef,        setLightRef]        = useState('');
 
-  /* ── Drain / Manhole Issue ─────────────────────────────────────── */
+  /* ── Tab 2: Drain / Manhole / Stormwater ──────────────────────────── */
   const [drainData, setDrainData] = useState({
     fullName: '', mobile: '', email: '', address: '', ward: '',
-    drainLocation: '', wardIncident: '', nearestLandmark: '',
-    issueType: '', roadPathBlocked: '', waterStagnationDepth: '',
-    manholeStatus: '', riskToPublic: '', riskDescription: '',
-    durationOfIssue: '', additionalDescription: '',
+    issueType: '', drainType: '', roadBlocked: '', floodDepth: '',
+    sewageVisible: '', issueDuration: '', manholeId: '',
+    exactLocation: '', nearestCrossRoad: '', gpsCoords: '', affectedLength: '',
+    previouslyReported: '', prevComplaintNo: '',
   });
   const [drainDocs,       setDrainDocs]       = useState({});
   const [drainSubmitting, setDrainSubmitting] = useState(false);
   const [drainSubmitted,  setDrainSubmitted]  = useState(false);
   const [drainRef,        setDrainRef]        = useState('');
 
-  /* ── Road Cutting Permit ───────────────────────────────────────── */
+  /* ── Tab 3: Road Cutting Permit ────────────────────────────────────── */
   const [cutData, setCutData] = useState({
-    orgName: '', orgType: '', contactPerson: '', contactMobile: '',
-    officialEmail: '', aadhaarPan: '', registeredAddress: '', ward: '',
-    roadName: '', wardCutting: '', startPoint: '', endPoint: '',
-    gpsCoords: '', workType: '', cutLength: '', cutWidth: '', cutDepth: '',
-    proposedStart: '', proposedEnd: '',
-    contractorName: '', contractorMobile: '', contractorLicense: '',
-    roadRestoration: '', workDescription: '',
+    applicantType: '', orgName: '', contactName: '', designation: '',
+    mobile: '', email: '', officeAddress: '', regNo: '', gstin: '',
+    purpose: '', roadName: '', ward: '',
+    totalLength: '', trenchWidth: '', trenchDepth: '',
+    startDate: '', endDate: '', workHoursFrom: '', workHoursTo: '',
+    nightWork: '', completionDate: '', isMainRoad: '',
+    diversionRoute: '', trafficMarshal: '', numMarshals: '',
+    barricadingType: '', signage: '', safetyOfficer: '',
+    noiseVibration: '', machinery: '', debrisDisposal: '',
+    roadRestoration: '', restorationDeposit: '',
   });
-  const [cutDocs,        setCutDocs]        = useState({});
-  const [cutDeclaration, setCutDeclaration] = useState(false);
-  const [cutSubmitting,  setCutSubmitting]  = useState(false);
-  const [cutSubmitted,   setCutSubmitted]   = useState(false);
-  const [cutRef,         setCutRef]         = useState('');
+  const [cutDocs,       setCutDocs]       = useState({});
+  const [cutSubmitting, setCutSubmitting] = useState(false);
+  const [cutSubmitted,  setCutSubmitted]  = useState(false);
+  const [cutRef,        setCutRef]        = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [receiptAppType, setReceiptAppType] = useState('');
+  const [receiptFormData, setReceiptFormData] = useState({});
+  const [receiptAppNum, setReceiptAppNum] = useState('');
 
-  /* ── Tab switch ────────────────────────────────────────────────── */
-  const handleTabChange = (_, val) => { setActiveTab(val); setActiveStep(0); };
+  /* ── Tab switch ─────────────────────────────────────────────────────── */
+  const handleTabChange = (_, val) => {
+    setActiveTab(val);
+    setActiveStep(0);
+    setPotSubmitted(false);
+    setLightSubmitted(false);
+    setDrainSubmitted(false);
+    setCutSubmitted(false);
+  };
 
-  /* ── Field updaters ────────────────────────────────────────────── */
+  /* ── Field updaters ─────────────────────────────────────────────────── */
   const updPot = (f) => (e) => {
     let v = e.target.value;
     if (f === 'mobile')  v = v.replace(/\D/g, '').slice(0, 10);
@@ -117,11 +127,11 @@ export default function MunicipalRoadsForm({ onClose }) {
   };
   const updCut = (f) => (e) => {
     let v = e.target.value;
-    if (f === 'contactMobile' || f === 'contractorMobile') v = v.replace(/\D/g, '').slice(0, 10);
+    if (f === 'mobile') v = v.replace(/\D/g, '').slice(0, 10);
     setCutData(p => ({ ...p, [f]: v }));
   };
 
-  /* ── Doc handlers ──────────────────────────────────────────────── */
+  /* ── Doc handlers ───────────────────────────────────────────────────── */
   const mkDocHandler = (setter) => (name, file) => {
     if (!file) return;
     const err = validateFile(file, 5);
@@ -129,94 +139,102 @@ export default function MunicipalRoadsForm({ onClose }) {
     setter(p => ({ ...p, [name]: file }));
     toast.success(`${file.name} selected`);
   };
-  const mkRemoveHandler = (setter) => (name) =>
+  const mkRemove = (setter) => (name) =>
     setter(p => { const n = { ...p }; delete n[name]; return n; });
 
   const handlePotDoc   = mkDocHandler(setPotDocs);
-  const removePotDoc   = mkRemoveHandler(setPotDocs);
+  const removePotDoc   = mkRemove(setPotDocs);
   const handleLightDoc = mkDocHandler(setLightDocs);
-  const removeLightDoc = mkRemoveHandler(setLightDocs);
+  const removeLightDoc = mkRemove(setLightDocs);
   const handleDrainDoc = mkDocHandler(setDrainDocs);
-  const removeDrainDoc = mkRemoveHandler(setDrainDocs);
+  const removeDrainDoc = mkRemove(setDrainDocs);
   const handleCutDoc   = mkDocHandler(setCutDocs);
-  const removeCutDoc   = mkRemoveHandler(setCutDocs);
+  const removeCutDoc   = mkRemove(setCutDocs);
 
-  /* ── Validation ────────────────────────────────────────────────── */
+  /* ── Validation ─────────────────────────────────────────────────────── */
   const validateStep = () => {
+    /* ---- Tab 0: Pothole / Road Damage ---- */
     if (activeTab === 0) {
       if (activeStep === 0) {
-        if (!potData.fullName.trim())      { toast.error('Full Name is required');              return false; }
-        if (potData.mobile.length < 10)    { toast.error('Valid 10-digit mobile required');      return false; }
-        if (!potData.ward)                 { toast.error('Ward is required');                    return false; }
+        if (!potData.fullName.trim())      { toast.error('Full Name is required');                  return false; }
+        if (potData.mobile.length < 10)    { toast.error('Valid 10-digit mobile required');         return false; }
+        if (!potData.address.trim())       { toast.error('Address / Locality is required');         return false; }
+        if (!potData.ward)                 { toast.error('Ward is required');                       return false; }
       }
       if (activeStep === 1) {
-        if (!potData.roadName.trim())      { toast.error('Road Name / Location is required');    return false; }
-        if (!potData.nearestLandmark.trim()){ toast.error('Nearest Landmark is required');       return false; }
-        if (!potData.damageType)           { toast.error('Damage Type is required');             return false; }
-        if (!potData.damageSeverity)       { toast.error('Damage Severity is required');         return false; }
+        if (!potData.roadName.trim())      { toast.error('Road Name / Route is required');          return false; }
+        if (!potData.roadType)             { toast.error('Road Type is required');                  return false; }
+        if (!potData.damageType)           { toast.error('Type of Damage is required');             return false; }
+        if (!potData.severity)             { toast.error('Severity is required');                   return false; }
       }
       if (activeStep === 2) {
-        if (!potDocs['road_damage_photo']) { toast.error('Photo of Road Damage is required');    return false; }
+        if (!potData.exactLocation.trim()) { toast.error('Exact Location is required');             return false; }
+        if (!potData.landmark.trim())      { toast.error('Nearest Landmark is required');           return false; }
+        if (!potDocs['road_photo'])        { toast.error('Road Damage Photo is required');          return false; }
       }
     }
+    /* ---- Tab 1: Broken Streetlight ---- */
     if (activeTab === 1) {
       if (activeStep === 0) {
-        if (!lightData.fullName.trim())    { toast.error('Full Name is required');               return false; }
-        if (lightData.mobile.length < 10)  { toast.error('Valid 10-digit mobile required');      return false; }
-        if (!lightData.ward)               { toast.error('Ward is required');                    return false; }
+        if (!lightData.fullName.trim())       { toast.error('Full Name is required');               return false; }
+        if (lightData.mobile.length < 10)     { toast.error('Valid 10-digit mobile required');      return false; }
+        if (!lightData.address.trim())        { toast.error('Address / Locality is required');      return false; }
+        if (!lightData.ward)                  { toast.error('Ward is required');                    return false; }
       }
       if (activeStep === 1) {
-        if (!lightData.streetName.trim())  { toast.error('Street / Road Name is required');      return false; }
-        if (!lightData.nearestLandmark.trim()){ toast.error('Nearest Landmark is required');     return false; }
-        if (!lightData.complaintType)      { toast.error('Complaint Type is required');          return false; }
+        if (!lightData.complaintType)         { toast.error('Type of Complaint is required');       return false; }
+        if (!lightData.streetName.trim())     { toast.error('Street / Road Name is required');      return false; }
+        if (!lightData.numLightsAffected)     { toast.error('Number of lights affected is required');return false; }
       }
       if (activeStep === 2) {
-        if (!lightDocs['light_photo'])     { toast.error('Photo of Broken/Dark Streetlight is required'); return false; }
+        if (!lightData.exactLocation.trim())  { toast.error('Exact Location Description is required');return false; }
+        if (!lightDocs['light_photo'])        { toast.error('Photo of Broken Streetlight is required');return false; }
       }
     }
+    /* ---- Tab 2: Drain / Manhole ---- */
     if (activeTab === 2) {
       if (activeStep === 0) {
-        if (!drainData.fullName.trim())    { toast.error('Full Name is required');               return false; }
-        if (drainData.mobile.length < 10)  { toast.error('Valid 10-digit mobile required');      return false; }
-        if (!drainData.ward)               { toast.error('Ward is required');                    return false; }
+        if (!drainData.fullName.trim())       { toast.error('Full Name is required');               return false; }
+        if (drainData.mobile.length < 10)     { toast.error('Valid 10-digit mobile required');      return false; }
+        if (!drainData.address.trim())        { toast.error('Address / Locality is required');      return false; }
+        if (!drainData.ward)                  { toast.error('Ward is required');                    return false; }
       }
       if (activeStep === 1) {
-        if (!drainData.drainLocation.trim()){ toast.error('Drain/Manhole Location is required'); return false; }
-        if (!drainData.nearestLandmark.trim()){ toast.error('Nearest Landmark is required');     return false; }
-        if (!drainData.issueType)          { toast.error('Issue Type is required');              return false; }
+        if (!drainData.issueType)             { toast.error('Issue Type is required');              return false; }
+        if (!drainData.roadBlocked)           { toast.error('Please indicate if road is blocked');  return false; }
       }
       if (activeStep === 2) {
-        if (!drainDocs['drain_photo'])     { toast.error('Photo of Drain/Manhole Issue is required'); return false; }
+        if (!drainData.exactLocation.trim())  { toast.error('Exact Location/Address is required');  return false; }
+        if (!drainData.nearestCrossRoad.trim()){ toast.error('Nearest Cross Road is required');     return false; }
+        if (!drainDocs['drain_photo'])        { toast.error('Photo of Drain/Manhole Issue is required');return false; }
       }
     }
+    /* ---- Tab 3: Road Cutting Permit ---- */
     if (activeTab === 3) {
       if (activeStep === 0) {
-        if (!cutData.orgName.trim())       { toast.error('Organisation/Applicant Name is required'); return false; }
-        if (!cutData.contactPerson.trim()) { toast.error('Contact Person Name is required');     return false; }
-        if (cutData.contactMobile.length < 10){ toast.error('Valid contact mobile required');    return false; }
-        if (!cutData.officialEmail.trim()) { toast.error('Official Email is required');          return false; }
-        if (!cutData.registeredAddress.trim()){ toast.error('Registered Address is required');  return false; }
-        if (!cutData.ward)                 { toast.error('Ward is required');                    return false; }
+        if (!cutData.orgName.trim())          { toast.error('Organisation / Company Name is required');return false; }
+        if (!cutData.contactName.trim())      { toast.error('Contact Person Name is required');     return false; }
+        if (!cutData.designation.trim())      { toast.error('Designation is required');             return false; }
+        if (cutData.mobile.length < 10)       { toast.error('Valid 10-digit mobile required');      return false; }
+        if (!cutData.email.trim())            { toast.error('Official Email is required');          return false; }
+        if (!cutData.officeAddress.trim())    { toast.error('Office Address is required');          return false; }
       }
       if (activeStep === 1) {
-        if (!cutData.roadName.trim())      { toast.error('Road Name to be Cut is required');     return false; }
-        if (!cutData.wardCutting)          { toast.error('Ward of Cutting Location is required'); return false; }
-        if (!cutData.workType)             { toast.error('Work Type is required');               return false; }
-        if (!cutData.cutLength)            { toast.error('Length of Road to Cut is required');   return false; }
-        if (!cutData.cutWidth)             { toast.error('Width of Cut is required');            return false; }
-        if (!cutData.cutDepth)             { toast.error('Depth of Cut is required');            return false; }
-        if (!cutData.proposedStart)        { toast.error('Proposed Start Date is required');     return false; }
-        if (!cutData.proposedEnd)          { toast.error('Proposed End Date is required');       return false; }
-        if (!cutData.contractorName.trim()){ toast.error('Contractor/Agency Name is required');  return false; }
-        if (!cutData.roadRestoration)      { toast.error('Road Restoration Commitment is required'); return false; }
-        if (!cutData.workDescription.trim()){ toast.error('Work Description is required');      return false; }
+        if (!cutData.purpose)                 { toast.error('Purpose of Road Cutting is required'); return false; }
+        if (!cutData.roadName.trim())         { toast.error('Road / Street Name is required');      return false; }
+        if (!cutData.ward)                    { toast.error('Ward is required');                    return false; }
+        if (!cutData.totalLength)             { toast.error('Total Length of Cutting is required'); return false; }
+        if (!cutData.trenchWidth)             { toast.error('Width of Trench is required');         return false; }
+        if (!cutData.trenchDepth)             { toast.error('Depth of Trench is required');         return false; }
+        if (!cutData.startDate)               { toast.error('Proposed Start Date is required');     return false; }
+        if (!cutData.endDate)                 { toast.error('Proposed End Date is required');       return false; }
       }
       if (activeStep === 2) {
-        if (!cutDocs['sanction_letter'])   { toast.error('Work Sanction Letter is required');    return false; }
-        if (!cutDocs['site_plan'])         { toast.error('Site Location Plan / Drawing is required'); return false; }
+        if (!cutData.roadRestoration)         { toast.error('Road Restoration Method is required'); return false; }
       }
       if (activeStep === 3) {
-        if (!cutDeclaration)               { toast.error('Please accept the declaration to proceed'); return false; }
+        if (!cutDocs['work_order'])           { toast.error('Work Order / Sanction Letter is required');return false; }
+        if (!cutDocs['authorisation_letter']) { toast.error('Organisation Authorisation Letter is required');return false; }
       }
     }
     return true;
@@ -225,66 +243,270 @@ export default function MunicipalRoadsForm({ onClose }) {
   const handleNext = () => { if (validateStep()) setActiveStep(s => s + 1); };
   const handleBack = () => setActiveStep(s => s - 1);
 
-  /* ── Submit handlers ───────────────────────────────────────────── */
-  const mkSubmit = (type, data, docs, setSub, setRef, setSubmitted) => async () => {
+  /* ── Submit handlers ────────────────────────────────────────────────── */
+  const handlePotSubmit = async (email) => {
     if (!validateStep()) return;
-    setSub(true);
+    setPotSubmitting(true);
     try {
+      const docsArray = await Promise.all(
+        Object.entries(potDocs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
       const res = await api.post('/municipal/applications/submit', {
-        application_type: type,
-        application_data: data,
-        documents: docs,
+        application_type: 'road_damage_complaint',
+        application_data: potData,
+        documents: docsArray,
       });
-      setRef(res.data?.reference_number || `${type.slice(0, 3).toUpperCase()}-${Date.now()}`);
-      setSubmitted(true);
-      toast.success('Application submitted successfully!');
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `RDC-${Date.now()}`;
+      setPotRef(appNum);
+      setPotSubmitted(true);
+      const ts = new Date().toISOString();
+      setReceiptAppNum(appNum);
+      setReceiptAppType('pothole_complaint');
+      setReceiptFormData({ ...potData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'pothole_complaint',
+        application_data: { ...potData },
+        submitted_at: ts,
+      }).catch(console.warn);
+      toast.success('Road damage complaint submitted successfully!');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Submission failed. Please try again.');
     } finally {
-      setSub(false);
+      setPotSubmitting(false);
     }
   };
 
-  const handlePotSubmit   = mkSubmit('road_damage_report',       potData,   potDocs,   setPotSubmitting,   setPotRef,   setPotSubmitted);
-  const handleLightSubmit = mkSubmit('streetlight_complaint',    lightData, lightDocs, setLightSubmitting, setLightRef, setLightSubmitted);
-  const handleDrainSubmit = mkSubmit('drain_manhole_complaint',  drainData, drainDocs, setDrainSubmitting, setDrainRef, setDrainSubmitted);
-  const handleCutSubmit   = mkSubmit('road_cutting_permit',      cutData,   cutDocs,   setCutSubmitting,   setCutRef,   setCutSubmitted);
-
-  const handleSubmit = () => {
-    if (activeTab === 0)      handlePotSubmit();
-    else if (activeTab === 1) handleLightSubmit();
-    else if (activeTab === 2) handleDrainSubmit();
-    else if (activeTab === 3) handleCutSubmit();
+  const handleLightSubmit = async (email) => {
+    if (!validateStep()) return;
+    setLightSubmitting(true);
+    try {
+      const docsArray = await Promise.all(
+        Object.entries(lightDocs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
+      const res = await api.post('/municipal/applications/submit', {
+        application_type: 'streetlight_complaint',
+        application_data: lightData,
+        documents: docsArray,
+      });
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `SLC-${Date.now()}`;
+      setLightRef(appNum);
+      setLightSubmitted(true);
+      const ts = new Date().toISOString();
+      setReceiptAppNum(appNum);
+      setReceiptAppType('streetlight_complaint');
+      setReceiptFormData({ ...lightData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'streetlight_complaint',
+        application_data: { ...lightData },
+        submitted_at: ts,
+      }).catch(console.warn);
+      toast.success('Streetlight complaint submitted successfully!');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Submission failed. Please try again.');
+    } finally {
+      setLightSubmitting(false);
+    }
   };
 
-  /* ── Success screen helper ─────────────────────────────────────── */
-  const SuccessScreen = ({ refNo, message }) => (
-    <Box textAlign="center" py={5}>
-      <Typography variant="h6" fontWeight={700} gutterBottom>Submitted Successfully!</Typography>
-      <Chip label={`Reference: ${refNo}`} color="success" sx={{ fontSize: 15, py: 2.5, px: 1, mb: 2 }} />
-      <Typography color="text.secondary" mt={1}>{message}</Typography>
+  const handleDrainSubmit = async (email) => {
+    if (!validateStep()) return;
+    setDrainSubmitting(true);
+    try {
+      const docsArray = await Promise.all(
+        Object.entries(drainDocs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
+      const res = await api.post('/municipal/applications/submit', {
+        application_type: 'drain_manhole_complaint',
+        application_data: drainData,
+        documents: docsArray,
+      });
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `DRN-${Date.now()}`;
+      setDrainRef(appNum);
+      setDrainSubmitted(true);
+      const ts = new Date().toISOString();
+      setReceiptAppNum(appNum);
+      setReceiptAppType('drain_complaint');
+      setReceiptFormData({ ...drainData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'drain_complaint',
+        application_data: { ...drainData },
+        submitted_at: ts,
+      }).catch(console.warn);
+      toast.success('Drain/manhole complaint submitted successfully!');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Submission failed. Please try again.');
+    } finally {
+      setDrainSubmitting(false);
+    }
+  };
+
+  const handleCutSubmit = async (email) => {
+    if (!validateStep()) return;
+    setCutSubmitting(true);
+    try {
+      const docsArray = await Promise.all(
+        Object.entries(cutDocs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
+      const res = await api.post('/municipal/applications/submit', {
+        application_type: 'road_cutting_permit',
+        application_data: cutData,
+        documents: docsArray,
+      });
+      const appNum = res.data?.reference_number || res.data?.data?.application_number || `RCP-${Date.now()}`;
+      setCutRef(appNum);
+      setCutSubmitted(true);
+      const ts = new Date().toISOString();
+      setReceiptAppNum(appNum);
+      setReceiptAppType('road_cutting_permit');
+      setReceiptFormData({ ...cutData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'road_cutting_permit',
+        application_data: { ...cutData },
+        submitted_at: ts,
+      }).catch(console.warn);
+      toast.success('Road cutting permit application submitted!');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Submission failed. Please try again.');
+    } finally {
+      setCutSubmitting(false);
+    }
+  };
+
+  const handleSubmit = (email) => {
+    if (activeTab === 0)      handlePotSubmit(email);
+    else if (activeTab === 1) handleLightSubmit(email);
+    else if (activeTab === 2) handleDrainSubmit(email);
+    else if (activeTab === 3) handleCutSubmit(email);
+  };
+
+  /* ── Success screen ─────────────────────────────────────────────────── */
+  const SuccessScreen = ({ refNo, nextSteps }) => (
+    <Box textAlign="center" py={4}>
+      <SuccessIcon sx={{ fontSize: 64, color: 'success.main', mb: 1.5 }} />
+      <Typography variant="h6" fontWeight={700} gutterBottom>
+        Application Submitted Successfully!
+      </Typography>
+      <Chip
+        label={`Reference: ${refNo}`}
+        color="success"
+        sx={{ fontSize: 15, py: 2.5, px: 1, mb: 2 }}
+      />
+      <Alert severity="info" sx={{ textAlign: 'left', mb: 3 }}>
+        {nextSteps}
+      </Alert>
+      <Button variant="outlined" onClick={onClose}>Close</Button>
     </Box>
   );
 
-  /* ── Step renders ──────────────────────────────────────────────── */
-
-  /* Tab 0: Pothole / Road Damage */
+  /* ════════════════════════════════════════════════════════════════════
+     TAB 0 — POTHOLE / ROAD DAMAGE
+  ════════════════════════════════════════════════════════════════════ */
   const renderPotStep = () => {
-    if (potSubmitted)
-      return <SuccessScreen refNo={potRef} message="Roads department will inspect within 3 working days." />;
+    if (potSubmitted) return (
+      <SuccessScreen
+        refNo={potRef}
+        nextSteps="Your road damage complaint has been registered. The Roads Department will inspect the site within 3–5 working days. You can track your complaint using the reference number. For emergency road hazards call 1800-XXX-XXXX (24×7)."
+      />
+    );
 
     if (activeStep === 0) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Full Name *" value={potData.fullName} onChange={updPot('fullName')} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Mobile *" value={potData.mobile} onChange={updPot('mobile')} inputProps={{ maxLength: 10 }} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Email" value={potData.email} onChange={updPot('email')} type="email" /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Aadhaar Number" value={potData.aadhaar} onChange={updPot('aadhaar')} inputProps={{ maxLength: 12 }} /></Grid>
-        <Grid item xs={12}><TextField fullWidth label="Address / Area" value={potData.address} onChange={updPot('address')} multiline rows={2} /></Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Full Name *" value={potData.fullName} onChange={updPot('fullName')} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Mobile *" value={potData.mobile}
+            onChange={updPot('mobile')} inputProps={{ maxLength: 10 }}
+            placeholder="10-digit mobile number"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Email" type="email" value={potData.email} onChange={updPot('email')} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Aadhaar Number" value={potData.aadhaar}
+            onChange={updPot('aadhaar')} inputProps={{ maxLength: 12 }}
+            placeholder="12-digit Aadhaar"
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Address / Locality *" value={potData.address}
+            onChange={updPot('address')} multiline rows={2}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+                    <TextField fullWidth required label="Ward *" value={potData.ward} onChange={updPot('ward')} />
+        </Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={potData.ward} label="Ward *" onChange={updPot('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
+            <InputLabel>Is road in front of your property?</InputLabel>
+            <Select
+              value={potData.propertyFront}
+              label="Is road in front of your property?"
+              onChange={updPot('propertyFront')}
+            >
+              <MenuItem value="Yes">Yes</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+              <MenuItem value="Nearby area">Nearby area</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -293,225 +515,380 @@ export default function MunicipalRoadsForm({ onClose }) {
 
     if (activeStep === 1) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12}>
-          <TextField fullWidth label="Road Name / Location *" value={potData.roadName} onChange={updPot('roadName')} placeholder="Name of road/street with nearest landmark" />
-        </Grid>
         <Grid item xs={12} sm={6}>
-          <TextField fullWidth label="GPS Coordinates" value={potData.gpsCoords} onChange={updPot('gpsCoords')} placeholder="Lat, Long if available" />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField fullWidth label="Nearest Landmark *" value={potData.nearestLandmark} onChange={updPot('nearestLandmark')} />
+          <TextField fullWidth label="Road Name / Route *" value={potData.roadName} onChange={updPot('roadName')} />
         </Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Ward of Incident *</InputLabel>
-            <Select value={potData.wardIncident} label="Ward of Incident *" onChange={updPot('wardIncident')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
+            <InputLabel>Road Type *</InputLabel>
+            <Select value={potData.roadType} label="Road Type *" onChange={updPot('roadType')}>
+              {[
+                'Municipal road', 'State highway passing through city', 'Internal colony road',
+                'Market road', 'School/Hospital zone road', 'Bridge approach road', 'Service lane',
+              ].map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
             </Select>
           </FormControl>
         </Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Damage Type *</InputLabel>
-            <Select value={potData.damageType} label="Damage Type *" onChange={updPot('damageType')}>
-              {['Pothole', 'Road Crack', 'Damaged Footpath', 'Missing Speed Breaker',
-                'Waterlogged Road', 'Road Cave-in', 'Missing Road Marking', 'Damaged Divider', 'Other']
+            <InputLabel>Type of Damage *</InputLabel>
+            <Select value={potData.damageType} label="Type of Damage *" onChange={updPot('damageType')}>
+              {[
+                'Pothole — small <30cm', 'Pothole — large >30cm', 'Road collapse/sinkage',
+                'Damaged road edge/shoulder', 'Broken divider/median', 'Missing road studs/cats-eyes',
+                'Damaged speed breaker', 'Broken footpath adjacent to road',
+                'Waterlogging on road', 'Other',
+              ].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Severity *</InputLabel>
+            <Select value={potData.severity} label="Severity *" onChange={updPot('severity')}>
+              {[
+                'Minor — passable safely', 'Moderate — causing inconvenience',
+                'Severe — risk to 2-wheelers', 'Critical — risk to all vehicles',
+                'Emergency — immediate risk to life',
+              ].map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        {(potData.severity === 'Critical — risk to all vehicles' ||
+          potData.severity === 'Emergency — immediate risk to life') && (
+          <Grid item xs={12}>
+            <Alert severity="error">
+              Emergency road damage! Please also call our 24×7 Roads Helpline: 1800-XXX-XXXX
+            </Alert>
+          </Grid>
+        )}
+        <Grid item xs={12} sm={4}>
+          <TextField
+            fullWidth label="Approximate Length of Damage (meters)"
+            value={potData.damageLength} onChange={updPot('damageLength')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <TextField
+            fullWidth label="Approximate Width of Damage (meters)"
+            value={potData.damageWidth} onChange={updPot('damageWidth')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <TextField
+            fullWidth label="Depth of Pothole (cm) — if applicable"
+            value={potData.potholeDepth} onChange={updPot('potholeDepth')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <FormControl fullWidth>
+            <InputLabel>Any accidents reported due to this?</InputLabel>
+            <Select
+              value={potData.accidentsReported}
+              label="Any accidents reported due to this?"
+              onChange={updPot('accidentsReported')}
+            >
+              <MenuItem value="Yes">Yes</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+              <MenuItem value="Unknown">Unknown</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <FormControl fullWidth>
+            <InputLabel>How long has this damage existed?</InputLabel>
+            <Select
+              value={potData.damageDuration}
+              label="How long has this damage existed?"
+              onChange={updPot('damageDuration')}
+            >
+              {['Less than 1 week', '1–4 weeks', '1–3 months', 'More than 3 months']
+                .map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <FormControl fullWidth>
+            <InputLabel>Any drainage issue contributing?</InputLabel>
+            <Select
+              value={potData.drainageIssue}
+              label="Any drainage issue contributing?"
+              onChange={updPot('drainageIssue')}
+            >
+              <MenuItem value="Yes — blocked drain nearby">Yes — blocked drain nearby</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+              <MenuItem value="Unsure">Unsure</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+      </Grid>
+    );
+
+    if (activeStep === 2) return (
+      <Grid container spacing={2.5}>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Exact GPS/Address Location *"
+            value={potData.exactLocation} onChange={updPot('exactLocation')}
+            multiline rows={2}
+            placeholder="Plot no, street, nearest junction"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Nearest Landmark *" value={potData.landmark} onChange={updPot('landmark')} />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth label="Distance from Landmark (meters)"
+            value={potData.distanceFromLandmark} onChange={updPot('distanceFromLandmark')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth label="GPS Coordinates (optional)"
+            value={potData.gpsCoords} onChange={updPot('gpsCoords')}
+            placeholder="e.g. 18.9220° N, 72.8347° E"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Previously Reported?</InputLabel>
+            <Select
+              value={potData.previouslyReported}
+              label="Previously Reported?"
+              onChange={updPot('previouslyReported')}
+            >
+              <MenuItem value="Yes">Yes — I have a complaint no.</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        {potData.previouslyReported === 'Yes' && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth label="Previous Complaint No."
+              value={potData.prevComplaintNo} onChange={updPot('prevComplaintNo')}
+            />
+          </Grid>
+        )}
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Road Damage Photo *" name="road_photo" required
+            hint="Clear photo showing damage extent"
+            docs={potDocs} onFileChange={handlePotDoc} onRemove={removePotDoc}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Additional Photo (wide angle/context)" name="context_photo"
+            hint="Shows surrounding area and hazard"
+            docs={potDocs} onFileChange={handlePotDoc} onRemove={removePotDoc}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Accident Report (if any)" name="accident_report"
+            hint="FIR / hospital report if accident occurred"
+            docs={potDocs} onFileChange={handlePotDoc} onRemove={removePotDoc}
+          />
+        </Grid>
+      </Grid>
+    );
+    return null;
+  };
+
+  /* ════════════════════════════════════════════════════════════════════
+     TAB 1 — BROKEN STREETLIGHT / PUBLIC LIGHTING
+  ════════════════════════════════════════════════════════════════════ */
+  const renderLightStep = () => {
+    const isDanger = ['Damaged pole — fallen/leaning', 'Exposed wiring on pole']
+      .includes(lightData.complaintType);
+
+    if (lightSubmitted) return (
+      <SuccessScreen
+        refNo={lightRef}
+        nextSteps="Your streetlight / public lighting complaint has been registered. The Electrical Department will inspect the site within 2–3 working days. For electrical hazards or fallen poles, contact Emergency: 100 / Electricity Department immediately."
+      />
+    );
+
+    if (activeStep === 0) return (
+      <Grid container spacing={2.5}>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Full Name *" value={lightData.fullName} onChange={updLight('fullName')} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Mobile *" value={lightData.mobile}
+            onChange={updLight('mobile')} inputProps={{ maxLength: 10 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Email" type="email" value={lightData.email} onChange={updLight('email')} />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Address / Locality *" value={lightData.address}
+            onChange={updLight('address')} multiline rows={2}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+                    <TextField fullWidth required label="Ward *" value={lightData.ward} onChange={updLight('ward')} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Nearest Identifiable Landmark"
+            value={lightData.nearestLandmark} onChange={updLight('nearestLandmark')}
+          />
+        </Grid>
+      </Grid>
+    );
+
+    if (activeStep === 1) return (
+      <Grid container spacing={2.5}>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Type of Complaint *</InputLabel>
+            <Select
+              value={lightData.complaintType}
+              label="Type of Complaint *"
+              onChange={updLight('complaintType')}
+            >
+              {[
+                'Light not working', 'Light flickering/unstable', 'Damaged pole — standing',
+                'Broken pole — fallen/leaning', 'Exposed wiring on pole', 'Light on during daytime',
+                'Light too dim', 'Light cover/shade broken', 'Transformer/cable box issue',
+                'CCTV camera on pole damaged', 'Other',
+              ].map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        {isDanger && (
+          <Grid item xs={12}>
+            <Alert severity="error">
+              DANGER! Do not touch the pole or wire. Keep public away. Contact Emergency: 100 / Electricity Dept immediately.
+            </Alert>
+          </Grid>
+        )}
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Pole/Light ID Number"
+            value={lightData.poleId} onChange={updLight('poleId')}
+            placeholder="Usually painted on the pole"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Street / Road Name *" value={lightData.streetName} onChange={updLight('streetName')} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Type of Area</InputLabel>
+            <Select value={lightData.areaType} label="Type of Area" onChange={updLight('areaType')}>
+              {[
+                'Residential street', 'Main road', 'Highway', 'Market area',
+                'School/hospital zone', 'Park/garden', 'Bridge/underpass', 'Other',
+              ].map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Number of lights affected *</InputLabel>
+            <Select
+              value={lightData.numLightsAffected}
+              label="Number of lights affected *"
+              onChange={updLight('numLightsAffected')}
+            >
+              {['1', '2–5', '6–10', 'More than 10'].map(n => <MenuItem key={n} value={n}>{n}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>How long has this issue persisted?</InputLabel>
+            <Select
+              value={lightData.issueDuration}
+              label="How long has this issue persisted?"
+              onChange={updLight('issueDuration')}
+            >
+              {['Today', '1–7 days', '1–4 weeks', 'More than 1 month']
                 .map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
             </Select>
           </FormControl>
         </Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Damage Severity *</InputLabel>
-            <Select value={potData.damageSeverity} label="Damage Severity *" onChange={updPot('damageSeverity')}>
-              <MenuItem value="Minor">Minor — surface cracks</MenuItem>
-              <MenuItem value="Moderate">Moderate — shallow pothole</MenuItem>
-              <MenuItem value="Serious">Serious — deep pothole &gt;15cm</MenuItem>
-              <MenuItem value="Severe">Severe — large crater blocking lane</MenuItem>
-              <MenuItem value="Dangerous">Dangerous — safety hazard, road collapse risk</MenuItem>
+            <InputLabel>Does it create safety risk at night?</InputLabel>
+            <Select
+              value={lightData.safetyRisk}
+              label="Does it create safety risk at night?"
+              onChange={updLight('safetyRisk')}
+            >
+              <MenuItem value="Yes — area is completely dark">Yes — area is completely dark</MenuItem>
+              <MenuItem value="Yes — partially dark">Yes — partially dark</MenuItem>
+              <MenuItem value="No — other lights cover the area">No — other lights cover the area</MenuItem>
             </Select>
           </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField fullWidth label="Approximate Size of Damage" value={potData.approxSize} onChange={updPot('approxSize')} placeholder='e.g., "2m x 1m, 30cm deep"' />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Road Classification</InputLabel>
-            <Select value={potData.roadClassification} label="Road Classification" onChange={updPot('roadClassification')}>
-              {['Main Road/Highway', 'Arterial Road', 'Internal Road/Lane', 'Service Road', 'Footpath Only']
-                .map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <TextField fullWidth label="Days Since Damage Noticed" value={potData.daysDamageNoticed} onChange={updPot('daysDamageNoticed')} type="number" inputProps={{ min: 0 }} />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Traffic Impact</InputLabel>
-            <Select value={potData.trafficImpact} label="Traffic Impact" onChange={updPot('trafficImpact')}>
-              {['No impact', 'Partial lane blocked', 'One lane blocked', 'Both lanes difficult', 'Road impassable']
-                .map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Accident Occurred Due to This?</InputLabel>
-            <Select value={potData.accidentOccurred} label="Accident Occurred Due to This?" onChange={updPot('accidentOccurred')}>
-              <MenuItem value="Yes">Yes</MenuItem>
-              <MenuItem value="No">No</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        {potData.accidentOccurred === 'Yes' && (
-          <Grid item xs={12}>
-            <TextField fullWidth label="Accident Description" value={potData.accidentDescription} onChange={updPot('accidentDescription')} multiline rows={2} />
-          </Grid>
-        )}
-        <Grid item xs={12}>
-          <TextField fullWidth label="Additional Details" value={potData.additionalDetails} onChange={updPot('additionalDetails')} multiline rows={3} />
         </Grid>
       </Grid>
     );
 
     if (activeStep === 2) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="Photo of Road Damage *" name="road_damage_photo" required
-            hint="Clear photo showing the extent of damage"
-            docs={potDocs} onFileChange={handlePotDoc} onRemove={removePotDoc}
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Exact Location Description *"
+            value={lightData.exactLocation} onChange={updLight('exactLocation')}
+            multiline rows={2}
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="Additional Photo" name="road_damage_photo2"
-            hint="Multiple angles or wider view"
-            docs={potDocs} onFileChange={handlePotDoc} onRemove={removePotDoc}
+          <TextField
+            fullWidth label="GPS Coordinates (optional)"
+            value={lightData.gpsCoords} onChange={updLight('gpsCoords')}
+            placeholder="e.g. 18.9220° N, 72.8347° E"
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="Measurement / Scale Reference Photo" name="road_damage_scale"
-            hint="Coin or ruler next to damage for scale"
-            docs={potDocs} onFileChange={handlePotDoc} onRemove={removePotDoc}
+          <TextField
+            fullWidth label="Nearby Junction / Cross Road"
+            value={lightData.nearbyJunction} onChange={updLight('nearbyJunction')}
           />
         </Grid>
-      </Grid>
-    );
-    return null;
-  };
-
-  /* Tab 1: Streetlight Complaint */
-  const renderLightStep = () => {
-    if (lightSubmitted)
-      return <SuccessScreen refNo={lightRef} message="Electrical team will repair within 48 hours." />;
-
-    if (activeStep === 0) return (
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Full Name *" value={lightData.fullName} onChange={updLight('fullName')} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Mobile *" value={lightData.mobile} onChange={updLight('mobile')} inputProps={{ maxLength: 10 }} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Email" value={lightData.email} onChange={updLight('email')} type="email" /></Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={lightData.ward} label="Ward *" onChange={updLight('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12}><TextField fullWidth label="Address / Area" value={lightData.address} onChange={updLight('address')} multiline rows={2} /></Grid>
-      </Grid>
-    );
-
-    if (activeStep === 1) return (
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Street / Road Name *" value={lightData.streetName} onChange={updLight('streetName')} /></Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField fullWidth label="Pole / Light ID Number" value={lightData.poleId} onChange={updLight('poleId')} placeholder="Found on pole nameplate, e.g. SL-2024-001" />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Ward of Incident *</InputLabel>
-            <Select value={lightData.wardIncident} label="Ward of Incident *" onChange={updLight('wardIncident')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Nearest Landmark *" value={lightData.nearestLandmark} onChange={updLight('nearestLandmark')} /></Grid>
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Complaint Type *</InputLabel>
-            <Select value={lightData.complaintType} label="Complaint Type *" onChange={updLight('complaintType')}>
-              {['Light not working', 'Flickering light', 'Damaged light cover',
-                'Hanging/snapped wire', 'Broken pole', 'Light on during day',
-                'Very dim light', 'Multiple lights down', 'Other']
-                .map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={3}>
-          <TextField fullWidth label="Number of Non-working Lights" value={lightData.numNonWorking} onChange={updLight('numNonWorking')} type="number" inputProps={{ min: 1 }} />
-        </Grid>
-        <Grid item xs={12} sm={3}>
-          <TextField fullWidth label="Days Issue Persisting" value={lightData.daysPersisting} onChange={updLight('daysPersisting')} type="number" inputProps={{ min: 0 }} />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Area Affected</InputLabel>
-            <Select value={lightData.areaAffected} label="Area Affected" onChange={updLight('areaAffected')}>
-              {['Single streetlight', '50m stretch', '100m stretch', 'Entire street', 'Multiple streets']
-                .map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Time Issue Noticed</InputLabel>
-            <Select value={lightData.timeNoticed} label="Time Issue Noticed" onChange={updLight('timeNoticed')}>
-              <MenuItem value="Nighttime">Only nighttime</MenuItem>
-              <MenuItem value="24hrs">24 hours</MenuItem>
-              <MenuItem value="ReportedBefore">Reported previously</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Safety Hazard?</InputLabel>
-            <Select value={lightData.safetyHazard} label="Safety Hazard?" onChange={updLight('safetyHazard')}>
+            <InputLabel>Previously Reported?</InputLabel>
+            <Select
+              value={lightData.previouslyReported}
+              label="Previously Reported?"
+              onChange={updLight('previouslyReported')}
+            >
               <MenuItem value="Yes">Yes</MenuItem>
               <MenuItem value="No">No</MenuItem>
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12}>
-          <TextField fullWidth label="Additional Description" value={lightData.additionalDescription} onChange={updLight('additionalDescription')} multiline rows={2} />
-        </Grid>
-        {lightData.complaintType === 'Hanging/snapped wire' && (
-          <Grid item xs={12}>
-            <Alert severity="error">
-              DANGER: Do not approach hanging/live wires! Contact electricity department immediately at 1912.
-            </Alert>
+        {lightData.previouslyReported === 'Yes' && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth label="Previous Complaint No."
+              value={lightData.prevComplaintNo} onChange={updLight('prevComplaintNo')}
+            />
           </Grid>
         )}
-      </Grid>
-    );
-
-    if (activeStep === 2) return (
-      <Grid container spacing={2.5}>
         <Grid item xs={12} sm={6}>
           <DocUpload
             label="Photo of Broken/Dark Streetlight *" name="light_photo" required
-            hint="Clear photo of the non-working or damaged streetlight"
             docs={lightDocs} onFileChange={handleLightDoc} onRemove={removeLightDoc}
           />
         </Grid>
         <Grid item xs={12} sm={6}>
           <DocUpload
-            label="Photo of Damaged Pole or Wire" name="light_pole_photo"
-            hint="If pole/wire damaged — important for safety assessment"
+            label="Photo of Damaged Pole/Wiring" name="pole_photo"
+            hint="Critical for safety hazards — wires, broken poles"
             docs={lightDocs} onFileChange={handleLightDoc} onRemove={removeLightDoc}
           />
         </Grid>
@@ -520,142 +897,216 @@ export default function MunicipalRoadsForm({ onClose }) {
     return null;
   };
 
-  /* Tab 2: Drain / Manhole Issue */
+  /* ════════════════════════════════════════════════════════════════════
+     TAB 2 — DRAIN / MANHOLE / STORMWATER
+  ════════════════════════════════════════════════════════════════════ */
   const renderDrainStep = () => {
-    if (drainSubmitted)
-      return <SuccessScreen refNo={drainRef} message="Sanitation team will address within 24–48 hours." />;
+    const isOpenManhole = drainData.issueType.includes('Open') || drainData.issueType.includes('Missing');
+    const isDeepFlooding = ['Waist deep', 'More than waist'].includes(drainData.floodDepth);
+
+    if (drainSubmitted) return (
+      <SuccessScreen
+        refNo={drainRef}
+        nextSteps="Your drain/manhole complaint has been registered. The Drainage Department will attend to the issue within 24–48 hours. For open manhole or sewage emergencies, call Roads Emergency: 1800-XXX-XXXX immediately."
+      />
+    );
 
     if (activeStep === 0) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Full Name *" value={drainData.fullName} onChange={updDrain('fullName')} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Mobile *" value={drainData.mobile} onChange={updDrain('mobile')} inputProps={{ maxLength: 10 }} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Email" value={drainData.email} onChange={updDrain('email')} type="email" /></Grid>
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={drainData.ward} label="Ward *" onChange={updDrain('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
+          <TextField fullWidth label="Full Name *" value={drainData.fullName} onChange={updDrain('fullName')} />
         </Grid>
-        <Grid item xs={12}><TextField fullWidth label="Address / Area" value={drainData.address} onChange={updDrain('address')} multiline rows={2} /></Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Mobile *" value={drainData.mobile}
+            onChange={updDrain('mobile')} inputProps={{ maxLength: 10 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Email" type="email" value={drainData.email} onChange={updDrain('email')} />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Address / Locality *" value={drainData.address}
+            onChange={updDrain('address')} multiline rows={2}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+                    <TextField fullWidth required label="Ward *" value={drainData.ward} onChange={updDrain('ward')} />
+        </Grid>
       </Grid>
     );
 
     if (activeStep === 1) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12}>
-          <TextField fullWidth label="Drain/Manhole Location *" value={drainData.drainLocation} onChange={updDrain('drainLocation')} multiline rows={2} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Ward of Incident *</InputLabel>
-            <Select value={drainData.wardIncident} label="Ward of Incident *" onChange={updDrain('wardIncident')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Nearest Landmark *" value={drainData.nearestLandmark} onChange={updDrain('nearestLandmark')} /></Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
             <InputLabel>Issue Type *</InputLabel>
             <Select value={drainData.issueType} label="Issue Type *" onChange={updDrain('issueType')}>
-              {['Open manhole — no cover', 'Broken/damaged manhole cover', 'Blocked/overflowing drain',
-                'Sewage overflow', 'Flooded road due to blocked drain', 'Foul smell from drain',
-                'Broken drain wall', 'Manhole cover displaced', 'Other']
-                .map(i => <MenuItem key={i} value={i}>{i}</MenuItem>)}
+              {[
+                'Open/uncovered manhole', 'Broken manhole cover', 'Overflowing drain',
+                'Blocked drain — no water flow', 'Foul smell from drain', 'Drain causing waterlogging',
+                'Missing manhole cover', 'Collapsed drain/sewer', 'Sewage mixing in stormwater', 'Other',
+              ].map(i => <MenuItem key={i} value={i}>{i}</MenuItem>)}
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Is Road/Path Blocked?</InputLabel>
-            <Select value={drainData.roadPathBlocked} label="Is Road/Path Blocked?" onChange={updDrain('roadPathBlocked')}>
-              <MenuItem value="No">No</MenuItem>
-              <MenuItem value="Partially">Partially</MenuItem>
-              <MenuItem value="YesDifficult">Yes — passage difficult</MenuItem>
-              <MenuItem value="YesBlocked">Yes — completely blocked</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Water Stagnation Depth</InputLabel>
-            <Select value={drainData.waterStagnationDepth} label="Water Stagnation Depth" onChange={updDrain('waterStagnationDepth')}>
-              <MenuItem value="None">No stagnation</MenuItem>
-              <MenuItem value="Ankle">Ankle level</MenuItem>
-              <MenuItem value="Knee">Knee level</MenuItem>
-              <MenuItem value="Waist">Waist level</MenuItem>
-              <MenuItem value="VeryDeep">Very deep — dangerous</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Manhole Cover Status</InputLabel>
-            <Select value={drainData.manholeStatus} label="Manhole Cover Status" onChange={updDrain('manholeStatus')}>
-              {['Cover present', 'Cover absent — open', 'Cover damaged/cracked', 'Cover displaced', 'No cover ever installed']
-                .map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Risk to Public?</InputLabel>
-            <Select value={drainData.riskToPublic} label="Risk to Public?" onChange={updDrain('riskToPublic')}>
-              <MenuItem value="Yes">Yes</MenuItem>
-              <MenuItem value="No">No</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        {drainData.riskToPublic === 'Yes' && (
+        {isOpenManhole && (
           <Grid item xs={12}>
-            <TextField fullWidth label="Risk Description" value={drainData.riskDescription} onChange={updDrain('riskDescription')} multiline rows={2} />
+            <Alert severity="error">
+              DANGER: Open manhole! Please barricade immediately and call Roads Emergency: 1800-XXX-XXXX
+            </Alert>
           </Grid>
         )}
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Duration of Issue</InputLabel>
-            <Select value={drainData.durationOfIssue} label="Duration of Issue" onChange={updDrain('durationOfIssue')}>
-              {['Just noticed', '1–3 days', '1 week', '2–4 weeks', 'More than a month']
+            <InputLabel>Drain/Manhole Type</InputLabel>
+            <Select value={drainData.drainType} label="Drain/Manhole Type" onChange={updDrain('drainType')}>
+              {[
+                'Main sewer manhole', 'Stormwater drain', 'Road-side nala',
+                'Internal colony drain', 'Underground sewer', 'Not known',
+              ].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Is the road/path blocked due to this? *</InputLabel>
+            <Select
+              value={drainData.roadBlocked}
+              label="Is the road/path blocked due to this? *"
+              onChange={updDrain('roadBlocked')}
+            >
+              <MenuItem value="Yes — completely blocked">Yes — completely blocked</MenuItem>
+              <MenuItem value="Yes — partially blocked">Yes — partially blocked</MenuItem>
+              <MenuItem value="No — only flooding">No — only flooding</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Approximate Depth of Water / Flooding</InputLabel>
+            <Select
+              value={drainData.floodDepth}
+              label="Approximate Depth of Water / Flooding"
+              onChange={updDrain('floodDepth')}
+            >
+              {['No standing water', 'Up to ankle level', 'Knee deep', 'Waist deep', 'More than waist']
                 .map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12}>
-          <TextField fullWidth label="Additional Description" value={drainData.additionalDescription} onChange={updDrain('additionalDescription')} multiline rows={3} />
-        </Grid>
-        {drainData.issueType === 'Open manhole — no cover' && (
+        {isDeepFlooding && (
           <Grid item xs={12}>
-            <Alert severity="error">
-              SAFETY: Open manhole is a life hazard. Warn nearby pedestrians.
-              We will dispatch repair crew within 4 hours.
+            <Alert severity="warning">
+              Severe flooding — do not attempt to cross. Move to higher ground.
             </Alert>
           </Grid>
         )}
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Is sewage visible / foul smell?</InputLabel>
+            <Select
+              value={drainData.sewageVisible}
+              label="Is sewage visible / foul smell?"
+              onChange={updDrain('sewageVisible')}
+            >
+              <MenuItem value="Yes — sewage overflow">Yes — sewage overflow</MenuItem>
+              <MenuItem value="Yes — foul smell only">Yes — foul smell only</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>How long has this been happening?</InputLabel>
+            <Select
+              value={drainData.issueDuration}
+              label="How long has this been happening?"
+              onChange={updDrain('issueDuration')}
+            >
+              {['Just started today', '2–7 days', '1–4 weeks', 'Recurring/chronic']
+                .map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Nearest manhole/drain ID (if visible)"
+            value={drainData.manholeId} onChange={updDrain('manholeId')}
+          />
+        </Grid>
       </Grid>
     );
 
     if (activeStep === 2) return (
       <Grid container spacing={2.5}>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Exact Location/Address *"
+            value={drainData.exactLocation} onChange={updDrain('exactLocation')}
+            multiline rows={2}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Nearest Cross Road / Junction *"
+            value={drainData.nearestCrossRoad} onChange={updDrain('nearestCrossRoad')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="GPS Coordinates (optional)"
+            value={drainData.gpsCoords} onChange={updDrain('gpsCoords')}
+            placeholder="e.g. 18.9220° N, 72.8347° E"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Affected Length of drain (approx. meters)"
+            value={drainData.affectedLength} onChange={updDrain('affectedLength')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Previously Reported?</InputLabel>
+            <Select
+              value={drainData.previouslyReported}
+              label="Previously Reported?"
+              onChange={updDrain('previouslyReported')}
+            >
+              <MenuItem value="Yes">Yes</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        {drainData.previouslyReported === 'Yes' && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth label="Previous Complaint No."
+              value={drainData.prevComplaintNo} onChange={updDrain('prevComplaintNo')}
+            />
+          </Grid>
+        )}
         <Grid item xs={12} sm={6}>
           <DocUpload
             label="Photo of Drain/Manhole Issue *" name="drain_photo" required
-            hint="Clear photo showing the blockage, open manhole or overflow"
             docs={drainDocs} onFileChange={handleDrainDoc} onRemove={removeDrainDoc}
           />
         </Grid>
         <Grid item xs={12} sm={6}>
           <DocUpload
-            label="Photo of Water Stagnation / Flooding" name="drain_flood_photo"
-            hint="If road is flooded, photo showing water level"
+            label="Additional Photo — Water Level / Flooding" name="flood_photo"
+            hint="Shows depth and spread of issue"
             docs={drainDocs} onFileChange={handleDrainDoc} onRemove={removeDrainDoc}
           />
         </Grid>
         <Grid item xs={12} sm={6}>
           <DocUpload
-            label="Additional Evidence Photo" name="drain_extra_photo"
-            hint="Any other supporting photo of the issue"
+            label="Video File (short clip)" name="video_evidence"
+            hint="Optional — .mp4 under 5MB"
+            accept=".mp4,.mov"
             docs={drainDocs} onFileChange={handleDrainDoc} onRemove={removeDrainDoc}
           />
         </Grid>
@@ -664,196 +1115,356 @@ export default function MunicipalRoadsForm({ onClose }) {
     return null;
   };
 
-  /* Tab 3: Road Cutting Permit */
+  /* ════════════════════════════════════════════════════════════════════
+     TAB 3 — ROAD CUTTING PERMIT
+  ════════════════════════════════════════════════════════════════════ */
   const renderCutStep = () => {
-    if (cutSubmitted)
-      return <SuccessScreen refNo={cutRef} message="Permit approval takes 7–10 working days. Security deposit may be required." />;
+    if (cutSubmitted) return (
+      <SuccessScreen
+        refNo={cutRef}
+        nextSteps="Your road cutting permit application has been registered. The Roads Department will review it within 3–5 working days. A site inspection may be scheduled. Permit (if approved) is issued within 7–10 working days. Pay the road restoration deposit before commencing work."
+      />
+    );
 
     if (activeStep === 0) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Organisation / Applicant Name *" value={cutData.orgName} onChange={updCut('orgName')} /></Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Type of Organisation</InputLabel>
-            <Select value={cutData.orgType} label="Type of Organisation" onChange={updCut('orgType')}>
-              {['Government Department', 'PSU/Public Utility', 'Private Company', 'Individual Contractor', 'NGO', 'Other']
-                .map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+            <InputLabel>Applicant Type *</InputLabel>
+            <Select value={cutData.applicantType} label="Applicant Type *" onChange={updCut('applicantType')}>
+              {[
+                'Government department', 'Semi-government/PSU', 'Telecom company',
+                'Internet/cable provider', 'Water supply dept.', 'Gas utility',
+                'Electricity dept.', 'Private contractor on behalf of above', 'Individual/Builder',
+              ].map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Contact Person Name *" value={cutData.contactPerson} onChange={updCut('contactPerson')} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Contact Mobile *" value={cutData.contactMobile} onChange={updCut('contactMobile')} inputProps={{ maxLength: 10 }} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Official Email *" value={cutData.officialEmail} onChange={updCut('officialEmail')} type="email" /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Aadhaar / PAN of Contact Person" value={cutData.aadhaarPan} onChange={updCut('aadhaarPan')} /></Grid>
-        <Grid item xs={12}><TextField fullWidth label="Registered Address *" value={cutData.registeredAddress} onChange={updCut('registeredAddress')} multiline rows={2} /></Grid>
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Ward *</InputLabel>
-            <Select value={cutData.ward} label="Ward *" onChange={updCut('ward')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-            </Select>
-          </FormControl>
+          <TextField
+            fullWidth label="Organisation / Company Name *"
+            value={cutData.orgName} onChange={updCut('orgName')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Contact Person Name *"
+            value={cutData.contactName} onChange={updCut('contactName')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Designation *"
+            value={cutData.designation} onChange={updCut('designation')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Official Mobile *" value={cutData.mobile}
+            onChange={updCut('mobile')} inputProps={{ maxLength: 10 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Official Email *" type="email"
+            value={cutData.email} onChange={updCut('email')}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Office Address *"
+            value={cutData.officeAddress} onChange={updCut('officeAddress')}
+            multiline rows={2}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Organisation Registration / License No."
+            value={cutData.regNo} onChange={updCut('regNo')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="GSTIN (Optional)"
+            value={cutData.gstin} onChange={updCut('gstin')}
+          />
         </Grid>
       </Grid>
     );
 
     if (activeStep === 1) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Road Name to be Cut *" value={cutData.roadName} onChange={updCut('roadName')} /></Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Ward of Cutting Location *</InputLabel>
-            <Select value={cutData.wardCutting} label="Ward of Cutting Location *" onChange={updCut('wardCutting')}>
-              {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
+            <InputLabel>Purpose of Road Cutting *</InputLabel>
+            <Select value={cutData.purpose} label="Purpose of Road Cutting *" onChange={updCut('purpose')}>
+              {[
+                'Water pipeline laying/repair', 'Sewer line laying/repair', 'Gas pipeline laying',
+                'Telephone/optical fiber cable', 'Electricity cable/transformer',
+                'Storm water drain', 'Road widening work', 'Bridge/culvert repair', 'Other civic work',
+              ].map(p => <MenuItem key={p} value={p}>{p}</MenuItem>)}
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="Start Point (Landmark/Junction)" value={cutData.startPoint} onChange={updCut('startPoint')} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="End Point (Landmark/Junction)" value={cutData.endPoint} onChange={updCut('endPoint')} /></Grid>
-        <Grid item xs={12} sm={6}><TextField fullWidth label="GPS Coordinates of Site" value={cutData.gpsCoords} onChange={updCut('gpsCoords')} placeholder="Lat, Long" /></Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Road / Street Name(s) *"
+            value={cutData.roadName} onChange={updCut('roadName')}
+            placeholder="Comma-separated if multiple roads"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+                    <TextField fullWidth required label="Ward *" value={cutData.ward} onChange={updCut('ward')} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Total Length of Cutting Required (meters) *"
+            value={cutData.totalLength} onChange={updCut('totalLength')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth label="Width of Trench (cm) *"
+            value={cutData.trenchWidth} onChange={updCut('trenchWidth')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth label="Depth of Trench (cm) *"
+            value={cutData.trenchDepth} onChange={updCut('trenchDepth')}
+            type="number" inputProps={{ min: 0 }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Proposed Start Date *" type="date"
+            value={cutData.startDate} onChange={updCut('startDate')}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ min: getTodayPlus(3) }}
+            helperText="Minimum 3 days advance notice required"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Proposed End Date *" type="date"
+            value={cutData.endDate} onChange={updCut('endDate')}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ min: cutData.startDate || getTodayPlus(3) }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth label="Working Hours — From" type="time"
+            value={cutData.workHoursFrom} onChange={updCut('workHoursFrom')}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth label="Working Hours — To" type="time"
+            value={cutData.workHoursTo} onChange={updCut('workHoursTo')}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <FormControl fullWidth>
+            <InputLabel>Night Work Required?</InputLabel>
+            <Select value={cutData.nightWork} label="Night Work Required?" onChange={updCut('nightWork')}>
+              <MenuItem value="Yes">Yes</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth label="Full Road Restoration by (date)" type="date"
+            value={cutData.completionDate} onChange={updCut('completionDate')}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ min: cutData.endDate || getTodayPlus(3) }}
+          />
+        </Grid>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
-            <InputLabel>Work Type *</InputLabel>
-            <Select value={cutData.workType} label="Work Type *" onChange={updCut('workType')}>
-              {['Water Pipeline Laying', 'Sewage Line Work', 'Gas Pipeline', 'Electricity Cable',
-                'Telephone/Optical Fibre', 'Storm Water Drain', 'Road Widening', 'Footpath Repair', 'Other']
-                .map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
+            <InputLabel>Is work over main road?</InputLabel>
+            <Select value={cutData.isMainRoad} label="Is work over main road?" onChange={updCut('isMainRoad')}>
+              <MenuItem value="Yes — state highway">Yes — state highway</MenuItem>
+              <MenuItem value="Yes — municipal main road">Yes — municipal main road</MenuItem>
+              <MenuItem value="No — internal/service road">No — internal/service road</MenuItem>
             </Select>
           </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={4}><TextField fullWidth label="Length of Road to Cut (m) *" value={cutData.cutLength} onChange={updCut('cutLength')} type="number" inputProps={{ min: 0.1, step: 0.1 }} /></Grid>
-        <Grid item xs={12} sm={4}><TextField fullWidth label="Width of Cut (m) *" value={cutData.cutWidth} onChange={updCut('cutWidth')} type="number" inputProps={{ min: 0.1, step: 0.1 }} /></Grid>
-        <Grid item xs={12} sm={4}><TextField fullWidth label="Depth of Cut (m) *" value={cutData.cutDepth} onChange={updCut('cutDepth')} type="number" inputProps={{ min: 0.1, step: 0.1 }} /></Grid>
-        <Grid item xs={12} sm={4}>
-          <TextField fullWidth label="Proposed Start Date *" type="date" value={cutData.proposedStart} onChange={updCut('proposedStart')} InputLabelProps={{ shrink: true }} inputProps={{ min: getTodayPlus(1) }} />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <TextField fullWidth label="Proposed End Date *" type="date" value={cutData.proposedEnd} onChange={updCut('proposedEnd')} InputLabelProps={{ shrink: true }} inputProps={{ min: datePlusOne(cutData.proposedStart) }} />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <TextField fullWidth label="Total Duration" value={daysBetween(cutData.proposedStart, cutData.proposedEnd)} InputProps={{ readOnly: true }} InputLabelProps={{ shrink: true }} helperText="Auto-calculated" />
-        </Grid>
-        <Grid item xs={12} sm={4}><TextField fullWidth label="Contractor / Agency Name *" value={cutData.contractorName} onChange={updCut('contractorName')} /></Grid>
-        <Grid item xs={12} sm={4}><TextField fullWidth label="Contractor Mobile *" value={cutData.contractorMobile} onChange={updCut('contractorMobile')} inputProps={{ maxLength: 10 }} /></Grid>
-        <Grid item xs={12} sm={4}><TextField fullWidth label="Contractor License Number" value={cutData.contractorLicense} onChange={updCut('contractorLicense')} /></Grid>
-        <Grid item xs={12} sm={12}>
-          <FormControl fullWidth>
-            <InputLabel>Road Restoration Commitment *</InputLabel>
-            <Select value={cutData.roadRestoration} label="Road Restoration Commitment *" onChange={updCut('roadRestoration')}>
-              <MenuItem value="BitumenFull">Full reinstatement with bitumen</MenuItem>
-              <MenuItem value="ConcreteFull">Full reinstatement with concrete</MenuItem>
-              <MenuItem value="TempThenPerm">Temporary reinstatement then permanent</MenuItem>
-              <MenuItem value="Contractor3yr">Contractor responsible for 3 years</MenuItem>
-              <MenuItem value="Other">Other — specify</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12}>
-          <TextField fullWidth label="Work Description *" value={cutData.workDescription} onChange={updCut('workDescription')} multiline rows={3} />
         </Grid>
       </Grid>
     );
 
     if (activeStep === 2) return (
       <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="Departmental / Organisation Work Sanction Letter *"
-            name="sanction_letter" required
-            hint="Letter authorising the road cutting work"
-            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+        <Grid item xs={12}>
+          <TextField
+            fullWidth label="Alternative Route for Diversion"
+            value={cutData.diversionRoute} onChange={updCut('diversionRoute')}
+            placeholder="Describe alternate route for traffic"
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="Site Location Plan / Drawing *"
-            name="site_plan" required
-            hint="Showing exact stretch to be cut"
-            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          <FormControl fullWidth>
+            <InputLabel>Traffic Marshal arranged?</InputLabel>
+            <Select
+              value={cutData.trafficMarshal}
+              label="Traffic Marshal arranged?"
+              onChange={updCut('trafficMarshal')}
+            >
+              <MenuItem value="Yes">Yes</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        {cutData.trafficMarshal === 'Yes' && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth label="Number of traffic marshals/guards *"
+              value={cutData.numMarshals} onChange={updCut('numMarshals')}
+              type="number" inputProps={{ min: 1 }}
+            />
+          </Grid>
+        )}
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Barricading type *</InputLabel>
+            <Select value={cutData.barricadingType} label="Barricading type *" onChange={updCut('barricadingType')}>
+              {[
+                'Metal barricades', 'Plastic delineators', 'Sandbags',
+                'Road cones only', 'Will be decided on site',
+              ].map(b => <MenuItem key={b} value={b}>{b}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Signage / Warning lights at night?</InputLabel>
+            <Select
+              value={cutData.signage}
+              label="Signage / Warning lights at night?"
+              onChange={updCut('signage')}
+            >
+              <MenuItem value="Yes">Yes</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Safety Officer Assigned (Name)"
+            value={cutData.safetyOfficer} onChange={updCut('safetyOfficer')}
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="Indemnity Bond / Guarantee Letter"
-            name="indemnity_bond"
-            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          <FormControl fullWidth>
+            <InputLabel>Will work create noise/vibration?</InputLabel>
+            <Select
+              value={cutData.noiseVibration}
+              label="Will work create noise/vibration?"
+              onChange={updCut('noiseVibration')}
+            >
+              <MenuItem value="Yes">Yes</MenuItem>
+              <MenuItem value="No">No</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Machinery/equipment to be used"
+            value={cutData.machinery} onChange={updCut('machinery')}
+            placeholder="e.g., JCB, Pipe layer, Welding tools"
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="Contractor Registration Certificate"
-            name="contractor_cert"
-            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
-          />
+          <FormControl fullWidth>
+            <InputLabel>Debris disposal arrangement *</InputLabel>
+            <Select
+              value={cutData.debrisDisposal}
+              label="Debris disposal arrangement *"
+              onChange={updCut('debrisDisposal')}
+            >
+              <MenuItem value="Municipal garbage van contracted">Municipal garbage van contracted</MenuItem>
+              <MenuItem value="Own vehicle">Own vehicle</MenuItem>
+              <MenuItem value="Left on site — describe">Left on site — describe</MenuItem>
+            </Select>
+          </FormControl>
         </Grid>
         <Grid item xs={12} sm={6}>
-          <DocUpload
-            label="No-Objection from Electricity Dept"
-            name="electricity_noc"
-            hint="If digging near electrical lines"
-            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          <FormControl fullWidth>
+            <InputLabel>Road restoration method *</InputLabel>
+            <Select
+              value={cutData.roadRestoration}
+              label="Road restoration method *"
+              onChange={updCut('roadRestoration')}
+            >
+              {[
+                'Full bituminous recarpeting', 'Patch repair with bitumen', 'Paver blocks relaid',
+                'Concrete cutting and rejoining', 'Municipal will restore — pay charges', 'Other',
+              ].map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth label="Deposit for road restoration (₹)"
+            value={cutData.restorationDeposit} onChange={updCut('restorationDeposit')}
+            type="number" inputProps={{ min: 0 }}
+            placeholder="As per road cutting bylaws. Amount will be specified in permit"
           />
+        </Grid>
+        <Grid item xs={12}>
+          <Alert severity="info">
+            Road restoration deposit is mandatory. Failure to restore within specified period will lead to forfeiture of deposit and blacklisting of agency.
+          </Alert>
         </Grid>
       </Grid>
     );
 
     if (activeStep === 3) return (
-      <Box>
-        <Typography variant="subtitle1" fontWeight={700} gutterBottom>Application Summary</Typography>
-        <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
-          <Grid container spacing={1}>
-            {[
-              ['Organisation',       cutData.orgName],
-              ['Contact Person',     cutData.contactPerson],
-              ['Contact Mobile',     cutData.contactMobile],
-              ['Official Email',     cutData.officialEmail],
-              ['Ward',               cutData.ward],
-              ['Road to be Cut',     cutData.roadName],
-              ['Ward of Cutting',    cutData.wardCutting],
-              ['Work Type',          cutData.workType],
-              ['Cut Length',         cutData.cutLength ? `${cutData.cutLength} m` : '—'],
-              ['Cut Width',          cutData.cutWidth  ? `${cutData.cutWidth} m`  : '—'],
-              ['Cut Depth',          cutData.cutDepth  ? `${cutData.cutDepth} m`  : '—'],
-              ['Proposed Start',     cutData.proposedStart],
-              ['Proposed End',       cutData.proposedEnd],
-              ['Duration',           daysBetween(cutData.proposedStart, cutData.proposedEnd)],
-              ['Contractor',         cutData.contractorName],
-              ['Road Restoration',   cutData.roadRestoration],
-            ].map(([label, value]) => (
-              <React.Fragment key={label}>
-                <Grid item xs={5} sm={4}>
-                  <Typography variant="body2" color="text.secondary" fontWeight={500}>{label}</Typography>
-                </Grid>
-                <Grid item xs={7} sm={8}>
-                  <Typography variant="body2">{value || '—'}</Typography>
-                </Grid>
-              </React.Fragment>
-            ))}
-          </Grid>
-          <Divider sx={{ my: 1.5 }} />
-          <Typography variant="body2" color="text.secondary" fontWeight={500}>Uploaded Documents</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
-            {Object.keys(cutDocs).map(key => (
-              <Chip key={key} label={key.replace(/_/g, ' ')} size="small" color="success" variant="outlined" />
-            ))}
-          </Box>
-        </Paper>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={cutDeclaration}
-              onChange={e => setCutDeclaration(e.target.checked)}
-              color="primary"
-            />
-          }
-          label="I declare that the information provided is correct and I accept responsibility for road restoration as committed. I understand that false information may result in rejection of the permit and legal action."
-        />
-      </Box>
+      <Grid container spacing={2.5}>
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Work Order / Sanction Letter *" name="work_order" required
+            hint="From competent authority — BSNL/MSEDCL/PWD/etc."
+            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Organisation Authorisation Letter *" name="authorisation_letter" required
+            hint="Signed by head of organisation"
+            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Site Plan showing road cutting path *" name="site_plan"
+            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Applicant ID / Company Certificate" name="company_cert"
+            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <DocUpload
+            label="Environmental Clearance" name="env_clearance"
+            hint="Required for major utility works"
+            docs={cutDocs} onFileChange={handleCutDoc} onRemove={removeCutDoc}
+          />
+        </Grid>
+      </Grid>
     );
     return null;
   };
 
-  /* ── Derived state ─────────────────────────────────────────────── */
+  /* ── Derived state ──────────────────────────────────────────────────── */
   const getSteps = () => {
     if (activeTab === 0) return POT_STEPS;
     if (activeTab === 1) return LIGHT_STEPS;
@@ -862,30 +1473,38 @@ export default function MunicipalRoadsForm({ onClose }) {
   };
   const steps      = getSteps();
   const isLastStep = activeStep === steps.length - 1;
-  const submitting =
-    activeTab === 0 ? potSubmitting   :
-    activeTab === 1 ? lightSubmitting :
-    activeTab === 2 ? drainSubmitting : cutSubmitting;
   const isSubmitted =
-    activeTab === 0 ? potSubmitted   :
+    activeTab === 0 ? potSubmitted :
     activeTab === 1 ? lightSubmitted :
-    activeTab === 2 ? drainSubmitted : cutSubmitted;
+    activeTab === 2 ? drainSubmitted :
+    cutSubmitted;
+  const submitting =
+    activeTab === 0 ? potSubmitting :
+    activeTab === 1 ? lightSubmitting :
+    activeTab === 2 ? drainSubmitting :
+    cutSubmitting;
 
-  /* ── Render ────────────────────────────────────────────────────── */
+  /* ── Render ─────────────────────────────────────────────────────────── */
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    handleSubmit(email);
+  };
+
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: HEADER_COLOR, color: '#fff', py: 2 }}>
         <Typography variant="h6" fontWeight={700}>Municipal Roads &amp; Infrastructure</Typography>
         <Typography variant="body2" sx={{ opacity: 0.85 }}>
-          Report road damage, streetlight issues, drain problems, or apply for road cutting permit
+          Report potholes, broken streetlights, drain/manhole issues, or apply for road cutting permits
         </Typography>
       </DialogTitle>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fafafa' }}>
         <Tabs value={activeTab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
           <Tab label="Pothole / Road Damage" />
-          <Tab label="Streetlight Complaint" />
-          <Tab label="Drain / Manhole Issue" />
+          <Tab label="Broken Streetlight" />
+          <Tab label="Drain / Manhole" />
           <Tab label="Road Cutting Permit" />
         </Tabs>
       </Box>
@@ -905,7 +1524,9 @@ export default function MunicipalRoadsForm({ onClose }) {
 
       {!isSubmitted && (
         <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-          <Button onClick={handleBack} variant="outlined" disabled={activeStep === 0}>Back</Button>
+          <Button onClick={handleBack} variant="outlined" disabled={activeStep === 0}>
+            Back
+          </Button>
           <Box sx={{ flex: 1 }} />
           {!isLastStep ? (
             <Button
@@ -916,8 +1537,7 @@ export default function MunicipalRoadsForm({ onClose }) {
             </Button>
           ) : (
             <Button
-              onClick={handleSubmit} variant="contained"
-              disabled={submitting || (activeTab === 3 && !cutDeclaration)}
+              onClick={() => setShowOtpDialog(true)} variant="contained" disabled={submitting}
               sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
             >
               {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Application'}
@@ -925,6 +1545,23 @@ export default function MunicipalRoadsForm({ onClose }) {
           )}
         </DialogActions>
       )}
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={activeTab === 0 ? potData.email || '' : activeTab === 1 ? lightData.email || '' : activeTab === 2 ? drainData.email || '' : cutData.email || ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptAppNum}
+        applicationType={receiptAppType}
+        formData={receiptFormData}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 }
+

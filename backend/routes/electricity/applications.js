@@ -85,8 +85,10 @@ router.post('/submit', optionalAuth, [
   ]),
   body('application_data').isObject()
 ], async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -211,11 +213,18 @@ router.post('/submit', optionalAuth, [
       application_id: applicationId
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {
+        // Ignore rollback failures when connection itself is unavailable.
+      }
+    }
     console.error('Submit application error:', error.message);
-    res.status(500).json({ error: 'Failed to submit application', details: error.message });
+    const statusCode = error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' ? 503 : 500;
+    res.status(statusCode).json({ error: 'Failed to submit application', details: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

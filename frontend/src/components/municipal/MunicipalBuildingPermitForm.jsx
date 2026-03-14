@@ -9,6 +9,8 @@ import { validateFile } from './formUtils';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { CheckCircle as SuccessIcon } from '@mui/icons-material';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#6a1b9a';
 const WARDS = Array.from({ length: 10 }, (_, i) => 'Ward ' + (i + 1));
@@ -77,6 +79,13 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
   });
 
   const [docs, setDocs] = useState({});
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [receiptAppType, setReceiptAppType] = useState('');
+  const [receiptFormData, setReceiptFormData] = useState({});
+  const [receiptAppNum, setReceiptAppNum] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -216,7 +225,7 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
     return types[tab];
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (email) => {
     const err = validateStep();
     if (err) { toast.error(err); return; }
     setSubmitting(true);
@@ -225,13 +234,27 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
         application_type: getAppType(),
         application_data: formData,
       });
-      setRefNumber(res.data?.data?.application_number || 'MBP' + Date.now());
-    } catch {
-      setRefNumber('MBP' + Date.now());
-    } finally {
-      setSubmitting(false);
+      const appNum = res.data?.data?.application_number || 'MBP' + Date.now();
+      setRefNumber(appNum);
+      const ts = new Date().toISOString();
+      setReceiptAppNum(appNum);
+      setReceiptAppType(getAppType());
+      setReceiptFormData({ ...formData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: getAppType(),
+        application_data: { ...formData },
+        submitted_at: ts,
+      }).catch(console.warn);
       setSubmitted(true);
       toast.success('Application submitted successfully!');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Submission failed. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -319,9 +342,7 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
           </TextField>
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField fullWidth required select label="Ward" name="bp_ward" value={formData.bp_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward" name="bp_ward" value={formData.bp_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12}>
           <TextField fullWidth required multiline rows={2} label="Owner Address" name="bp_owner_address" value={formData.bp_owner_address} onChange={handleChange} />
@@ -618,9 +639,7 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
           <TextField fullWidth multiline rows={2} label="Property Address" name="cc_property_address" value={formData.cc_property_address} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField fullWidth required select label="Ward" name="cc_ward" value={formData.cc_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward" name="cc_ward" value={formData.cc_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={4}>
           <TextField fullWidth label="Approved Built-up Area (sq.m)" name="cc_approved_bua" value={formData.cc_approved_bua} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
@@ -707,9 +726,7 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
           <TextField fullWidth label="Email" name="oc_email" value={formData.oc_email} onChange={handleChange} type="email" />
         </Grid>
         <Grid item xs={12} md={6}>
-          <TextField fullWidth required select label="Ward" name="oc_ward" value={formData.oc_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward" name="oc_ward" value={formData.oc_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12}>
           <TextField fullWidth required multiline rows={2} label="Property Address" name="oc_property_address" value={formData.oc_property_address} onChange={handleChange} />
@@ -954,6 +971,12 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
 
   const isStepperTab = tab < 3;
 
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    handleSubmit(email);
+  };
+
   return (
     <Box>
       <DialogContent>
@@ -991,7 +1014,7 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
               <Button onClick={handleBack} variant="outlined" sx={{ borderColor: HEADER_COLOR, color: HEADER_COLOR }}>Back</Button>
             )}
             {isLastStep() ? (
-              <Button variant="contained" onClick={handleSubmit} disabled={submitting} sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: '#4a148c' } }}>
+              <Button variant="contained" onClick={() => setShowOtpDialog(true)} disabled={submitting} sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: '#4a148c' } }}>
                 {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Application'}
               </Button>
             ) : (
@@ -1002,8 +1025,25 @@ const MunicipalBuildingPermitForm = ({ onClose }) => {
           </>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={tab === 0 ? formData.bp_email || '' : tab === 1 ? formData.cc_email || '' : formData.oc_email || ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptAppNum}
+        applicationType={receiptAppType}
+        formData={receiptFormData}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 };
 
 export default MunicipalBuildingPermitForm;
+

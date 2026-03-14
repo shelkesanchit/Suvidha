@@ -51,8 +51,9 @@ async function uploadDocuments(applicationId, documents) {
 
 // Submit new gas application
 router.post('/submit', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { application_type, application_data, documents = [], additional_info = {} } = req.body;
@@ -149,11 +150,15 @@ router.post('/submit', async (req, res) => {
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Submit gas application error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
@@ -246,8 +251,9 @@ router.get('/consumer-by-mobile/:mobile', async (req, res) => {
 
 // Book LPG cylinder
 router.post('/cylinder-booking', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { consumer_number, mobile, cylinder_type, quantity = 1, delivery_preference = 'home_delivery' } = req.body;
@@ -348,11 +354,15 @@ router.post('/cylinder-booking', async (req, res) => {
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Cylinder booking error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

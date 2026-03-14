@@ -9,6 +9,8 @@ import { validateFile } from './formUtils';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { CheckCircle as SuccessIcon } from '@mui/icons-material';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#e65100';
 const WARDS = Array.from({ length: 10 }, (_, i) => 'Ward ' + (i + 1));
@@ -83,6 +85,13 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
   });
 
   const [docs, setDocs] = useState({});
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [receiptAppType, setReceiptAppType] = useState('');
+  const [receiptFormData, setReceiptFormData] = useState({});
+  const [receiptAppNum, setReceiptAppNum] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -167,22 +176,48 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
 
   const isLastStep = () => activeStep === TAB_STEPS[0].length - 1;
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (email) => {
     const err = validateStep();
     if (err) { toast.error(err); return; }
     setSubmitting(true);
     try {
+      const docsArray = await Promise.all(
+        Object.entries(docs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
       const res = await api.post('/municipal/applications/submit', {
         application_type: 'new_trade_license',
         application_data: formData,
+        documents: docsArray,
       });
-      setRefNumber(res.data?.data?.application_number || 'MTL' + Date.now());
-    } catch {
-      setRefNumber('MTL' + Date.now());
+      const appNum = res.data?.data?.application_number || res.data?.reference_number || `MTL${Date.now()}`;
+      const ts = new Date().toISOString();
+      setReceiptAppNum(appNum);
+      setReceiptAppType('trade_license_new');
+      setReceiptFormData({ ...formData });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      toast.success('Application submitted successfully!');
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'trade_license_new',
+        application_data: { ...formData },
+        submitted_at: ts,
+      }).catch(console.warn);
+    } catch (err) {
+      toast.error('Submission failed. Please try again.');
     } finally {
       setSubmitting(false);
-      setSubmitted(true);
-      toast.success('Trade License application submitted!');
     }
   };
 
@@ -324,9 +359,7 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
         <TextField fullWidth required multiline rows={2} label="Business Address (Full)" name="tl_business_address" value={formData.tl_business_address} onChange={handleChange} />
       </Grid>
       <Grid item xs={12} md={6}>
-        <TextField fullWidth required select label="Ward" name="tl_ward" value={formData.tl_ward} onChange={handleChange}>
-          {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-        </TextField>
+        <TextField fullWidth required label="Ward" name="tl_ward" value={formData.tl_ward} onChange={handleChange} />
       </Grid>
       <Grid item xs={12} md={6}>
         <TextField fullWidth required label="Pincode" name="tl_pincode" value={formData.tl_pincode} onChange={handleChange} inputProps={{ maxLength: 6 }} />
@@ -378,9 +411,7 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
         <TextField fullWidth required multiline rows={2} label="Permanent Residential Address" name="tl_res_address" value={formData.tl_res_address} onChange={handleChange} />
       </Grid>
       <Grid item xs={12} md={4}>
-        <TextField fullWidth select label="Ward of Residence" name="tl_res_ward" value={formData.tl_res_ward} onChange={handleChange}>
-          {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-        </TextField>
+        <TextField fullWidth label="Ward of Residence" name="tl_res_ward" value={formData.tl_res_ward} onChange={handleChange} />
       </Grid>
       {(formData.tl_legal_entity === 'Partnership Firm') && (
         <>
@@ -832,6 +863,12 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
     return null;
   };
 
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    handleSubmit(email);
+  };
+
   return (
     <Box>
       <DialogContent>
@@ -869,7 +906,7 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
               <Button onClick={handleBack} variant="outlined" sx={{ borderColor: HEADER_COLOR, color: HEADER_COLOR }}>Back</Button>
             )}
             {isLastStep() ? (
-              <Button variant="contained" onClick={handleSubmit} disabled={submitting} sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: '#bf360c' } }}>
+              <Button variant="contained" onClick={() => setShowOtpDialog(true)} disabled={submitting} sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: '#bf360c' } }}>
                 {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Application'}
               </Button>
             ) : (
@@ -880,8 +917,25 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
           </>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.tl_email || ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptAppNum}
+        applicationType={receiptAppType}
+        formData={receiptFormData}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 };
 
 export default MunicipalTradeLicenseForm;
+

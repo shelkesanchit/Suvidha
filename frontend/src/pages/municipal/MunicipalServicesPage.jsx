@@ -247,7 +247,7 @@ const MunicipalServicesPage = () => {
                 </Typography>
               </Toolbar>
             </AppBar>
-            <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+            <Box className="kiosk-form-shell" sx={{ flexGrow: 1, overflow: 'auto' }}>
               {renderFormComponent(openService, handleClose)}
             </Box>
           </Box>

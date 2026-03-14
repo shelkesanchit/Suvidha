@@ -191,8 +191,9 @@ router.get('/applications', async (req, res) => {
 
 // Update application status
 router.put('/applications/:id/status', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     const { id } = req.params;
     const { status, remarks } = req.body;
@@ -264,11 +265,15 @@ router.put('/applications/:id/status', async (req, res) => {
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Update application error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

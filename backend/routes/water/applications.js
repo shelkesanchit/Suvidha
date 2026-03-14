@@ -47,8 +47,9 @@ async function uploadDocuments(applicationId, documents) {
 
 // Submit new water application
 router.post('/submit', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { application_type, application_data, documents } = req.body;
@@ -100,11 +101,15 @@ router.post('/submit', async (req, res) => {
       data: { application_number: applicationNumber, application_id: applicationId }
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Submit water application error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

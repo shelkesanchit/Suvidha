@@ -54,8 +54,9 @@ router.post('/create-order', verifyToken, async (req, res) => {
 
 // Verify payment
 router.post('/verify', verifyToken, async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
@@ -98,11 +99,15 @@ router.post('/verify', verifyToken, async (req, res) => {
 
     res.json({ message: 'Payment verified successfully', receipt_number: receiptNumber, transaction_id: payment.transaction_id });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Verify payment error:', error);
     res.status(500).json({ error: 'Payment verification failed' });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
@@ -159,8 +164,9 @@ router.get('/receipt/:receiptNumber', verifyToken, async (req, res) => {
 
 // Prepaid recharge
 router.post('/prepaid-recharge', verifyToken, async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { consumer_number, amount } = req.body;
@@ -188,11 +194,15 @@ router.post('/prepaid-recharge', verifyToken, async (req, res) => {
 
     res.json({ message: 'Recharge successful', recharge_number: rechargeNumber, units_credited: unitsCredited });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Prepaid recharge error:', error);
     res.status(500).json({ error: 'Recharge failed' });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

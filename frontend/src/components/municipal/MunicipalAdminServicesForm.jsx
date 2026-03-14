@@ -9,6 +9,8 @@ import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import DocUpload from './DocUpload';
 import { validateFile } from './formUtils';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#1a237e';
 const WARDS = Array.from({ length: 10 }, (_, i) => 'Ward ' + (i + 1));
@@ -82,6 +84,10 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
   const [refNumber, setRefNumber]   = useState('');
   const [formData, setFormData]     = useState(initialForm);
   const [docs, setDocs]             = useState({});
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptInfo, setReceiptInfo] = useState({ appNum: '', type: '', data: {}, ts: '', email: '' });
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleChange = (e) => {
@@ -146,11 +152,37 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
     const appTypes = ['noc_certificate', 'domicile_certificate', 'residence_certificate', 'annual_subscription', 'advertisement_permit'];
     setSubmitting(true);
     try {
+      const docsArray = await Promise.all(
+        Object.entries(docs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
+      const appType = appTypes[tab];
       const res = await api.post('/municipal/applications/submit', {
-        application_type: appTypes[tab],
+        application_type: appType,
         application_data: { ...formData },
+        documents: docsArray,
       });
-      setRefNumber(res.data?.data?.application_number || 'MAS' + Date.now());
+      const appNum = res.data?.data?.application_number || res.data?.reference_number || `MAS${Date.now()}`;
+      const ts = new Date().toISOString();
+      setRefNumber(appNum);
+      setReceiptInfo({ appNum, type: appType, data: { ...formData }, ts, email: verifiedEmail });
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: verifiedEmail,
+        application_number: appNum,
+        application_type: appType,
+        application_data: { ...formData },
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch {
       setRefNumber('MAS' + Date.now());
     } finally {
@@ -158,6 +190,12 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
       setSubmitted(true);
       toast.success('Submitted successfully!');
     }
+  };
+
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    handleSubmit();
   };
 
   // ── Fee info for subscriptions ───────────────────────────────────────────────
@@ -257,10 +295,8 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
                 </TextField>
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Ward *" name="ward"
-                  value={formData.ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
+                <TextField fullWidth required label="Ward *" name="ward"
+                  value={formData.ward} onChange={handleChange} />
               </Grid>
               <Grid item xs={12} md={8}>
                 <TextField fullWidth required label="Complete Address *" name="address"
@@ -460,10 +496,8 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
                   value={formData.dom_perm_address} onChange={handleChange} multiline rows={2} />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Ward *" name="ward"
-                  value={formData.ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
+                <TextField fullWidth required label="Ward *" name="ward"
+                  value={formData.ward} onChange={handleChange} />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField fullWidth label="Pincode" name="pincode"
@@ -599,10 +633,8 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
                   value={formData.address} onChange={handleChange} multiline rows={2} />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Ward *" name="ward"
-                  value={formData.ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
+                <TextField fullWidth required label="Ward *" name="ward"
+                  value={formData.ward} onChange={handleChange} />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField fullWidth select label="Duration at Current Address" name="res_duration_at_address"
@@ -701,10 +733,8 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
                   value={formData.address} onChange={handleChange} multiline rows={2} />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Ward *" name="ward"
-                  value={formData.ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
+                <TextField fullWidth required label="Ward *" name="ward"
+                  value={formData.ward} onChange={handleChange} />
               </Grid>
             </Grid>
           )}
@@ -839,10 +869,8 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
                   value={formData.adv_applicant_address} onChange={handleChange} multiline rows={2} />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Ward *" name="adv_ward"
-                  value={formData.adv_ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
+                <TextField fullWidth required label="Ward *" name="adv_ward"
+                  value={formData.adv_ward} onChange={handleChange} />
               </Grid>
             </Grid>
           )}
@@ -866,10 +894,8 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
                   placeholder="Street name, locality, landmark" />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Ward of Display *" name="adv_display_ward"
-                  value={formData.adv_display_ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
+                <TextField fullWidth required label="Ward of Display *" name="adv_display_ward"
+                  value={formData.adv_display_ward} onChange={handleChange} />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField fullWidth select required label="Zone Type *" name="adv_zone_type"
@@ -1005,7 +1031,7 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
         {isLastStep && (
           <Button
             variant="contained"
-            onClick={handleSubmit}
+            onClick={() => setShowOtpDialog(true)}
             disabled={submitting}
             sx={{ bgcolor: HEADER_COLOR }}
           >
@@ -1015,6 +1041,22 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
           </Button>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={formData.noc_email || formData.domicile_email || formData.res_email || formData.adv_email || ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptInfo.appNum}
+        applicationType={receiptInfo.type}
+        formData={receiptInfo.data}
+        email={receiptInfo.email}
+        submittedAt={receiptInfo.ts}
+      />
     </Box>
   );
 };

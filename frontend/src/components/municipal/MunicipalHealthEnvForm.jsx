@@ -9,6 +9,8 @@ import { validateFile } from './formUtils';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { CheckCircle as SuccessIcon } from '@mui/icons-material';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#00695c';
 const WARDS = Array.from({ length: 10 }, (_, i) => 'Ward ' + (i + 1));
@@ -84,6 +86,13 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
   });
 
   const [docs, setDocs] = useState({});
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [receiptAppType, setReceiptAppType] = useState('');
+  const [receiptFormData, setReceiptFormData] = useState({});
+  const [receiptAppNum, setReceiptAppNum] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -231,11 +240,39 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
     if (err) { toast.error(err); return; }
     setSubmitting(true);
     try {
+      const docsArray = await Promise.all(
+        Object.entries(docs)
+          .filter(([, file]) => file)
+          .map(([documentType, file]) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve({
+              name: file.name, type: file.type, size: file.size,
+              data: reader.result.split(',')[1], documentType,
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }))
+      );
+      const appType = getAppType();
+      const emailMap = [formData.hl_email, formData.fe_proprietor_email, formData.fv_email, formData.ec_email];
+      const emailVal = verifiedEmail || emailMap[tab] || '';
       const res = await api.post('/municipal/applications/submit', {
-        application_type: getAppType(),
+        application_type: appType,
         application_data: formData,
+        documents: docsArray,
       });
-      setRefNumber(res.data?.data?.application_number || 'MHE' + Date.now());
+      const appNum = res.data?.data?.application_number || res.data?.reference_number || `MHE${Date.now()}`;
+      const ts = new Date().toISOString();
+      setRefNumber(appNum);
+      setReceiptInfo({ appNum, type: appType, data: { ...formData }, ts, email: emailVal });
+      setShowReceipt(true);
+      api.post('/municipal/otp/send-receipt', {
+        email: emailVal,
+        application_number: appNum,
+        application_type: appType,
+        application_data: { ...formData },
+        submitted_at: ts,
+      }).catch(console.warn);
     } catch {
       setRefNumber('MHE' + Date.now());
     } finally {
@@ -296,9 +333,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
           </TextField>
         </Grid>
         <Grid item xs={12} md={4}>
-          <TextField fullWidth required select label="Ward" name="hl_ward" value={formData.hl_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward" name="hl_ward" value={formData.hl_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12}>
           <TextField fullWidth required multiline rows={2} label="Permanent Address" name="hl_address" value={formData.hl_address} onChange={handleChange} />
@@ -330,9 +365,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
           </TextField>
         </Grid>
         <Grid item xs={12} md={6}>
-          <TextField fullWidth required select label="Ward (Business Location)" name="hl_biz_ward" value={formData.hl_biz_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward (Business Location)" name="hl_biz_ward" value={formData.hl_biz_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12}>
           <TextField fullWidth required multiline rows={2} label="Business Address" name="hl_business_address" value={formData.hl_business_address} onChange={handleChange} />
@@ -501,9 +534,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
           <TextField fullWidth required multiline rows={2} label="Establishment Address" name="fe_address" value={formData.fe_address} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={2}>
-          <TextField fullWidth required select label="Ward" name="fe_ward" value={formData.fe_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward" name="fe_ward" value={formData.fe_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={2}>
           <TextField fullWidth required label="Year of Establishment" name="fe_year_established" value={formData.fe_year_established} onChange={handleChange} type="number" inputProps={{ min: 1900, max: new Date().getFullYear() }} />
@@ -694,9 +725,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
           <TextField fullWidth required multiline rows={2} label="Complete Address (where fogging is needed)" name="fv_address" value={formData.fv_address} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={6}>
-          <TextField fullWidth required select label="Ward" name="fv_ward" value={formData.fv_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward" name="fv_ward" value={formData.fv_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={6}>
           <TextField fullWidth label="Contact Person at Premises (if institutional)" name="fv_contact_person" value={formData.fv_contact_person} onChange={handleChange} placeholder="Name of contact at location" />
@@ -803,9 +832,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
           <TextField fullWidth required multiline rows={2} label="Project Location" name="ec_project_location" value={formData.ec_project_location} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={3}>
-          <TextField fullWidth required select label="Ward" name="ec_ward" value={formData.ec_ward} onChange={handleChange}>
-            {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-          </TextField>
+          <TextField fullWidth required label="Ward" name="ec_ward" value={formData.ec_ward} onChange={handleChange} />
         </Grid>
         <Grid item xs={12} md={3}>
           <TextField fullWidth required label="Project Area (sq.m / acres)" name="ec_project_area" value={formData.ec_project_area} onChange={handleChange} placeholder="e.g., 5000 sq.m" />
@@ -980,6 +1007,12 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
     return null;
   };
 
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    handleSubmit(email);
+  };
+
   return (
     <Box>
       <DialogContent>
@@ -1008,7 +1041,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
           <Button onClick={handleBack} variant="outlined" sx={{ borderColor: HEADER_COLOR, color: HEADER_COLOR }}>Back</Button>
         )}
         {isLastStep() ? (
-          <Button variant="contained" onClick={handleSubmit} disabled={submitting} sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: '#004d40' } }}>
+          <Button variant="contained" onClick={() => setShowOtpDialog(true)} disabled={submitting} sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: '#004d40' } }}>
             {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Application'}
           </Button>
         ) : (
@@ -1017,8 +1050,25 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
           </Button>
         )}
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={tab === 0 ? formData.hl_email || '' : tab === 1 ? formData.fe_proprietor_email || '' : tab === 2 ? formData.fv_email || '' : formData.ec_email || ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptAppNum}
+        applicationType={receiptAppType}
+        formData={receiptFormData}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
 };
 
 export default MunicipalHealthEnvForm;
+

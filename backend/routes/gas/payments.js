@@ -8,8 +8,9 @@ const { pool } = require('../../config/database');
 
 // Process payment
 router.post('/process', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { consumer_id, booking_number, amount, payment_method } = req.body;
@@ -73,11 +74,15 @@ router.post('/process', async (req, res) => {
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Process gas payment error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
@@ -116,8 +121,9 @@ router.get('/history/:consumerId', async (req, res) => {
 
 // Pay for cylinder booking
 router.post('/cylinder-payment', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { booking_number, payment_method } = req.body;
@@ -176,11 +182,15 @@ router.post('/cylinder-payment', async (req, res) => {
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+    }
     console.error('Cylinder payment error:', error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

@@ -1,918 +1,1649 @@
 import React, { useState } from 'react';
 import {
-  Box, Typography, TextField, Button, Grid, MenuItem, Tabs, Tab,
-  DialogContent, DialogActions, Alert, Chip, CircularProgress,
-  Paper, Stepper, Step, StepLabel, Divider, Switch, FormControlLabel,
+  Box, Grid, TextField, MenuItem, Button, Tabs, Tab,
+  Stepper, Step, StepLabel, Alert, Chip, CircularProgress,
+  Paper, Divider, Typography, DialogContent, DialogActions,
+  Switch, FormControlLabel, Select, InputLabel, FormControl,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
-import { CheckCircle as SuccessIcon, Print as PrintIcon } from '@mui/icons-material';
-import toast from 'react-hot-toast';
-import api from '../../utils/api';
+import { CheckCircle as SuccessIcon, Download as DownloadIcon } from '@mui/icons-material';
 import DocUpload from './DocUpload';
 import { validateFile } from './formUtils';
+import toast from 'react-hot-toast';
+import api from '../../utils/api';
+import EmailOtpVerification from './EmailOtpVerification';
+import ApplicationReceipt from './ApplicationReceipt';
 
 const HEADER_COLOR = '#1565c0';
+const HOVER_COLOR  = '#0d47a1';
 const WARDS = Array.from({ length: 10 }, (_, i) => 'Ward ' + (i + 1));
 
-const SELF_ASSESS_STEPS  = ['Property Details', 'Owner Details', 'Building Info', 'Documents & Review'];
-const REVISION_STEPS     = ['Property & Applicant', 'Revision Details', 'Documents'];
-const MUTATION_STEPS     = ['Previous Owner', 'New Owner', 'Property Details', 'Documents'];
-// Tab-index → step-count (0 = no stepper)
-const STEP_COUNTS = [0, 4, 3, 4, 0];
+const SELF_ASSESS_STEPS = ['Owner Details', 'Property Details', 'Building Details', 'Documents & Review'];
+const REVISION_STEPS    = ['Applicant & Property', 'Revision Request', 'Documents'];
+const MUTATION_STEPS    = ['Previous Owner', 'New Owner', 'Transfer Details', 'Documents'];
+
+const PROPERTY_TYPES = [
+  'Independent house — bungalow', 'Row house/tenement', 'Flat/apartment in society',
+  'Commercial shop on ground floor', 'Office space', 'Warehouse/godown', 'Industrial shed',
+  'Petrol pump', 'Hospital/nursing home', 'Hotel', 'Mixed residential+commercial',
+  'Agricultural (not taxable)', 'Government/public',
+];
 
 function TabPanel({ value, index, children }) {
   return value === index ? <Box sx={{ pt: 2 }}>{children}</Box> : null;
 }
 
-const SectionHeading = ({ children }) => (
-  <Grid item xs={12}>
-    <Box sx={{ mt: 1.5, mb: 0.5 }}>
+function SectionHeading({ children }) {
+  return (
+    <Grid item xs={12}>
       <Typography
-        variant="caption"
+        variant="subtitle1"
         fontWeight={700}
-        color="primary.dark"
-        sx={{ textTransform: 'uppercase', letterSpacing: 1 }}
+        sx={{ mt: 1.5, mb: 0.5, color: HEADER_COLOR, borderBottom: `2px solid ${HEADER_COLOR}`, pb: 0.5 }}
       >
         {children}
       </Typography>
-      <Divider />
+    </Grid>
+  );
+}
+
+function SuccessView({ refNumber, message, onClose }) {
+  return (
+    <Box sx={{ textAlign: 'center', py: 4 }}>
+      <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
+      <Typography variant="h5" color="success.main" gutterBottom fontWeight={700}>
+        Application Submitted Successfully!
+      </Typography>
+      <Chip
+        label={refNumber}
+        sx={{ bgcolor: HEADER_COLOR, color: 'white', fontSize: '1.1rem', py: 2.5, px: 3, mb: 3 }}
+      />
+      <Alert severity="info" sx={{ mb: 3, textAlign: 'left' }}>{message}</Alert>
+      <Button
+        variant="contained"
+        onClick={onClose}
+        sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR }, px: 5 }}
+      >
+        Close
+      </Button>
     </Box>
-  </Grid>
-);
+  );
+}
 
-const initialForm = {
-  // Tab 0
-  property_id: '', payment_method: '',
-  // Tab 1 – Step 0: Property Details
-  sa_plot_number: '', sa_address: '', sa_ward: '', sa_colony: '', sa_pincode: '',
-  sa_land_area: '', sa_property_type: '', sa_sub_type: '', sa_usage: '', sa_monthly_rent: '',
-  // Tab 1 – Step 1: Owner Details
-  sa_owner_name: '', sa_co_owner: '', sa_mobile: '', sa_alt_mobile: '',
-  sa_email: '', sa_aadhaar: '', sa_pan: '', sa_father_name: '',
-  sa_dob: '', sa_gender: '', sa_perm_address: '', sa_category: '',
-  // Tab 1 – Step 2: Building Info
-  sa_year_construction: '', sa_floors: '', sa_has_basement: 'no', sa_basement_area: '',
-  sa_total_builtup: '', sa_gf_area: '', sa_ff_area: '', sa_sf_area: '',
-  sa_construction_type: '', sa_plinth_area: '', sa_is_heritage: 'no',
-  sa_roof_type: '', sa_water_source: '', sa_electricity_meter: '', sa_prev_record: '',
-  // Tab 2 – Assessment Revision
-  rev_property_id: '', rev_owner_name: '', rev_mobile: '', rev_email: '', rev_ward: '', rev_aadhaar: '',
-  rev_reason: '', rev_current_value: '', rev_requested_value: '', rev_area_diff: '',
-  rev_explanation: '', rev_prev_order_no: '', rev_effective_from: '',
-  // Tab 3 – Mutation Step 0: Previous Owner
-  mut_prev_owner_name: '', mut_prev_mobile: '', mut_prev_aadhaar: '', mut_prev_pan: '',
-  mut_transfer_reason: '', mut_property_id: '',
-  // Tab 3 – Mutation Step 1: New Owner
-  mut_new_owner_name: '', mut_new_mobile: '', mut_new_aadhaar: '', mut_new_pan: '',
-  mut_new_email: '', mut_new_address: '', mut_relation: '', mut_new_category: '',
-  // Tab 3 – Mutation Step 2: Property Details
-  mut_property_address: '', mut_ward: '', mut_transfer_date: '', mut_transfer_value: '',
-  mut_stamp_duty: 'yes', mut_reg_number: '', mut_property_type: '',
-  // Tab 4
-  receipt_property_id: '',
-};
+function makeDocHandlers(setDocs) {
+  return {
+    onFileChange: (name, file) => {
+      if (!file) return;
+      const err = validateFile(file, 5);
+      if (err) { toast.error(err); return; }
+      setDocs(p => ({ ...p, [name]: file }));
+      toast.success(file.name + ' selected');
+    },
+    onRemove: (name) => setDocs(p => { const n = { ...p }; delete n[name]; return n; }),
+  };
+}
 
-const MunicipalPropertyTaxForm = ({ onClose }) => {
+export default function MunicipalPropertyTaxForm({ onClose }) {
+  /* ─── Tab / Step ──────────────────────────────────────────────────────────── */
   const [tab, setTab]               = useState(0);
   const [activeStep, setActiveStep] = useState(0);
-  const [submitted, setSubmitted]   = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [refNumber, setRefNumber]   = useState('');
-  const [declared, setDeclared]     = useState(false);
+
+  /* ─── Tab 0 — Pay Property Tax ──────────────────────────────────────────── */
   const [billData, setBillData]     = useState(null);
-  const [receipts, setReceipts]     = useState(null);
-  const [formData, setFormData]     = useState(initialForm);
-  const [docs, setDocs]             = useState({});
+  const [t0, setT0]                 = useState({ property_id: '', payment_method: '' });
+  const [t0Submitting, setT0Submitting] = useState(false);
+  const [t0Submitted, setT0Submitted]   = useState(false);
+  const [t0Ref, setT0Ref]               = useState('');
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleChange = (e) => {
+  /* ─── Tab 1 — Self-Assessment ────────────────────────────────────────────── */
+  const [t1, setT1] = useState({
+    // Step 0 – Owner Details
+    owner_name: '', father_name: '', dob: '', gender: '',
+    mobile: '', alt_mobile: '', email: '', aadhaar: '', pan: '',
+    joint_ownership: 'No — sole owner', co_owner_name: '', co_owner_aadhaar: '',
+    residential_address: '', owner_ward: '', owner_pincode: '',
+    // Step 1 – Property Details
+    property_address: '', property_ward: '', property_pincode: '',
+    plot_number: '', cts_hissa: '', zone_type: '', property_type: '',
+    total_plot_area: '', plot_area_shared: 'No', ownership_type: '',
+    // Step 2 – Building Details
+    year_construction: '', floors: '', gf_bua: '', total_bua: '',
+    current_usage: '', monthly_rent: '',
+    occ_cert: 'No', muni_approved: 'No', lift: 'No',
+    parking_2w: '', parking_4w: '', building_violations: 'No',
+  });
+  const [t1Docs, setT1Docs]               = useState({});
+  const [t1Declaration, setT1Declaration] = useState(false);
+  const [t1Submitting, setT1Submitting]   = useState(false);
+  const [t1Submitted, setT1Submitted]     = useState(false);
+  const [t1Ref, setT1Ref]                 = useState('');
+
+  /* ─── Tab 2 — Assessment Revision ───────────────────────────────────────── */
+  const [t2, setT2] = useState({
+    property_id: '', owner_name: '', mobile: '', email: '', aadhaar: '',
+    existing_value: '', last_assessment_year: '', property_type: '',
+    ward: '', property_address: '', revision_reason: '',
+    revised_amount: '', justification: '', evidence_type: '',
+    date_of_change: '', application_submitted_to: '',
+  });
+  const [t2Docs, setT2Docs]             = useState({});
+  const [t2Submitting, setT2Submitting] = useState(false);
+  const [t2Submitted, setT2Submitted]   = useState(false);
+  const [t2Ref, setT2Ref]               = useState('');
+
+  /* ─── Tab 3 — Property Mutation ─────────────────────────────────────────── */
+  const [t3, setT3] = useState({
+    // Step 0 – Previous Owner
+    prev_owner_name: '', prev_mobile: '', prev_aadhaar: '', prev_pan: '',
+    property_id: '', prev_ward: '', property_address: '',
+    // Step 1 – New Owner
+    new_owner_name: '', new_father_name: '', new_dob: '', new_gender: '',
+    new_mobile: '', new_alt_mobile: '', new_email: '',
+    new_aadhaar: '', new_pan: '', new_address: '', new_ward: '',
+    // Step 2 – Transfer Details
+    transfer_type: '', transfer_date: '', sale_deed_reg_no: '',
+    registrar_office: '', sale_consideration: '', stamp_duty: '',
+    market_value: '', property_disputes: 'No', tax_arrear_cleared: '',
+  });
+  const [t3Docs, setT3Docs]             = useState({});
+  const [t3Submitting, setT3Submitting] = useState(false);
+  const [t3Submitted, setT3Submitted]   = useState(false);
+  const [t3Ref, setT3Ref]               = useState('');
+
+  /* ─── Tab 4 — View Tax Receipts ─────────────────────────────────────────── */
+  const [receipts, setReceipts]         = useState(null);
+  const [t4PropertyId, setT4PropertyId] = useState('');
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [receiptAppType, setReceiptAppType] = useState('');
+  const [receiptFormData, setReceiptFormData] = useState({});
+  const [receiptAppNum, setReceiptAppNum] = useState('');
+
+  /* ─── Doc handlers ───────────────────────────────────────────────────────── */
+  const t1DocH = makeDocHandlers(setT1Docs);
+  const t2DocH = makeDocHandlers(setT2Docs);
+  const t3DocH = makeDocHandlers(setT3Docs);
+
+  /* ─── Tab change ─────────────────────────────────────────────────────────── */
+  const handleTabChange = (_, v) => {
+    setTab(v);
+    setActiveStep(0);
+    setT0Submitted(false);
+    setT1Submitted(false);
+    setT2Submitted(false);
+    setT3Submitted(false);
+    setBillData(null);
+    setReceipts(null);
+  };
+
+  /* ─── Field change helpers ───────────────────────────────────────────────── */
+  const handleT1 = (e) => {
     const { name, value } = e.target;
-    setFormData(p => ({ ...p, [name]: value }));
-  };
-  const handleMobile  = (name) => (e) => setFormData(p => ({ ...p, [name]: e.target.value.replace(/\D/g, '').slice(0, 10) }));
-  const handleAadhaar = (name) => (e) => setFormData(p => ({ ...p, [name]: e.target.value.replace(/\D/g, '').slice(0, 12) }));
-
-  const onDocChange = (name, file) => {
-    if (!file) return;
-    const err = validateFile(file, 5);
-    if (err) { toast.error(err); return; }
-    setDocs(p => ({ ...p, [name]: file }));
-    toast.success(file.name + ' selected');
-  };
-  const onDocRemove = (name) => setDocs(p => { const n = { ...p }; delete n[name]; return n; });
-
-  // ── Mock fetchers ────────────────────────────────────────────────────────────
-  const fetchBill = () => {
-    if (!formData.property_id) return toast.error('Enter Property ID / Holding Number');
-    setBillData({
-      owner: 'Rajesh Kumar Verma', ward: 'Ward 5',
-      type: 'Residential — Independent House', area: '135 sq.m',
-      annualTax: 4850, lastPaid: '15 Mar 2024',
-      dueDate: '31 Mar 2025', penalty: 0, totalPayable: 4850,
-    });
+    if (['mobile', 'alt_mobile'].includes(name))
+      return setT1(p => ({ ...p, [name]: value.replace(/\D/g, '').slice(0, 10) }));
+    if (['aadhaar', 'co_owner_aadhaar'].includes(name))
+      return setT1(p => ({ ...p, [name]: value.replace(/\D/g, '').slice(0, 12) }));
+    if (name === 'pan')
+      return setT1(p => ({ ...p, pan: value.toUpperCase().slice(0, 10) }));
+    setT1(p => ({ ...p, [name]: value }));
   };
 
-  const fetchReceipts = () => {
-    if (!formData.receipt_property_id) return toast.error('Enter Property ID');
-    setReceipts([
-      { sr: 1, year: '2024-25', amount: 4850, mode: 'UPI',           date: '12 Apr 2024', receipt: 'PTX2024001' },
-      { sr: 2, year: '2023-24', amount: 4500, mode: 'Net Banking',   date: '08 Mar 2024', receipt: 'PTX2023001' },
-      { sr: 3, year: '2022-23', amount: 4200, mode: 'Cash at Counter',date: '15 Feb 2023', receipt: 'PTX2022001' },
-      { sr: 4, year: '2021-22', amount: 3900, mode: 'Debit Card',    date: '22 Apr 2022', receipt: 'PTX2021001' },
-      { sr: 5, year: '2020-21', amount: 3650, mode: 'UPI',           date: '10 Mar 2021', receipt: 'PTX2020001' },
-    ]);
+  const handleT2 = (e) => {
+    const { name, value } = e.target;
+    if (name === 'mobile')
+      return setT2(p => ({ ...p, mobile: value.replace(/\D/g, '').slice(0, 10) }));
+    if (name === 'aadhaar')
+      return setT2(p => ({ ...p, aadhaar: value.replace(/\D/g, '').slice(0, 12) }));
+    setT2(p => ({ ...p, [name]: value }));
   };
 
-  // ── Stepper navigation ───────────────────────────────────────────────────────
-  const isLastStep     = activeStep === STEP_COUNTS[tab] - 1;
-  const hasStepperTab  = [1, 2, 3].includes(tab);
+  const handleT3 = (e) => {
+    const { name, value } = e.target;
+    if (['prev_mobile', 'new_mobile', 'new_alt_mobile'].includes(name))
+      return setT3(p => ({ ...p, [name]: value.replace(/\D/g, '').slice(0, 10) }));
+    if (['prev_aadhaar', 'new_aadhaar'].includes(name))
+      return setT3(p => ({ ...p, [name]: value.replace(/\D/g, '').slice(0, 12) }));
+    if (['prev_pan', 'new_pan'].includes(name))
+      return setT3(p => ({ ...p, [name]: value.toUpperCase().slice(0, 10) }));
+    setT3(p => ({ ...p, [name]: value }));
+  };
 
+  /* ─── Stepper navigation ─────────────────────────────────────────────────── */
   const handleNext = () => {
+    /* --- Tab 1: Self-Assessment --- */
     if (tab === 1) {
-      if (activeStep === 0 && (!formData.sa_address || !formData.sa_ward || !formData.sa_colony || !formData.sa_pincode || !formData.sa_land_area || !formData.sa_property_type || !formData.sa_usage))
-        return toast.error('Please fill all required fields');
-      if (activeStep === 1 && (!formData.sa_owner_name || !formData.sa_mobile || !formData.sa_email || !formData.sa_aadhaar || !formData.sa_father_name || !formData.sa_dob || !formData.sa_perm_address))
-        return toast.error('Please fill all required owner fields');
-      if (activeStep === 2 && (!formData.sa_year_construction || !formData.sa_floors || !formData.sa_total_builtup || !formData.sa_construction_type))
-        return toast.error('Please fill all required building fields');
+      if (activeStep === 0) {
+        if (!t1.owner_name)                     return toast.error('Owner Full Name is required');
+        if (!t1.father_name)                    return toast.error('Father/Husband Name is required');
+        if (!t1.dob)                            return toast.error('Date of Birth is required');
+        if (t1.mobile.length < 10)              return toast.error('Mobile must be 10 digits');
+        if (!t1.email)                          return toast.error('Email is required');
+        if (t1.aadhaar.length < 12)             return toast.error('Aadhaar must be 12 digits');
+        if (!t1.pan || t1.pan.length < 10)      return toast.error('PAN Card is required (10 characters)');
+        if (!t1.residential_address)            return toast.error('Residential Address is required');
+        if (!t1.owner_ward)                     return toast.error('Owner Ward is required');
+      }
+      if (activeStep === 1) {
+        if (!t1.property_address)  return toast.error('Property Address is required');
+        if (!t1.property_ward)     return toast.error('Ward of Property is required');
+        if (!t1.plot_number)       return toast.error('Plot / Survey Number is required');
+        if (!t1.zone_type)         return toast.error('Zone Type is required');
+        if (!t1.property_type)     return toast.error('Property Type is required');
+        if (!t1.total_plot_area)   return toast.error('Total Plot Area is required');
+        if (!t1.ownership_type)    return toast.error('Ownership Type is required');
+      }
+      if (activeStep === 2) {
+        if (!t1.year_construction) return toast.error('Year of Construction is required');
+        if (!t1.floors)            return toast.error('Number of Floors is required');
+        if (!t1.gf_bua)            return toast.error('Ground Floor Built-up Area is required');
+        if (!t1.total_bua)         return toast.error('Total Built-up Area is required');
+        if (!t1Declaration)        return toast.error('Please accept the declaration before proceeding');
+      }
     }
+    /* --- Tab 2: Assessment Revision --- */
     if (tab === 2) {
-      if (activeStep === 0 && (!formData.rev_property_id || !formData.rev_owner_name || !formData.rev_mobile))
-        return toast.error('Property ID, owner name, and mobile are required');
-      if (activeStep === 1 && (!formData.rev_reason || !formData.rev_current_value || !formData.rev_requested_value || !formData.rev_explanation))
-        return toast.error('Please fill all required revision fields');
+      if (activeStep === 0) {
+        if (!t2.property_id)            return toast.error('Property ID / Holding Number is required');
+        if (!t2.owner_name)             return toast.error('Owner / Applicant Name is required');
+        if (t2.mobile.length < 10)      return toast.error('Mobile must be 10 digits');
+        if (!t2.existing_value)         return toast.error('Existing Assessed Value is required');
+        if (!t2.last_assessment_year)   return toast.error('Year of Last Assessment is required');
+        if (!t2.ward)                   return toast.error('Ward is required');
+        if (!t2.property_address)       return toast.error('Property Address is required');
+        if (!t2.revision_reason)        return toast.error('Reason for Revision Request is required');
+      }
+      if (activeStep === 1) {
+        if (!t2.revised_amount)  return toast.error('Revised Assessment Amount is required');
+        if (!t2.justification)   return toast.error('Detailed Justification is required');
+        if (!t2.date_of_change)  return toast.error('Date of Change is required');
+      }
     }
+    /* --- Tab 3: Property Mutation --- */
     if (tab === 3) {
-      if (activeStep === 0 && (!formData.mut_prev_owner_name || !formData.mut_prev_mobile || !formData.mut_prev_aadhaar || !formData.mut_transfer_reason || !formData.mut_property_id))
-        return toast.error('Please fill all required previous owner fields');
-      if (activeStep === 1 && (!formData.mut_new_owner_name || !formData.mut_new_mobile || !formData.mut_new_aadhaar || !formData.mut_new_address))
-        return toast.error('Please fill all required new owner fields');
-      if (activeStep === 2 && (!formData.mut_property_address || !formData.mut_transfer_date || !formData.mut_transfer_value || !formData.mut_reg_number))
-        return toast.error('Please fill all required property details');
+      if (activeStep === 0) {
+        if (!t3.prev_owner_name)         return toast.error('Previous Owner Full Name is required');
+        if (t3.prev_aadhaar.length < 12) return toast.error('Previous Owner Aadhaar must be 12 digits');
+        if (!t3.property_id)             return toast.error('Property ID / Holding No is required');
+        if (!t3.prev_ward)               return toast.error('Ward is required');
+        if (!t3.property_address)        return toast.error('Property Address is required');
+      }
+      if (activeStep === 1) {
+        if (!t3.new_owner_name)          return toast.error('New Owner Full Name is required');
+        if (!t3.new_father_name)         return toast.error('Father/Husband Name is required');
+        if (!t3.new_dob)                 return toast.error('Date of Birth is required');
+        if (!t3.new_gender)              return toast.error('Gender is required');
+        if (t3.new_mobile.length < 10)   return toast.error('Mobile must be 10 digits');
+        if (!t3.new_email)               return toast.error('Email is required');
+        if (t3.new_aadhaar.length < 12)  return toast.error('Aadhaar must be 12 digits');
+        if (!t3.new_pan || t3.new_pan.length < 10) return toast.error('PAN is required (10 characters)');
+        if (!t3.new_address)             return toast.error('New Owner Residential Address is required');
+        if (!t3.new_ward)                return toast.error('Ward of New Owner is required');
+      }
+      if (activeStep === 2) {
+        if (!t3.transfer_type)      return toast.error('Transfer Type is required');
+        if (!t3.transfer_date)      return toast.error('Date of Transfer / Registration is required');
+        if (!t3.sale_deed_reg_no)   return toast.error('Sale Deed / Registration No is required');
+        if (!t3.registrar_office)   return toast.error('Registration Office / Sub-Registrar Name is required');
+        if (!t3.stamp_duty)         return toast.error('Stamp Duty Paid amount is required');
+      }
     }
     setActiveStep(s => s + 1);
   };
+
   const handleBack = () => setActiveStep(s => s - 1);
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (tab === 1 && !declared) return toast.error('Please accept the declaration before submitting');
-    const appTypes = ['property_tax_payment', 'property_self_assessment', 'property_assessment_revision', 'property_mutation', null];
-    const appType = appTypes[tab];
-    if (!appType) return;
-    setSubmitting(true);
+  /* ─── Submit: Tab 0 ──────────────────────────────────────────────────────── */
+  const handleT0Submit = async (email) => {
+    if (!billData)              return toast.error('Please fetch the bill first');
+    if (!t0.payment_method)     return toast.error('Please select a Payment Method');
+    setT0Submitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: appType,
-        application_data: { ...formData },
+        application_type: 'property_tax_payment',
+        application_data: { ...t0, bill: billData },
       });
-      setRefNumber(res.data?.data?.application_number || 'MPT' + Date.now());
-    } catch {
-      setRefNumber('MPT' + Date.now());
+      const appNum = res.data?.data?.application_number || 'PTX-' + Date.now();
+      const ts = new Date().toISOString();
+      setT0Ref(appNum);
+      setReceiptAppNum(appNum);
+      setReceiptAppType('property_tax_payment');
+      setReceiptFormData({ ...t0 });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      toast.success('Payment submitted successfully!');
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'property_tax_payment',
+        application_data: { ...t0 },
+        submitted_at: ts,
+      }).catch(console.warn);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit. Please try again.');
     } finally {
-      setSubmitting(false);
-      setSubmitted(true);
-      toast.success('Submitted successfully!');
+      setT0Submitting(false);
     }
   };
 
-  // ── Success Screen ───────────────────────────────────────────────────────────
-  if (submitted) return (
-    <Box>
-      <DialogContent sx={{ textAlign: 'center', py: 4 }}>
-        <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
-        <Typography variant="h4" color="success.main" gutterBottom>
-          {tab === 0 ? 'Payment Successful!' : 'Application Submitted!'}
-        </Typography>
-        <Chip label={refNumber} sx={{ bgcolor: HEADER_COLOR, color: 'white', fontSize: '1.1rem', py: 2, px: 3, mb: 3 }} />
-        <Alert severity="info">
-          {tab === 0
-            ? 'Tax payment recorded. Receipt will be sent to your registered mobile/email within 24 hours.'
-            : tab === 1
-            ? 'Self-assessment registered. A municipal inspector will verify the property within 15 working days.'
-            : tab === 2
-            ? 'Assessment revision request submitted. Decision communicated within 30 working days.'
-            : 'Mutation application registered. Processing within 30 working days after document verification.'}
-        </Alert>
-      </DialogContent>
-      <DialogActions>
-        <Button variant="contained" onClick={onClose} fullWidth sx={{ bgcolor: HEADER_COLOR }}>Close</Button>
-      </DialogActions>
-    </Box>
-  );
+  /* ─── Submit: Tab 1 ──────────────────────────────────────────────────────── */
+  const handleT1Submit = async (email) => {
+    if (!t1Docs.ownership_deed)  return toast.error('Property Ownership / Sale Deed is required');
+    if (!t1Docs.owner_id_proof)  return toast.error('Owner Identity Proof (Aadhaar/PAN) is required');
+    setT1Submitting(true);
+    try {
+      const res = await api.post('/municipal/applications/submit', {
+        application_type: 'property_self_assessment',
+        application_data: { ...t1 },
+      });
+      const appNum = res.data?.data?.application_number || 'PSA-' + Date.now();
+      const ts = new Date().toISOString();
+      setT1Ref(appNum);
+      setReceiptAppNum(appNum);
+      setReceiptAppType('self_assessment');
+      setReceiptFormData({ ...t1 });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      toast.success('Application submitted successfully!');
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'self_assessment',
+        application_data: { ...t1 },
+        submitted_at: ts,
+      }).catch(console.warn);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit. Please try again.');
+    } finally {
+      setT1Submitting(false);
+    }
+  };
 
-  // ── Main Render ──────────────────────────────────────────────────────────────
+  /* ─── Submit: Tab 2 ──────────────────────────────────────────────────────── */
+  const handleT2Submit = async (email) => {
+    if (!t2Docs.old_assessment_order) return toast.error('Current/Old Assessment Order is required');
+    if (!t2Docs.ownership_proof)      return toast.error('Property Ownership Proof is required');
+    if (!t2Docs.supporting_doc)       return toast.error('Supporting document for revision reason is required');
+    setT2Submitting(true);
+    try {
+      const res = await api.post('/municipal/applications/submit', {
+        application_type: 'property_assessment_revision',
+        application_data: { ...t2 },
+      });
+      const appNum = res.data?.data?.application_number || 'PAR-' + Date.now();
+      const ts = new Date().toISOString();
+      setT2Ref(appNum);
+      setReceiptAppNum(appNum);
+      setReceiptAppType('tax_revision');
+      setReceiptFormData({ ...t2 });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      toast.success('Revision request submitted successfully!');
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'tax_revision',
+        application_data: { ...t2 },
+        submitted_at: ts,
+      }).catch(console.warn);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit. Please try again.');
+    } finally {
+      setT2Submitting(false);
+    }
+  };
+
+  /* ─── Submit: Tab 3 ──────────────────────────────────────────────────────── */
+  const handleT3Submit = async (email) => {
+    if (!t3Docs.sale_deed)     return toast.error('Registered Sale Deed / Gift Deed / Will is required');
+    if (!t3Docs.prev_owner_id) return toast.error('Previous Owner Identity Proof is required');
+    if (!t3Docs.new_owner_id)  return toast.error('New Owner Identity Proof (Aadhaar) is required');
+    setT3Submitting(true);
+    try {
+      const res = await api.post('/municipal/applications/submit', {
+        application_type: 'property_mutation',
+        application_data: { ...t3 },
+      });
+      const appNum = res.data?.data?.application_number || 'PMT-' + Date.now();
+      const ts = new Date().toISOString();
+      setT3Ref(appNum);
+      setReceiptAppNum(appNum);
+      setReceiptAppType('property_mutation');
+      setReceiptFormData({ ...t3 });
+      setSubmittedAt(ts);
+      setShowReceipt(true);
+      toast.success('Mutation application submitted successfully!');
+      api.post('/municipal/otp/send-receipt', {
+        email: email || '',
+        application_number: appNum,
+        application_type: 'property_mutation',
+        application_data: { ...t3 },
+        submitted_at: ts,
+      }).catch(console.warn);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit. Please try again.');
+    } finally {
+      setT3Submitting(false);
+    }
+  };
+
+  /* ─── Mock fetch: bill ───────────────────────────────────────────────────── */
+  const fetchBill = () => {
+    if (!t0.property_id) return toast.error('Enter Property ID / Holding Number');
+    setBillData({
+      owner: 'Rajesh Kumar Verma', ward: 'Ward 5',
+      propertyType: 'Residential — Independent House', builtUpArea: '135 sq.m',
+      annualTax: 4850, penalty: 0, cess: 145, totalDue: 4995,
+      dueDate: '31 Mar 2026',
+    });
+  };
+
+  /* ─── Mock fetch: receipts ───────────────────────────────────────────────── */
+  const fetchReceipts = () => {
+    if (!t4PropertyId) return toast.error('Enter Property ID to search');
+    setReceipts([
+      { year: '2024-25', amount: 4850, date: '12 Apr 2024', receipt: 'PTX2024001' },
+      { year: '2023-24', amount: 4500, date: '08 Mar 2024', receipt: 'PTX2023001' },
+      { year: '2022-23', amount: 4200, date: '15 Feb 2023', receipt: 'PTX2022001' },
+      { year: '2021-22', amount: 3900, date: '22 Apr 2022', receipt: 'PTX2021001' },
+      { year: '2020-21', amount: 3650, date: '10 Mar 2021', receipt: 'PTX2020001' },
+    ]);
+  };
+
+  /* ─── Derived ────────────────────────────────────────────────────────────── */
+  const showJointFields   = t1.joint_ownership !== 'No — sole owner';
+  const showMonthlyRent   = ['Tenant occupied — residential', 'Tenant occupied — commercial'].includes(t1.current_usage);
+
+  /* ─── OTP Handler ────────────────────────────────────────────────────────── */
+  const handleOtpVerified = (email) => {
+    setShowOtpDialog(false);
+    setVerifiedEmail(email);
+    if (tab === 0) handleT0Submit(email);
+    else if (tab === 1) handleT1Submit(email);
+    else if (tab === 2) handleT2Submit(email);
+    else if (tab === 3) handleT3Submit(email);
+  };
+
+  /* ─────────────────────────────── RENDER ──────────────────────────────────── */
   return (
     <Box>
-      <DialogContent>
+      <DialogContent sx={{ p: { xs: 1, sm: 2 } }}>
         <Tabs
           value={tab}
-          onChange={(_, v) => { setTab(v); setActiveStep(0); setBillData(null); setReceipts(null); }}
-          variant="scrollable" scrollButtons="auto"
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
           sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}
         >
           <Tab label="Pay Property Tax" />
           <Tab label="Self-Assessment" />
-          <Tab label="Assessment Revision" />
+          <Tab label="Tax Revision" />
           <Tab label="Property Mutation" />
-          <Tab label="View & Print Receipts" />
+          <Tab label="View Tax Receipts" />
         </Tabs>
 
         {/* ═══════════════════════════════════════════════════════════
             TAB 0 — Pay Property Tax  (no stepper)
         ════════════════════════════════════════════════════════════ */}
         <TabPanel value={tab} index={0}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={8}>
-              <TextField
-                fullWidth label="Property ID / Holding Number *" name="property_id"
-                value={formData.property_id} onChange={handleChange}
-                placeholder="e.g., WARD05-2023-1234"
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Button fullWidth variant="outlined" sx={{ height: 56 }} onClick={fetchBill}>
-                Fetch Bill
-              </Button>
-            </Grid>
+          {t0Submitted ? (
+            <SuccessView
+              refNumber={t0Ref}
+              message="Property tax paid online reflects in records within 24 hours. Keep payment receipt for future reference."
+              onClose={onClose}
+            />
+          ) : (
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={8}>
+                <TextField
+                  fullWidth
+                  label="Property ID / Holding Number *"
+                  value={t0.property_id}
+                  onChange={e => setT0(p => ({ ...p, property_id: e.target.value }))}
+                  placeholder="e.g. WARD05-2023-1234"
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Button
+                  fullWidth variant="outlined"
+                  sx={{ height: 56, borderColor: HEADER_COLOR, color: HEADER_COLOR }}
+                  onClick={fetchBill}
+                >
+                  Fetch Bill
+                </Button>
+              </Grid>
 
-            {billData && (
-              <>
-                <Grid item xs={12}>
-                  <Paper sx={{ p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
-                    <Typography variant="subtitle1" fontWeight={700} color="primary" gutterBottom>
-                      Property Tax Bill Details
-                    </Typography>
-                    <Divider sx={{ mb: 1.5 }} />
-                    <Grid container spacing={1}>
-                      <Grid item xs={6} sm={4}><Typography variant="body2">Owner Name: <b>{billData.owner}</b></Typography></Grid>
-                      <Grid item xs={6} sm={4}><Typography variant="body2">Ward: <b>{billData.ward}</b></Typography></Grid>
-                      <Grid item xs={6} sm={4}><Typography variant="body2">Property Type: <b>{billData.type}</b></Typography></Grid>
-                      <Grid item xs={6} sm={4}><Typography variant="body2">Built-up Area: <b>{billData.area}</b></Typography></Grid>
-                      <Grid item xs={6} sm={4}><Typography variant="body2">Last Paid: <b>{billData.lastPaid}</b></Typography></Grid>
-                      <Grid item xs={6} sm={4}><Typography variant="body2">Due Date: <b>{billData.dueDate}</b></Typography></Grid>
-                      <Grid item xs={6} sm={4}><Typography variant="body2">Annual Tax Due: <b>₹{billData.annualTax.toLocaleString()}</b></Typography></Grid>
-                      <Grid item xs={6} sm={4}>
-                        <Typography variant="body2" color={billData.penalty > 0 ? 'error.main' : 'text.secondary'}>
-                          Penalty: <b>₹{billData.penalty.toLocaleString()}</b>
-                        </Typography>
+              {billData && (
+                <>
+                  <Grid item xs={12}>
+                    <Paper sx={{ p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
+                      <Typography variant="subtitle1" fontWeight={700} color="primary" gutterBottom>
+                        Property Tax Bill Details
+                      </Typography>
+                      <Divider sx={{ mb: 1.5 }} />
+                      <Grid container spacing={1}>
+                        {[
+                          ['Owner Name', billData.owner],
+                          ['Ward', billData.ward],
+                          ['Property Type', billData.propertyType],
+                          ['Built-up Area', billData.builtUpArea],
+                          ['Annual Tax', '₹' + billData.annualTax.toLocaleString()],
+                          ['Penalty', '₹' + billData.penalty.toLocaleString()],
+                          ['Cess', '₹' + billData.cess.toLocaleString()],
+                          ['Total Due', '₹' + billData.totalDue.toLocaleString()],
+                          ['Due Date', billData.dueDate],
+                        ].map(([label, val]) => (
+                          <Grid item xs={6} sm={4} key={label}>
+                            <Typography variant="body2">{label}: <b>{val}</b></Typography>
+                          </Grid>
+                        ))}
+                        <Grid item xs={12}>
+                          <Typography variant="h6" color="primary" sx={{ mt: 1 }}>
+                            Total Payable: ₹{billData.totalDue.toLocaleString()}
+                          </Typography>
+                        </Grid>
                       </Grid>
-                      <Grid item xs={12}>
-                        <Typography variant="h6" color="primary" sx={{ mt: 1 }}>
-                          Total Payable: ₹{billData.totalPayable.toLocaleString()}
-                        </Typography>
-                      </Grid>
-                    </Grid>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth select required label="Payment Method *"
-                    name="payment_method" value={formData.payment_method} onChange={handleChange}
-                  >
-                    {['UPI', 'Net Banking', 'Debit/Credit Card', 'Cash at Counter'].map(m => (
-                      <MenuItem key={m} value={m}>{m}</MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-              </>
-            )}
-          </Grid>
+                    </Paper>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t0-pay-method-label">Payment Method *</InputLabel>
+                      <Select
+                        labelId="t0-pay-method-label"
+                        value={t0.payment_method}
+                        onChange={e => setT0(p => ({ ...p, payment_method: e.target.value }))}
+                        label="Payment Method *"
+                      >
+                        {['UPI', 'Net Banking', 'Credit/Debit Card', 'Cash at Municipal Counter'].map(m => (
+                          <MenuItem key={m} value={m}>{m}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Button
+                      fullWidth variant="contained"
+                      sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
+                      onClick={() => setShowOtpDialog(true)}
+                      disabled={t0Submitting}
+                      startIcon={t0Submitting ? <CircularProgress size={18} color="inherit" /> : null}
+                    >
+                      {t0Submitting ? 'Processing...' : 'Pay Now'}
+                    </Button>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Alert severity="info">
+                      Property tax paid online reflects in records within 24 hours. Keep payment receipt for future reference.
+                    </Alert>
+                  </Grid>
+                </>
+              )}
+            </Grid>
+          )}
         </TabPanel>
 
         {/* ═══════════════════════════════════════════════════════════
-            TAB 1 — Self-Assessment (New Unregistered Property)  4-step
+            TAB 1 — Self-Assessment (New Property)  4-step stepper
         ════════════════════════════════════════════════════════════ */}
         <TabPanel value={tab} index={1}>
-          <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
-            {SELF_ASSESS_STEPS.map(s => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
-          </Stepper>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Self-assessment is subject to municipal verification. Under-reporting may attract a penalty up to 2× the differential tax.
-          </Alert>
+          {t1Submitted ? (
+            <SuccessView
+              refNumber={t1Ref}
+              message="Self-assessment registered. A municipal inspector will verify the property within 15 working days. You will be notified by SMS and email."
+              onClose={onClose}
+            />
+          ) : (
+            <>
+              <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 3 }}>
+                {SELF_ASSESS_STEPS.map(s => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
+              </Stepper>
 
-          {/* ── Step 0: Property Details ── */}
-          {activeStep === 0 && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Property / Plot Number (Survey No.)" name="sa_plot_number"
-                  value={formData.sa_plot_number} onChange={handleChange} placeholder="Survey No. / Gat No. / Plot No." />
-              </Grid>
-              <Grid item xs={12} md={8}>
-                <TextField fullWidth required label="Property Address *" name="sa_address"
-                  value={formData.sa_address} onChange={handleChange} multiline rows={2} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Ward *" name="sa_ward"
-                  value={formData.sa_ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Colony / Area / Locality *" name="sa_colony"
-                  value={formData.sa_colony} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Pincode *" name="sa_pincode"
-                  value={formData.sa_pincode} onChange={handleChange} inputProps={{ maxLength: 6 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Land Area (sq.m) *" name="sa_land_area"
-                  value={formData.sa_land_area} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Property Type *" name="sa_property_type"
-                  value={formData.sa_property_type} onChange={handleChange}>
-                  {['Residential', 'Commercial', 'Industrial', 'Mixed-use', 'Agricultural within limits', 'Government/Semi-govt'].map(t => (
-                    <MenuItem key={t} value={t}>{t}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Sub-type" name="sa_sub_type"
-                  value={formData.sa_sub_type} onChange={handleChange}>
-                  {['Independent House', 'Flat/Apartment', 'Row House', 'Bungalow', 'Shop', 'Office', 'Showroom', 'Warehouse', 'Factory', 'Other'].map(t => (
-                    <MenuItem key={t} value={t}>{t}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Property Usage *" name="sa_usage"
-                  value={formData.sa_usage} onChange={handleChange}>
-                  {['Self-occupied', 'Rented out fully', 'Partly rented', 'Vacant/Unused', 'Under construction'].map(u => (
-                    <MenuItem key={u} value={u}>{u}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              {['Rented out fully', 'Partly rented'].includes(formData.sa_usage) && (
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth label="Monthly Rent Received (₹)" name="sa_monthly_rent"
-                    value={formData.sa_monthly_rent} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-                </Grid>
-              )}
-            </Grid>
-          )}
+              {/* ── Step 0: Owner Details ── */}
+              {activeStep === 0 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Owner / Applicant Personal Details</SectionHeading>
 
-          {/* ── Step 1: Owner Details ── */}
-          {activeStep === 1 && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth required label="Owner Full Name *" name="sa_owner_name"
-                  value={formData.sa_owner_name} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth label="Co-owner Name (optional)" name="sa_co_owner"
-                  value={formData.sa_co_owner} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Mobile * (10 digits)" name="sa_mobile"
-                  value={formData.sa_mobile} onChange={handleMobile('sa_mobile')} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Alternate Mobile" name="sa_alt_mobile"
-                  value={formData.sa_alt_mobile} onChange={handleMobile('sa_alt_mobile')} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Email *" name="sa_email"
-                  value={formData.sa_email} onChange={handleChange} type="email" />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Aadhaar Number * (12 digits)" name="sa_aadhaar"
-                  value={formData.sa_aadhaar} onChange={handleAadhaar('sa_aadhaar')} inputProps={{ maxLength: 12 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="PAN Card Number" name="sa_pan"
-                  value={formData.sa_pan} onChange={handleChange} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Father's / Husband's Name *" name="sa_father_name"
-                  value={formData.sa_father_name} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Date of Birth *" name="sa_dob"
-                  value={formData.sa_dob} onChange={handleChange} type="date" InputLabelProps={{ shrink: true }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Gender" name="sa_gender"
-                  value={formData.sa_gender} onChange={handleChange}>
-                  {['Male', 'Female', 'Other'].map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Category" name="sa_category"
-                  value={formData.sa_category} onChange={handleChange} helperText="Affects applicable rebates">
-                  {['General', 'SC/ST', 'Senior Citizen', 'Military/Paramilitary', 'Freedom Fighter'].map(c => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField fullWidth required label="Permanent Address *" name="sa_perm_address"
-                  value={formData.sa_perm_address} onChange={handleChange} multiline rows={2} />
-              </Grid>
-            </Grid>
-          )}
-
-          {/* ── Step 2: Building Info ── */}
-          {activeStep === 2 && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Year of Construction *" name="sa_year_construction"
-                  value={formData.sa_year_construction} onChange={handleChange} type="number"
-                  inputProps={{ min: 1900, max: new Date().getFullYear() }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Number of Floors *" name="sa_floors"
-                  value={formData.sa_floors} onChange={handleChange} type="number" inputProps={{ min: 1 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Basement?" name="sa_has_basement"
-                  value={formData.sa_has_basement} onChange={handleChange}>
-                  <MenuItem value="no">No</MenuItem>
-                  <MenuItem value="yes">Yes</MenuItem>
-                </TextField>
-              </Grid>
-              {formData.sa_has_basement === 'yes' && (
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth label="Basement Area (sq.m)" name="sa_basement_area"
-                    value={formData.sa_basement_area} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-                </Grid>
-              )}
-              <SectionHeading>Floor-wise Built-up Area</SectionHeading>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth required label="Total Built-up Area (sq.m) *" name="sa_total_builtup"
-                  value={formData.sa_total_builtup} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth label="Ground Floor Area (sq.m)" name="sa_gf_area"
-                  value={formData.sa_gf_area} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth label="First Floor Area (sq.m)" name="sa_ff_area"
-                  value={formData.sa_ff_area} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth label="Second Floor &amp; Above (sq.m)" name="sa_sf_area"
-                  value={formData.sa_sf_area} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <SectionHeading>Construction Details</SectionHeading>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Construction Type *" name="sa_construction_type"
-                  value={formData.sa_construction_type} onChange={handleChange}>
-                  {['RCC Frame', 'Load Bearing', 'Composite', 'Pre-fab/Temporary', 'Kuccha'].map(c => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Plinth Area (sq.m)" name="sa_plinth_area"
-                  value={formData.sa_plinth_area} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Heritage / Notified Property?" name="sa_is_heritage"
-                  value={formData.sa_is_heritage} onChange={handleChange}>
-                  <MenuItem value="no">No</MenuItem>
-                  <MenuItem value="yes">Yes</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Roof Type" name="sa_roof_type"
-                  value={formData.sa_roof_type} onChange={handleChange}>
-                  {['RCC Slab', 'Tiled', 'Asbestos', 'Thatched', 'Other'].map(r => (
-                    <MenuItem key={r} value={r}>{r}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Water Connection Source" name="sa_water_source"
-                  value={formData.sa_water_source} onChange={handleChange}>
-                  {['MCGM/Municipal', 'Borewell', 'Both'].map(w => (
-                    <MenuItem key={w} value={w}>{w}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Electricity Meter No. (optional)" name="sa_electricity_meter"
-                  value={formData.sa_electricity_meter} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={12}>
-                <TextField fullWidth label="Past Tax Records / Previous Owner" name="sa_prev_record"
-                  value={formData.sa_prev_record} onChange={handleChange}
-                  placeholder="Previous property ID or owner name if known (optional)" />
-              </Grid>
-            </Grid>
-          )}
-
-          {/* ── Step 3: Documents & Review ── */}
-          {activeStep === 3 && (
-            <Grid container spacing={2}>
-              {/* Summary */}
-              <Grid item xs={12}>
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8f9fa', borderRadius: 2 }}>
-                  <Typography variant="subtitle1" fontWeight={700} color="primary" gutterBottom>Application Summary</Typography>
-                  <Divider sx={{ mb: 1.5 }} />
-                  <Grid container spacing={0.5}>
-                    <Grid item xs={12}><Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase' }}>Property Details</Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Ward: <b>{formData.sa_ward || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Colony: <b>{formData.sa_colony || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Pincode: <b>{formData.sa_pincode || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Type: <b>{formData.sa_property_type || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Sub-type: <b>{formData.sa_sub_type || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Usage: <b>{formData.sa_usage || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Land Area: <b>{formData.sa_land_area || '—'} sq.m</b></Typography></Grid>
-
-                    <Grid item xs={12} sx={{ mt: 1 }}><Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase' }}>Owner Details</Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Owner: <b>{formData.sa_owner_name || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Mobile: <b>{formData.sa_mobile || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Email: <b>{formData.sa_email || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Aadhaar: <b>{'****' + (formData.sa_aadhaar?.slice(-4) || '—')}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Father/Husband: <b>{formData.sa_father_name || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Category: <b>{formData.sa_category || '—'}</b></Typography></Grid>
-
-                    <Grid item xs={12} sx={{ mt: 1 }}><Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase' }}>Building Info</Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Year Built: <b>{formData.sa_year_construction || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Floors: <b>{formData.sa_floors || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Total Built-up: <b>{formData.sa_total_builtup || '—'} sq.m</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Construction: <b>{formData.sa_construction_type || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Roof Type: <b>{formData.sa_roof_type || '—'}</b></Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography variant="body2">Water Source: <b>{formData.sa_water_source || '—'}</b></Typography></Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Owner Full Name *" name="owner_name"
+                      value={t1.owner_name} onChange={handleT1}
+                    />
                   </Grid>
-                </Paper>
-              </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Father / Husband Name *" name="father_name"
+                      value={t1.father_name} onChange={handleT1}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Date of Birth *" name="dob" type="date"
+                      value={t1.dob} onChange={handleT1}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t1-gender-label">Gender</InputLabel>
+                      <Select
+                        labelId="t1-gender-label" name="gender"
+                        value={t1.gender} onChange={handleT1} label="Gender"
+                      >
+                        {['Male', 'Female', 'Other'].map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Mobile *" name="mobile"
+                      value={t1.mobile} onChange={handleT1}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Alternate Mobile" name="alt_mobile"
+                      value={t1.alt_mobile} onChange={handleT1}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Email *" name="email" type="email"
+                      value={t1.email} onChange={handleT1}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Aadhaar * (12 digits)" name="aadhaar"
+                      value={t1.aadhaar} onChange={handleT1}
+                      inputProps={{ maxLength: 12 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="PAN Card *" name="pan"
+                      value={t1.pan} onChange={handleT1}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
 
-              <SectionHeading>Required Documents</SectionHeading>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Property Title / Ownership Deed" name="sa_title_deed" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Primary legal ownership document" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Sale / Gift / Will Deed (if applicable)" name="sa_sale_deed"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Approved Building Plan" name="sa_building_plan" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Municipality-approved building plan" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Index II / Registration Document" name="sa_index2"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Possession Certificate" name="sa_possession_cert"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Aadhaar Card of Owner" name="sa_aadhaar_copy" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Self-attested copy" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Occupancy / Commencement Certificate" name="sa_occ_cert"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="If applicable" />
-              </Grid>
+                  <SectionHeading>Ownership Type</SectionHeading>
+                  <Grid item xs={12} md={8}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t1-joint-label">Is joint ownership?</InputLabel>
+                      <Select
+                        labelId="t1-joint-label" name="joint_ownership"
+                        value={t1.joint_ownership} onChange={handleT1}
+                        label="Is joint ownership?"
+                      >
+                        {[
+                          'No — sole owner',
+                          'Yes — joint with spouse',
+                          'Yes — joint with family',
+                          'Yes — partnership/company',
+                        ].map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  {showJointFields && (
+                    <>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth label="Co-owner Name" name="co_owner_name"
+                          value={t1.co_owner_name} onChange={handleT1}
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth label="Co-owner Aadhaar (12 digits)" name="co_owner_aadhaar"
+                          value={t1.co_owner_aadhaar} onChange={handleT1}
+                          inputProps={{ maxLength: 12 }}
+                        />
+                      </Grid>
+                    </>
+                  )}
 
-              {/* Declaration */}
-              <Grid item xs={12}>
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fff3e0', borderRadius: 2 }}>
-                  <FormControlLabel
-                    control={<Switch checked={declared} onChange={e => setDeclared(e.target.checked)} color="warning" />}
-                    label={
-                      <Typography variant="body2">
-                        I declare all information provided is accurate to the best of my knowledge and the property details are as described. I understand that providing false information may result in legal action and enhanced penalty.
-                      </Typography>
-                    }
-                  />
-                </Paper>
-              </Grid>
-            </Grid>
+                  <SectionHeading>Owner's Residential Address</SectionHeading>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Owner / Applicant's Residential Address *" name="residential_address"
+                      value={t1.residential_address} onChange={handleT1}
+                      multiline rows={2}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                              <TextField fullWidth required label="Owner's Ward *" name="owner_ward" value={t1.owner_ward} onChange={handleT1} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Owner Pincode" name="owner_pincode"
+                      value={t1.owner_pincode} onChange={handleT1}
+                      inputProps={{ maxLength: 6 }}
+                    />
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* ── Step 1: Property Details ── */}
+              {activeStep === 1 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>New Property Location Details</SectionHeading>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Property Address (where new property is) *" name="property_address"
+                      value={t1.property_address} onChange={handleT1}
+                      multiline rows={2}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                              <TextField fullWidth required label="Ward of Property *" name="property_ward" value={t1.property_ward} onChange={handleT1} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Property Pincode" name="property_pincode"
+                      value={t1.property_pincode} onChange={handleT1}
+                      inputProps={{ maxLength: 6 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Plot / Survey Number *" name="plot_number"
+                      value={t1.plot_number} onChange={handleT1}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="CTS / Hissa Number" name="cts_hissa"
+                      value={t1.cts_hissa} onChange={handleT1}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t1-zone-label">Zone Type *</InputLabel>
+                      <Select
+                        labelId="t1-zone-label" name="zone_type"
+                        value={t1.zone_type} onChange={handleT1} label="Zone Type *"
+                      >
+                        {[
+                          'Residential', 'Commercial', 'Industrial',
+                          'Mixed Use', 'Agricultural', 'Public/Semi-public',
+                        ].map(z => <MenuItem key={z} value={z}>{z}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t1-proptype-label">Property Type *</InputLabel>
+                      <Select
+                        labelId="t1-proptype-label" name="property_type"
+                        value={t1.property_type} onChange={handleT1} label="Property Type *"
+                      >
+                        {PROPERTY_TYPES.map(pt => <MenuItem key={pt} value={pt}>{pt}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Total Plot Area (sq.m) *" name="total_plot_area"
+                      type="number" value={t1.total_plot_area} onChange={handleT1}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t1-plotshared-label">Is total plot area shared with others?</InputLabel>
+                      <Select
+                        labelId="t1-plotshared-label" name="plot_area_shared"
+                        value={t1.plot_area_shared} onChange={handleT1}
+                        label="Is total plot area shared with others?"
+                      >
+                        <MenuItem value="No">No</MenuItem>
+                        <MenuItem value="Yes">Yes</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t1-own-type-label">Ownership Type *</InputLabel>
+                      <Select
+                        labelId="t1-own-type-label" name="ownership_type"
+                        value={t1.ownership_type} onChange={handleT1} label="Ownership Type *"
+                      >
+                        {[
+                          'Freehold', 'Leasehold', 'Government allotted',
+                          'Society member', 'Joint co-ownership',
+                        ].map(ot => <MenuItem key={ot} value={ot}>{ot}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* ── Step 2: Building Details ── */}
+              {activeStep === 2 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Construction & Usage Details</SectionHeading>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Year of Construction *" name="year_construction"
+                      type="number" value={t1.year_construction} onChange={handleT1}
+                      inputProps={{ min: 1900, max: new Date().getFullYear() }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Number of Floors (Ground + upper) *" name="floors"
+                      type="number" value={t1.floors} onChange={handleT1}
+                      inputProps={{ min: 1 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Total Built-up Area — Ground Floor (sq.m) *" name="gf_bua"
+                      type="number" value={t1.gf_bua} onChange={handleT1}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Total Built-up Area — All Floors combined (sq.m) *" name="total_bua"
+                      type="number" value={t1.total_bua} onChange={handleT1}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={8}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t1-usage-label">Currently Used for</InputLabel>
+                      <Select
+                        labelId="t1-usage-label" name="current_usage"
+                        value={t1.current_usage} onChange={handleT1} label="Currently Used for"
+                      >
+                        {[
+                          'Owner occupied — residential',
+                          'Tenant occupied — residential',
+                          'Self-used — commercial',
+                          'Tenant occupied — commercial',
+                          'Mixed',
+                          'Vacant/under construction',
+                          'Part vacant',
+                        ].map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  {showMonthlyRent && (
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth label="Monthly Rent (₹)" name="monthly_rent"
+                        type="number" value={t1.monthly_rent} onChange={handleT1}
+                        inputProps={{ min: 0 }}
+                      />
+                    </Grid>
+                  )}
+
+                  <SectionHeading>Property Status & Amenities</SectionHeading>
+                  {[
+                    { label: 'Occupancy Certificate available?', name: 'occ_cert' },
+                    { label: 'Is building construction approved by Municipal?', name: 'muni_approved' },
+                    { label: 'Lift installed?', name: 'lift' },
+                    { label: 'Any building violations pending?', name: 'building_violations' },
+                  ].map(({ label, name }) => (
+                    <Grid item xs={12} md={6} key={name}>
+                      <FormControl fullWidth>
+                        <InputLabel id={`t1-${name}-label`}>{label}</InputLabel>
+                        <Select
+                          labelId={`t1-${name}-label`} name={name}
+                          value={t1[name]} onChange={handleT1} label={label}
+                        >
+                          <MenuItem value="Yes">Yes</MenuItem>
+                          <MenuItem value="No">No</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  ))}
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Number of parking spaces (2-wheeler)" name="parking_2w"
+                      type="number" value={t1.parking_2w} onChange={handleT1}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Number of parking spaces (4-wheeler)" name="parking_4w"
+                      type="number" value={t1.parking_4w} onChange={handleT1}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={t1Declaration}
+                          onChange={e => setT1Declaration(e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label="I declare that the above information is true to the best of my knowledge. *"
+                    />
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* ── Step 3: Documents & Review ── */}
+              {activeStep === 3 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Required Document Uploads</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Property Ownership / Sale Deed *" name="ownership_deed"
+                      required docs={t1Docs} onFileChange={t1DocH.onFileChange} onRemove={t1DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Approved Building Plan" name="building_plan"
+                      hint="Plan sanctioned by Municipal Authority"
+                      docs={t1Docs} onFileChange={t1DocH.onFileChange} onRemove={t1DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Occupancy Certificate" name="occ_cert_doc"
+                      hint="If available — post construction"
+                      docs={t1Docs} onFileChange={t1DocH.onFileChange} onRemove={t1DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Index II / Latest Registration document" name="index_ii"
+                      docs={t1Docs} onFileChange={t1DocH.onFileChange} onRemove={t1DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="7-12 Extract / City Survey Map" name="seven_twelve"
+                      docs={t1Docs} onFileChange={t1DocH.onFileChange} onRemove={t1DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Owner Identity Proof (Aadhaar/PAN) *" name="owner_id_proof"
+                      required docs={t1Docs} onFileChange={t1DocH.onFileChange} onRemove={t1DocH.onRemove}
+                    />
+                  </Grid>
+
+                  <SectionHeading>Application Summary</SectionHeading>
+                  <Grid item xs={12}>
+                    <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8f9fa', borderRadius: 2 }}>
+                      <Grid container spacing={1}>
+                        {[
+                          ['Owner Name', t1.owner_name],
+                          ['Property Address', t1.property_address],
+                          ['Property Type', t1.property_type],
+                          ['Zone Type', t1.zone_type],
+                          ['Total Built-up Area', t1.total_bua ? t1.total_bua + ' sq.m' : '—'],
+                          ['Ownership Type', t1.ownership_type],
+                        ].map(([label, val]) => (
+                          <Grid item xs={12} sm={6} key={label}>
+                            <Typography variant="caption" color="text.secondary">{label}</Typography>
+                            <Typography variant="body1" fontWeight={600}>{val || '—'}</Typography>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* Navigation */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
+                <Button disabled={activeStep === 0} onClick={handleBack} variant="outlined">
+                  Back
+                </Button>
+                {activeStep < SELF_ASSESS_STEPS.length - 1 ? (
+                  <Button
+                    variant="contained" onClick={handleNext}
+                    sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained" onClick={() => setShowOtpDialog(true)}
+                    disabled={t1Submitting}
+                    startIcon={t1Submitting ? <CircularProgress size={18} color="inherit" /> : null}
+                    sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
+                  >
+                    {t1Submitting ? 'Submitting...' : 'Submit Application'}
+                  </Button>
+                )}
+              </Box>
+            </>
           )}
         </TabPanel>
 
         {/* ═══════════════════════════════════════════════════════════
-            TAB 2 — Assessment Revision  3-step
+            TAB 2 — Tax Assessment / Revision  3-step stepper
         ════════════════════════════════════════════════════════════ */}
         <TabPanel value={tab} index={2}>
-          <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
-            {REVISION_STEPS.map(s => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
-          </Stepper>
+          {t2Submitted ? (
+            <SuccessView
+              refNumber={t2Ref}
+              message="Assessment revision request submitted. The Municipal Assessment Department will review your application and communicate the decision within 30 working days."
+              onClose={onClose}
+            />
+          ) : (
+            <>
+              <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 3 }}>
+                {REVISION_STEPS.map(s => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
+              </Stepper>
 
-          {/* Step 0: Property & Applicant */}
-          {activeStep === 0 && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth required label="Property ID / Holding No. *" name="rev_property_id"
-                  value={formData.rev_property_id} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth required label="Owner Name *" name="rev_owner_name"
-                  value={formData.rev_owner_name} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Mobile *" name="rev_mobile"
-                  value={formData.rev_mobile} onChange={handleMobile('rev_mobile')} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Email" name="rev_email"
-                  value={formData.rev_email} onChange={handleChange} type="email" />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Ward" name="rev_ward"
-                  value={formData.rev_ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth label="Aadhaar Number" name="rev_aadhaar"
-                  value={formData.rev_aadhaar} onChange={handleAadhaar('rev_aadhaar')} inputProps={{ maxLength: 12 }} />
-              </Grid>
-            </Grid>
-          )}
+              {/* ── Step 0: Applicant & Property ── */}
+              {activeStep === 0 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Property Identification</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Property ID / Holding Number *" name="property_id"
+                      value={t2.property_id} onChange={handleT2}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Owner / Applicant Name *" name="owner_name"
+                      value={t2.owner_name} onChange={handleT2}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Mobile *" name="mobile"
+                      value={t2.mobile} onChange={handleT2}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Email" name="email" type="email"
+                      value={t2.email} onChange={handleT2}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Aadhaar (12 digits)" name="aadhaar"
+                      value={t2.aadhaar} onChange={handleT2}
+                      inputProps={{ maxLength: 12 }}
+                    />
+                  </Grid>
 
-          {/* Step 1: Revision Details */}
-          {activeStep === 1 && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth select required label="Reason for Revision *" name="rev_reason"
-                  value={formData.rev_reason} onChange={handleChange}>
-                  {['Incorrect area recorded', 'Wrong property type', 'Structural changes done',
-                    'Division/Amalgamation of property', 'Change of ownership', 'De-listing or demolition',
-                    'Error in tax calculation', 'Other'].map(r => (
-                    <MenuItem key={r} value={r}>{r}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth required label="Current Assessed Value (₹) *" name="rev_current_value"
-                  value={formData.rev_current_value} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth required label="Requested Revised Value (₹) *" name="rev_requested_value"
-                  value={formData.rev_requested_value} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Floor Area Difference (sq.m, + or -)" name="rev_area_diff"
-                  value={formData.rev_area_diff} onChange={handleChange} type="number"
-                  helperText="Positive if area increased, negative if decreased" />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Previous Assessment Order No." name="rev_prev_order_no"
-                  value={formData.rev_prev_order_no} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="With Effect From (FY start date)" name="rev_effective_from"
-                  value={formData.rev_effective_from} onChange={handleChange} type="date"
-                  InputLabelProps={{ shrink: true }} helperText="e.g., 01 April of relevant year" />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField fullWidth required multiline rows={4} label="Detailed Explanation *" name="rev_explanation"
-                  value={formData.rev_explanation} onChange={handleChange}
-                  placeholder="Provide a detailed explanation for the assessment revision request..." />
-              </Grid>
-              <Grid item xs={12}>
-                <Alert severity="info">
-                  Revision requests are reviewed by the Tax Assessment Officer. Decision will be communicated within <b>30 working days</b>.
-                </Alert>
-              </Grid>
-            </Grid>
-          )}
-
-          {/* Step 2: Documents */}
-          {activeStep === 2 && (
-            <Grid container spacing={2}>
-              <SectionHeading>Supporting Documents</SectionHeading>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Existing Assessment Order / Tax Receipt" name="rev_assessment_order" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Copy of current assessment or last paid tax bill" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Property Ownership Proof" name="rev_ownership_proof" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Sale deed / property card / 7/12 extract" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Building Plan (current / revised)" name="rev_building_plan"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="If revision relates to structural changes" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Any Other Supporting Document" name="rev_other_doc"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Any document supporting your revision claim" />
-              </Grid>
-            </Grid>
-          )}
-        </TabPanel>
-
-        {/* ═══════════════════════════════════════════════════════════
-            TAB 3 — Property Mutation  4-step
-        ════════════════════════════════════════════════════════════ */}
-        <TabPanel value={tab} index={3}>
-          <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
-            {MUTATION_STEPS.map(s => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
-          </Stepper>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Property mutation transfers the municipal tax record to the new owner following sale, inheritance, or gift. Ensure all transfer documents are duly registered with the Sub-Registrar's office.
-          </Alert>
-
-          {/* Step 0: Previous Owner */}
-          {activeStep === 0 && (
-            <Grid container spacing={2}>
-              <SectionHeading>Previous Owner Details</SectionHeading>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth required label="Previous Owner Full Name *" name="mut_prev_owner_name"
-                  value={formData.mut_prev_owner_name} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth required label="Previous Owner Mobile *" name="mut_prev_mobile"
-                  value={formData.mut_prev_mobile} onChange={handleMobile('mut_prev_mobile')} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth required label="Previous Owner Aadhaar *" name="mut_prev_aadhaar"
-                  value={formData.mut_prev_aadhaar} onChange={handleAadhaar('mut_prev_aadhaar')} inputProps={{ maxLength: 12 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Previous Owner PAN" name="mut_prev_pan"
-                  value={formData.mut_prev_pan} onChange={handleChange} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select required label="Reason for Transfer *" name="mut_transfer_reason"
-                  value={formData.mut_transfer_reason} onChange={handleChange}>
-                  {['Sale', 'Gift', 'Inheritance/Will', 'Court Order', 'Partition', 'HUF dissolution', 'Other'].map(r => (
-                    <MenuItem key={r} value={r}>{r}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Property ID / Holding No. *" name="mut_property_id"
-                  value={formData.mut_property_id} onChange={handleChange} placeholder="Current municipal property ID" />
-              </Grid>
-            </Grid>
-          )}
-
-          {/* Step 1: New Owner */}
-          {activeStep === 1 && (
-            <Grid container spacing={2}>
-              <SectionHeading>New Owner Details</SectionHeading>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth required label="New Owner Full Name *" name="mut_new_owner_name"
-                  value={formData.mut_new_owner_name} onChange={handleChange} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth required label="New Owner Mobile *" name="mut_new_mobile"
-                  value={formData.mut_new_mobile} onChange={handleMobile('mut_new_mobile')} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth required label="New Owner Aadhaar * (12 digits)" name="mut_new_aadhaar"
-                  value={formData.mut_new_aadhaar} onChange={handleAadhaar('mut_new_aadhaar')} inputProps={{ maxLength: 12 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="New Owner PAN" name="mut_new_pan"
-                  value={formData.mut_new_pan} onChange={handleChange} inputProps={{ maxLength: 10 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth label="New Owner Email" name="mut_new_email"
-                  value={formData.mut_new_email} onChange={handleChange} type="email" />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="New Owner Category" name="mut_new_category"
-                  value={formData.mut_new_category} onChange={handleChange}>
-                  {['General', 'SC/ST', 'Senior Citizen', 'Military/Paramilitary'].map(c => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={8}>
-                <TextField fullWidth required label="New Owner Address *" name="mut_new_address"
-                  value={formData.mut_new_address} onChange={handleChange} multiline rows={2} />
-              </Grid>
-              {['Gift', 'Inheritance/Will'].includes(formData.mut_transfer_reason) && (
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth label="Relation to Previous Owner" name="mut_relation"
-                    value={formData.mut_relation} onChange={handleChange}
-                    placeholder="e.g., Son, Daughter, Spouse" />
+                  <SectionHeading>Current Assessment Details</SectionHeading>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Existing Assessed Value (₹) *" name="existing_value"
+                      type="number" value={t2.existing_value} onChange={handleT2}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Year of Last Assessment *" name="last_assessment_year"
+                      type="number" value={t2.last_assessment_year} onChange={handleT2}
+                      inputProps={{ min: 2000, max: 2026 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t2-proptype-label">Property Type</InputLabel>
+                      <Select
+                        labelId="t2-proptype-label" name="property_type"
+                        value={t2.property_type} onChange={handleT2} label="Property Type"
+                      >
+                        {PROPERTY_TYPES.map(pt => <MenuItem key={pt} value={pt}>{pt}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                              <TextField fullWidth required label="Ward *" name="ward" value={t2.ward} onChange={handleT2} />
+                  </Grid>
+                  <Grid item xs={12} md={8}>
+                    <TextField
+                      fullWidth label="Property Address *" name="property_address"
+                      value={t2.property_address} onChange={handleT2}
+                      multiline rows={2}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t2-reason-label">Reason for Revision Request *</InputLabel>
+                      <Select
+                        labelId="t2-reason-label" name="revision_reason"
+                        value={t2.revision_reason} onChange={handleT2}
+                        label="Reason for Revision Request *"
+                      >
+                        {[
+                          'Property type changed',
+                          'Partial demolition/reduction in area',
+                          'Construction addition/improvement',
+                          'Change in usage (res to commercial)',
+                          'Error in original assessment',
+                          'Merger or sub-division of plots',
+                          'Market value change',
+                          'Legal transfer/mutation',
+                          'Other',
+                        ].map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
                 </Grid>
               )}
-            </Grid>
-          )}
 
-          {/* Step 2: Property Details */}
-          {activeStep === 2 && (
-            <Grid container spacing={2}>
-              <SectionHeading>Property &amp; Transfer Details</SectionHeading>
-              <Grid item xs={12} md={8}>
-                <TextField fullWidth required label="Property Address *" name="mut_property_address"
-                  value={formData.mut_property_address} onChange={handleChange} multiline rows={2} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Ward" name="mut_ward"
-                  value={formData.mut_ward} onChange={handleChange}>
-                  {WARDS.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Sale / Transfer Date *" name="mut_transfer_date"
-                  value={formData.mut_transfer_date} onChange={handleChange} type="date" InputLabelProps={{ shrink: true }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth required label="Sale / Transfer Value (₹) *" name="mut_transfer_value"
-                  value={formData.mut_transfer_value} onChange={handleChange} type="number" inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField fullWidth select label="Stamp Duty Paid?" name="mut_stamp_duty"
-                  value={formData.mut_stamp_duty} onChange={handleChange}>
-                  <MenuItem value="yes">Yes</MenuItem>
-                  <MenuItem value="no">No</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth required label="Registration No. (Sub-Registrar Office) *" name="mut_reg_number"
-                  value={formData.mut_reg_number} onChange={handleChange} placeholder="Registration document number" />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField fullWidth select label="Property Type" name="mut_property_type"
-                  value={formData.mut_property_type} onChange={handleChange}>
-                  {['Residential', 'Commercial', 'Industrial'].map(t => (
-                    <MenuItem key={t} value={t}>{t}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-            </Grid>
-          )}
+              {/* ── Step 1: Revision Details ── */}
+              {activeStep === 1 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Revision Request Details</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Revised Assessment Requested (₹) *" name="revised_amount"
+                      type="number" value={t2.revised_amount} onChange={handleT2}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Date of Change *" name="date_of_change"
+                      type="date" value={t2.date_of_change} onChange={handleT2}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="Detailed Justification *" name="justification"
+                      value={t2.justification} onChange={handleT2}
+                      multiline rows={4}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t2-evidence-label">Supporting evidence available?</InputLabel>
+                      <Select
+                        labelId="t2-evidence-label" name="evidence_type"
+                        value={t2.evidence_type} onChange={handleT2}
+                        label="Supporting evidence available?"
+                      >
+                        {[
+                          'Yes — construction plans',
+                          'Yes — registered sale deed',
+                          'Yes — surveyor report',
+                          'Yes — court order',
+                          'Multiple documents',
+                        ].map(e => <MenuItem key={e} value={e}>{e}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t2-submit-to-label">Application Submitted to</InputLabel>
+                      <Select
+                        labelId="t2-submit-to-label" name="application_submitted_to"
+                        value={t2.application_submitted_to} onChange={handleT2}
+                        label="Application Submitted to"
+                      >
+                        {[
+                          'Municipal Assessment Dept',
+                          'Online complaint',
+                          'RTI follow-up',
+                          'Court direction',
+                        ].map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              )}
 
-          {/* Step 3: Documents */}
-          {activeStep === 3 && (
-            <Grid container spacing={2}>
-              <SectionHeading>Required Documents</SectionHeading>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Registered Sale / Gift / Will Deed" name="mut_primary_deed" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Primary document establishing transfer of ownership — must be registered" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Stamp Duty &amp; Registration Receipt" name="mut_stamp_receipt" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Proof of stamp duty and registration fee payment" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Previous Owner ID Proof" name="mut_prev_id" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Aadhaar / Voter ID / PAN of previous owner" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="New Owner ID Proof (Aadhaar)" name="mut_new_id" required
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Aadhaar card of new owner" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="NOC from Housing Society (if applicable)" name="mut_noc_society"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Required for flat/apartment in co-operative housing society" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <DocUpload label="Property Card / 7/12 Extract" name="mut_property_card"
-                  docs={docs} onFileChange={onDocChange} onRemove={onDocRemove} hint="Revenue record / property card from competent authority" />
-              </Grid>
-            </Grid>
+              {/* ── Step 2: Documents ── */}
+              {activeStep === 2 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Required Documents</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Current/Old Assessment Order *" name="old_assessment_order"
+                      required docs={t2Docs} onFileChange={t2DocH.onFileChange} onRemove={t2DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Property Ownership Proof *" name="ownership_proof"
+                      required docs={t2Docs} onFileChange={t2DocH.onFileChange} onRemove={t2DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Site Plan / Floor Plan" name="site_plan"
+                      hint="Showing actual area as built"
+                      docs={t2Docs} onFileChange={t2DocH.onFileChange} onRemove={t2DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Supporting document for revision reason *" name="supporting_doc"
+                      required docs={t2Docs} onFileChange={t2DocH.onFileChange} onRemove={t2DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Court Order" name="court_order"
+                      hint="If revision is under court directive"
+                      docs={t2Docs} onFileChange={t2DocH.onFileChange} onRemove={t2DocH.onRemove}
+                    />
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* Navigation */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
+                <Button disabled={activeStep === 0} onClick={handleBack} variant="outlined">Back</Button>
+                {activeStep < REVISION_STEPS.length - 1 ? (
+                  <Button
+                    variant="contained" onClick={handleNext}
+                    sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained" onClick={() => setShowOtpDialog(true)}
+                    disabled={t2Submitting}
+                    startIcon={t2Submitting ? <CircularProgress size={18} color="inherit" /> : null}
+                    sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
+                  >
+                    {t2Submitting ? 'Submitting...' : 'Submit Revision Request'}
+                  </Button>
+                )}
+              </Box>
+            </>
           )}
         </TabPanel>
 
         {/* ═══════════════════════════════════════════════════════════
-            TAB 4 — View & Print Receipts  (no stepper)
+            TAB 3 — Property Mutation  4-step stepper
+        ════════════════════════════════════════════════════════════ */}
+        <TabPanel value={tab} index={3}>
+          {t3Submitted ? (
+            <SuccessView
+              refNumber={t3Ref}
+              message="Mutation application registered. Processing will be completed within 30 working days after document verification. You will be notified at each stage."
+              onClose={onClose}
+            />
+          ) : (
+            <>
+              <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 3 }}>
+                {MUTATION_STEPS.map(s => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
+              </Stepper>
+
+              {/* ── Step 0: Previous Owner ── */}
+              {activeStep === 0 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Previous Owner Details</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Previous Owner Full Name *" name="prev_owner_name"
+                      value={t3.prev_owner_name} onChange={handleT3}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Mobile" name="prev_mobile"
+                      value={t3.prev_mobile} onChange={handleT3}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Aadhaar * (12 digits)" name="prev_aadhaar"
+                      value={t3.prev_aadhaar} onChange={handleT3}
+                      inputProps={{ maxLength: 12 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="PAN" name="prev_pan"
+                      value={t3.prev_pan} onChange={handleT3}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Property ID / Holding No *" name="property_id"
+                      value={t3.property_id} onChange={handleT3}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                              <TextField fullWidth required label="Ward *" name="prev_ward" value={t3.prev_ward} onChange={handleT3} />
+                  </Grid>
+                  <Grid item xs={12} md={8}>
+                    <TextField
+                      fullWidth label="Property Address *" name="property_address"
+                      value={t3.property_address} onChange={handleT3}
+                      multiline rows={2}
+                    />
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* ── Step 1: New Owner ── */}
+              {activeStep === 1 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>New Owner Personal Details</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="New Owner Full Name *" name="new_owner_name"
+                      value={t3.new_owner_name} onChange={handleT3}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Father / Husband Name *" name="new_father_name"
+                      value={t3.new_father_name} onChange={handleT3}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Date of Birth *" name="new_dob" type="date"
+                      value={t3.new_dob} onChange={handleT3}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t3-new-gender-label">Gender *</InputLabel>
+                      <Select
+                        labelId="t3-new-gender-label" name="new_gender"
+                        value={t3.new_gender} onChange={handleT3} label="Gender *"
+                      >
+                        {['Male', 'Female', 'Other'].map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Mobile *" name="new_mobile"
+                      value={t3.new_mobile} onChange={handleT3}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Alternate Mobile" name="new_alt_mobile"
+                      value={t3.new_alt_mobile} onChange={handleT3}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Email *" name="new_email" type="email"
+                      value={t3.new_email} onChange={handleT3}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Aadhaar * (12 digits)" name="new_aadhaar"
+                      value={t3.new_aadhaar} onChange={handleT3}
+                      inputProps={{ maxLength: 12 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="PAN *" name="new_pan"
+                      value={t3.new_pan} onChange={handleT3}
+                      inputProps={{ maxLength: 10 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth label="New Owner Residential Address *" name="new_address"
+                      value={t3.new_address} onChange={handleT3}
+                      multiline rows={2}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                              <TextField fullWidth required label="Ward of New Owner *" name="new_ward" value={t3.new_ward} onChange={handleT3} />
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* ── Step 2: Transfer Details ── */}
+              {activeStep === 2 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Transfer / Sale Details</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t3-transfer-type-label">Transfer Type *</InputLabel>
+                      <Select
+                        labelId="t3-transfer-type-label" name="transfer_type"
+                        value={t3.transfer_type} onChange={handleT3} label="Transfer Type *"
+                      >
+                        {[
+                          'Sale and purchase', 'Gift deed',
+                          'Inheritance — will', 'Inheritance — legal heir (no will)',
+                          'Court decree', 'Partition',
+                          'Power of attorney based', 'Government acquisition', 'Other',
+                        ].map(tt => <MenuItem key={tt} value={tt}>{tt}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Date of Transfer / Registration *" name="transfer_date"
+                      type="date" value={t3.transfer_date} onChange={handleT3}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Sale Deed / Gift Deed Registration No *" name="sale_deed_reg_no"
+                      value={t3.sale_deed_reg_no} onChange={handleT3}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth label="Registration Office / Sub-Registrar Name *" name="registrar_office"
+                      value={t3.registrar_office} onChange={handleT3}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Sale Consideration Amount (₹)" name="sale_consideration"
+                      type="number" value={t3.sale_consideration} onChange={handleT3}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Stamp Duty Paid (₹) *" name="stamp_duty"
+                      type="number" value={t3.stamp_duty} onChange={handleT3}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth label="Market Value at time of Transfer (₹)" name="market_value"
+                      type="number" value={t3.market_value} onChange={handleT3}
+                      inputProps={{ min: 0 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t3-disputes-label">Any disputes on property?</InputLabel>
+                      <Select
+                        labelId="t3-disputes-label" name="property_disputes"
+                        value={t3.property_disputes} onChange={handleT3}
+                        label="Any disputes on property?"
+                      >
+                        {['No', 'Yes — court case', 'Yes — family dispute', 'Yes — government dispute'].map(d => (
+                          <MenuItem key={d} value={d}>{d}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel id="t3-arrear-label">Is property tax arrear cleared?</InputLabel>
+                      <Select
+                        labelId="t3-arrear-label" name="tax_arrear_cleared"
+                        value={t3.tax_arrear_cleared} onChange={handleT3}
+                        label="Is property tax arrear cleared?"
+                      >
+                        {[
+                          'Yes — Nil Due Certificate attached',
+                          'No — will clear at mutation time',
+                        ].map(ta => <MenuItem key={ta} value={ta}>{ta}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* ── Step 3: Documents ── */}
+              {activeStep === 3 && (
+                <Grid container spacing={2}>
+                  <SectionHeading>Required Documents</SectionHeading>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Registered Sale Deed / Gift Deed / Will *" name="sale_deed"
+                      required docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Previous Owner Identity Proof *" name="prev_owner_id"
+                      required docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="New Owner Identity Proof (Aadhaar) *" name="new_owner_id"
+                      required docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Encumbrance Certificate" name="encumbrance_cert"
+                      hint="From Sub-Registrar — shows no dues on property"
+                      docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Nil Property Tax Due Certificate" name="nil_tax_cert"
+                      hint="From Municipal Tax Dept"
+                      docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Death Certificate of Previous Owner" name="death_cert"
+                      hint="Required for inheritance cases"
+                      docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Probate / Legal Heir Certificate" name="heir_cert"
+                      hint="Required for inheritance without will"
+                      docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <DocUpload
+                      label="Court Order" name="court_order"
+                      hint="Required if transfer by court decree"
+                      docs={t3Docs} onFileChange={t3DocH.onFileChange} onRemove={t3DocH.onRemove}
+                    />
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* Navigation */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
+                <Button disabled={activeStep === 0} onClick={handleBack} variant="outlined">Back</Button>
+                {activeStep < MUTATION_STEPS.length - 1 ? (
+                  <Button
+                    variant="contained" onClick={handleNext}
+                    sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained" onClick={() => setShowOtpDialog(true)}
+                    disabled={t3Submitting}
+                    startIcon={t3Submitting ? <CircularProgress size={18} color="inherit" /> : null}
+                    sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
+                  >
+                    {t3Submitting ? 'Submitting...' : 'Submit Mutation Request'}
+                  </Button>
+                )}
+              </Box>
+            </>
+          )}
+        </TabPanel>
+
+        {/* ═══════════════════════════════════════════════════════════
+            TAB 4 — View Tax Receipts  (no stepper)
         ════════════════════════════════════════════════════════════ */}
         <TabPanel value={tab} index={4}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={8}>
               <TextField
-                fullWidth required label="Property ID / Holding Number *"
-                name="receipt_property_id" value={formData.receipt_property_id} onChange={handleChange}
-                placeholder="e.g., WARD05-2023-1234"
+                fullWidth
+                label="Property ID"
+                value={t4PropertyId}
+                onChange={e => setT4PropertyId(e.target.value)}
+                placeholder="e.g. WARD05-2023-1234"
               />
             </Grid>
             <Grid item xs={12} md={4}>
-              <Button fullWidth variant="outlined" sx={{ height: 56 }} onClick={fetchReceipts}>
-                Fetch Receipts
+              <Button
+                fullWidth variant="outlined"
+                sx={{ height: 56, borderColor: HEADER_COLOR, color: HEADER_COLOR }}
+                onClick={fetchReceipts}
+              >
+                Search
               </Button>
             </Grid>
-            <Grid item xs={12}>
-              <Alert severity="info">Receipts from the last 5 years are available online.</Alert>
-            </Grid>
+
             {receipts && (
               <Grid item xs={12}>
-                <TableContainer component={Paper} sx={{ mt: 1 }}>
-                  <Table size="small">
+                <TableContainer component={Paper} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                  <Table>
                     <TableHead sx={{ bgcolor: HEADER_COLOR }}>
                       <TableRow>
-                        {['Sr. No.', 'Financial Year', 'Amount', 'Mode of Payment', 'Payment Date', 'Receipt No.', 'Action'].map(h => (
-                          <TableCell key={h} sx={{ color: 'white', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</TableCell>
+                        {['Year', 'Amount Paid', 'Date Paid', 'Receipt No', 'Download'].map(h => (
+                          <TableCell key={h} sx={{ color: 'white', fontWeight: 700 }}>{h}</TableCell>
                         ))}
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {receipts.map(r => (
-                        <TableRow key={r.receipt} hover>
-                          <TableCell>{r.sr}</TableCell>
+                      {receipts.map((r, i) => (
+                        <TableRow key={i} hover>
                           <TableCell>{r.year}</TableCell>
                           <TableCell>₹{r.amount.toLocaleString()}</TableCell>
-                          <TableCell>{r.mode}</TableCell>
                           <TableCell>{r.date}</TableCell>
                           <TableCell>
                             <Chip label={r.receipt} size="small" color="primary" variant="outlined" />
                           </TableCell>
                           <TableCell>
-                            <Button size="small" startIcon={<PrintIcon />}
-                              onClick={() => toast.success('Printing receipt ' + r.receipt)}>
-                              Print
+                            <Button
+                              size="small" variant="outlined"
+                              startIcon={<DownloadIcon />}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              PDF
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -920,55 +1651,35 @@ const MunicipalPropertyTaxForm = ({ onClose }) => {
                     </TableBody>
                   </Table>
                 </TableContainer>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  Tax records available from 2015 onwards. For older records, contact the Municipal Records Section.
+                </Alert>
               </Grid>
             )}
           </Grid>
         </TabPanel>
       </DialogContent>
 
-      {/* ══ DIALOG ACTIONS ══════════════════════════════════════════ */}
-      <DialogActions sx={{ p: 2, gap: 1 }}>
-        <Button onClick={onClose} color="inherit">Cancel</Button>
-        <Box sx={{ flex: 1 }} />
-
-        {/* Back — only for stepper tabs */}
-        {hasStepperTab && (
-          <Button onClick={handleBack} disabled={activeStep === 0}>← Back</Button>
-        )}
-
-        {/* Pay Now — Tab 0 only when bill loaded */}
-        {tab === 0 && billData && (
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={submitting || !formData.payment_method}
-            sx={{ bgcolor: HEADER_COLOR }}
-          >
-            {submitting ? <CircularProgress size={22} color="inherit" /> : 'Pay Now'}
-          </Button>
-        )}
-
-        {/* Next — stepper tabs, not last step */}
-        {hasStepperTab && !isLastStep && (
-          <Button variant="contained" onClick={handleNext} sx={{ bgcolor: HEADER_COLOR }}>
-            Next →
-          </Button>
-        )}
-
-        {/* Submit — stepper tabs, last step */}
-        {hasStepperTab && isLastStep && (
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={submitting || (tab === 1 && !declared)}
-            sx={{ bgcolor: HEADER_COLOR }}
-          >
-            {submitting ? <CircularProgress size={22} color="inherit" /> : 'Submit Application'}
-          </Button>
-        )}
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button onClick={onClose} variant="outlined">Close</Button>
       </DialogActions>
+      <EmailOtpVerification
+        open={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        onVerified={handleOtpVerified}
+        initialEmail={tab === 1 ? t1.email || '' : tab === 2 ? t2.email || '' : tab === 3 ? t3.new_email || '' : ''}
+        title="Verify Email to Submit Application"
+      />
+      <ApplicationReceipt
+        open={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        applicationNumber={receiptAppNum}
+        applicationType={receiptAppType}
+        formData={receiptFormData}
+        email={verifiedEmail}
+        submittedAt={submittedAt}
+      />
     </Box>
   );
-};
+}
 
-export default MunicipalPropertyTaxForm;
