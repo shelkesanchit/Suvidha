@@ -391,6 +391,7 @@ const Reports = () => {
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="h6" gutterBottom>Category-wise Summary</Typography>
+                <Box sx={{ overflowX: 'auto' }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ bgcolor: '#f5f5f5' }}>
@@ -411,6 +412,7 @@ const Reports = () => {
                     ))}
                   </TableBody>
                 </Table>
+                </Box>
               </Grid>
             </Grid>
           )}

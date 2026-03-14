@@ -32,12 +32,14 @@ import {
   WaterDrop,
   ReceiptLong,
   ChevronLeft,
-  ChevronRight,
 } from '@mui/icons-material';
 import { useAuth } from "../../contexts/AuthContext";
 import toast from 'react-hot-toast';
 
 const DRAWER_WIDTH = 240;
+const DEPT_COLOR = '#0288d1';
+const DEPT_DARK = '#01579b';
+const DEPT_GRADIENT = 'linear-gradient(135deg, #0288d1 0%, #4fc3f7 100%)';
 
 const menuItems = [
   { text: 'Dashboard', icon: <Dashboard />, path: '/water' },
@@ -60,19 +62,8 @@ const WaterDashboard = () => {
   const location = useLocation();
 
   const handleDrawerToggle = () => {
-    if (isMobile) {
-      setMobileOpen(!mobileOpen);
-    } else {
-      setDesktopOpen(!desktopOpen);
-    }
-  };
-
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
+    if (isMobile) setMobileOpen(!mobileOpen);
+    else setDesktopOpen(!desktopOpen);
   };
 
   const handleLogout = () => {
@@ -83,41 +74,23 @@ const WaterDashboard = () => {
 
   const handleNavigation = (path) => {
     navigate(path);
-    if (isMobile) {
-      setMobileOpen(false);
-    }
+    if (isMobile) setMobileOpen(false);
   };
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Logo Section */}
-      <Box
-        sx={{
-          p: 2,
-          background: 'linear-gradient(135deg, #0288d1 0%, #4fc3f7 100%)',
-          color: 'white',
-        }}
-      >
+      {/* Gradient header */}
+      <Box sx={{ p: 2, background: DEPT_GRADIENT, color: 'white' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '10px',
-              bgcolor: 'rgba(255,255,255,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <WaterDrop sx={{ fontSize: 24 }} />
           </Box>
           <Box>
             <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
               Water Admin
             </Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9, fontSize: '0.7rem' }}>
-              Municipal Dept.
+            <Typography variant="caption" sx={{ opacity: 0.85, fontSize: '0.7rem' }}>
+              Municipal Water Dept.
             </Typography>
           </Box>
         </Box>
@@ -126,9 +99,9 @@ const WaterDashboard = () => {
       {/* Navigation Menu */}
       <List sx={{ flex: 1, px: 1.5, py: 1.5 }}>
         {menuItems.map((item) => {
-          const isActive = location.pathname === item.path || 
-            (item.path !== '/' && location.pathname.startsWith(item.path));
-          
+          const isActive = location.pathname === item.path ||
+            (item.path !== '/water' && location.pathname.startsWith(item.path));
+
           return (
             <ListItem key={item.text} disablePadding sx={{ mb: 0.3 }}>
               <ListItemButton
@@ -137,27 +110,18 @@ const WaterDashboard = () => {
                   borderRadius: 1.5,
                   py: 1,
                   px: 1.5,
-                  bgcolor: isActive ? 'primary.main' : 'transparent',
+                  bgcolor: isActive ? DEPT_COLOR : 'transparent',
                   color: isActive ? 'white' : 'text.primary',
-                  '&:hover': {
-                    bgcolor: isActive ? 'primary.dark' : 'action.hover',
-                  },
+                  '&:hover': { bgcolor: isActive ? DEPT_DARK : 'action.hover' },
+                  transition: 'background 0.15s',
                 }}
               >
-                <ListItemIcon
-                  sx={{
-                    color: isActive ? 'white' : 'primary.main',
-                    minWidth: 36,
-                  }}
-                >
+                <ListItemIcon sx={{ color: isActive ? 'white' : DEPT_COLOR, minWidth: 36 }}>
                   {item.icon}
                 </ListItemIcon>
-                <ListItemText 
+                <ListItemText
                   primary={item.text}
-                  primaryTypographyProps={{
-                    fontWeight: isActive ? 600 : 400,
-                    fontSize: '0.9rem',
-                  }}
+                  primaryTypographyProps={{ fontWeight: isActive ? 600 : 400, fontSize: '0.9rem' }}
                 />
               </ListItemButton>
             </ListItem>
@@ -168,7 +132,7 @@ const WaterDashboard = () => {
       {/* User Section */}
       <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36, fontSize: '0.9rem' }}>
+          <Avatar sx={{ bgcolor: DEPT_COLOR, width: 36, height: 36, fontSize: '0.9rem' }}>
             {user?.name?.charAt(0) || 'W'}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -179,6 +143,11 @@ const WaterDashboard = () => {
               {user?.role?.replace('_', ' ') || 'super_admin'}
             </Typography>
           </Box>
+          <Tooltip title="Logout">
+            <IconButton size="small" onClick={handleLogout} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
+              <Logout sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
     </Box>
@@ -190,75 +159,50 @@ const WaterDashboard = () => {
       <AppBar
         position="fixed"
         sx={{
-          width: { 
-            xs: '100%',
-            md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%'
-          },
-          ml: { 
-            xs: 0,
-            md: desktopOpen ? `${DRAWER_WIDTH}px` : 0
-          },
-          bgcolor: 'white',
-          color: 'text.primary',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+          width: { xs: '100%', md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%' },
+          ml: { xs: 0, md: desktopOpen ? `${DRAWER_WIDTH}px` : 0 },
+          background: DEPT_GRADIENT,
+          boxShadow: 2,
           transition: theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),
         }}
       >
-        <Toolbar sx={{ minHeight: 64 }}>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2 }}
-          >
-            <MenuIcon />
+        <Toolbar>
+          <IconButton color="inherit" edge="start" onClick={handleDrawerToggle} sx={{ mr: 2 }}>
+            {desktopOpen && !isMobile ? <ChevronLeft /> : <MenuIcon />}
           </IconButton>
-          
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h6" fontWeight={600} color="primary.dark">
-              💧 Water Department
-            </Typography>
-          </Box>
-
-          <Tooltip title="Account">
-            <IconButton onClick={handleMenuOpen}>
-              <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36 }}>
-                {user?.name?.charAt(0) || 'A'}
+          <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 600 }}>
+            Water Department Admin
+          </Typography>
+          <Tooltip title="Account settings">
+            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0 }}>
+              <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 36, height: 36 }}>
+                {user?.name?.charAt(0) || 'W'}
               </Avatar>
             </IconButton>
           </Tooltip>
-
           <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            PaperProps={{
-              sx: { width: 200, mt: 1 },
-            }}
+            onClose={() => setAnchorEl(null)}
+            PaperProps={{ sx: { mt: 1.5, minWidth: 180 } }}
           >
             <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="body2" fontWeight={600}>
-                {user?.name || 'Admin'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {user?.email || 'admin@water.gov.in'}
-              </Typography>
+              <Typography variant="body2" fontWeight={600}>{user?.name || 'Admin'}</Typography>
+              <Typography variant="caption" color="text.secondary">{user?.email || 'admin@water.gov.in'}</Typography>
             </Box>
             <Divider />
             <MenuItem onClick={handleLogout}>
-              <ListItemIcon>
-                <Logout fontSize="small" />
-              </ListItemIcon>
+              <ListItemIcon><Logout fontSize="small" /></ListItemIcon>
               Logout
             </MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* Drawer - Mobile */}
+      {/* Mobile Drawer */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
@@ -266,30 +210,24 @@ const WaterDashboard = () => {
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
-            boxSizing: 'border-box',
-          },
+          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: DRAWER_WIDTH },
         }}
       >
         {drawer}
       </Drawer>
 
-      {/* Drawer - Desktop */}
+      {/* Desktop Drawer */}
       <Drawer
         variant="persistent"
         open={desktopOpen}
         sx={{
           display: { xs: 'none', md: 'block' },
+          width: desktopOpen ? DRAWER_WIDTH : 0,
+          flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
             boxSizing: 'border-box',
-            borderRight: 'none',
-            boxShadow: '2px 0 8px rgba(0,0,0,0.05)',
-            transition: theme.transitions.create('width', {
-              easing: theme.transitions.easing.sharp,
-              duration: theme.transitions.duration.enteringScreen,
-            }),
+            width: DRAWER_WIDTH,
+            borderRight: '1px solid rgba(0,0,0,0.08)',
           },
         }}
       >
@@ -302,15 +240,7 @@ const WaterDashboard = () => {
         sx={{
           flexGrow: 1,
           p: { xs: 2, md: 3 },
-          pt: { xs: 3, md: 4 },
-          width: {
-            xs: '100%',
-            md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%'
-          },
-          ml: {
-            xs: 0,
-            md: desktopOpen ? `${DRAWER_WIDTH}px` : 0
-          },
+          width: { xs: '100%', md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%' },
           mt: '64px',
           bgcolor: 'background.default',
           minHeight: 'calc(100vh - 64px)',

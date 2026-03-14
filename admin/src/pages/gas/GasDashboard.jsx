@@ -32,7 +32,6 @@ import {
   LocalFireDepartment as GasIcon,
   ReceiptLong,
   ChevronLeft,
-  ChevronRight,
   PropaneTank as CylinderIcon,
   Security as RegulatoryIcon,
 } from '@mui/icons-material';
@@ -40,6 +39,9 @@ import { useAuth } from "../../contexts/AuthContext";
 import toast from 'react-hot-toast';
 
 const DRAWER_WIDTH = 240;
+const DEPT_COLOR = '#ff6b35';
+const DEPT_DARK = '#e55a2b';
+const DEPT_GRADIENT = 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)';
 
 const menuItems = [
   { text: 'Dashboard', icon: <Dashboard />, path: '/gas' },
@@ -64,19 +66,8 @@ const GasDashboard = () => {
   const location = useLocation();
 
   const handleDrawerToggle = () => {
-    if (isMobile) {
-      setMobileOpen(!mobileOpen);
-    } else {
-      setDesktopOpen(!desktopOpen);
-    }
-  };
-
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
+    if (isMobile) setMobileOpen(!mobileOpen);
+    else setDesktopOpen(!desktopOpen);
   };
 
   const handleLogout = () => {
@@ -87,40 +78,22 @@ const GasDashboard = () => {
 
   const handleNavigation = (path) => {
     navigate(path);
-    if (isMobile) {
-      setMobileOpen(false);
-    }
+    if (isMobile) setMobileOpen(false);
   };
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Logo Section */}
-      <Box
-        sx={{
-          p: 2,
-          background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
-          color: 'white',
-        }}
-      >
+      {/* Gradient header */}
+      <Box sx={{ p: 2, background: DEPT_GRADIENT, color: 'white' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '10px',
-              bgcolor: 'rgba(255,255,255,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <GasIcon sx={{ fontSize: 24 }} />
           </Box>
           <Box>
             <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
               Gas Admin
             </Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9, fontSize: '0.7rem' }}>
+            <Typography variant="caption" sx={{ opacity: 0.85, fontSize: '0.7rem' }}>
               Distribution Dept.
             </Typography>
           </Box>
@@ -130,9 +103,9 @@ const GasDashboard = () => {
       {/* Navigation Menu */}
       <List sx={{ flex: 1, px: 1.5, py: 1.5 }}>
         {menuItems.map((item) => {
-          const isActive = location.pathname === item.path || 
-            (item.path !== '/' && location.pathname.startsWith(item.path));
-          
+          const isActive = location.pathname === item.path ||
+            (item.path !== '/gas' && location.pathname.startsWith(item.path));
+
           return (
             <ListItem key={item.text} disablePadding sx={{ mb: 0.3 }}>
               <ListItemButton
@@ -141,27 +114,18 @@ const GasDashboard = () => {
                   borderRadius: 1.5,
                   py: 1,
                   px: 1.5,
-                  bgcolor: isActive ? 'primary.main' : 'transparent',
+                  bgcolor: isActive ? DEPT_COLOR : 'transparent',
                   color: isActive ? 'white' : 'text.primary',
-                  '&:hover': {
-                    bgcolor: isActive ? 'primary.dark' : 'action.hover',
-                  },
+                  '&:hover': { bgcolor: isActive ? DEPT_DARK : 'action.hover' },
+                  transition: 'background 0.15s',
                 }}
               >
-                <ListItemIcon
-                  sx={{
-                    color: isActive ? 'white' : 'primary.main',
-                    minWidth: 36,
-                  }}
-                >
+                <ListItemIcon sx={{ color: isActive ? 'white' : DEPT_COLOR, minWidth: 36 }}>
                   {item.icon}
                 </ListItemIcon>
-                <ListItemText 
+                <ListItemText
                   primary={item.text}
-                  primaryTypographyProps={{
-                    fontWeight: isActive ? 600 : 400,
-                    fontSize: '0.9rem',
-                  }}
+                  primaryTypographyProps={{ fontWeight: isActive ? 600 : 400, fontSize: '0.9rem' }}
                 />
               </ListItemButton>
             </ListItem>
@@ -172,7 +136,7 @@ const GasDashboard = () => {
       {/* User Section */}
       <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36, fontSize: '0.9rem' }}>
+          <Avatar sx={{ bgcolor: DEPT_COLOR, width: 36, height: 36, fontSize: '0.9rem' }}>
             {user?.name?.charAt(0) || 'G'}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -183,6 +147,11 @@ const GasDashboard = () => {
               {user?.role?.replace('_', ' ') || 'super_admin'}
             </Typography>
           </Box>
+          <Tooltip title="Logout">
+            <IconButton size="small" onClick={handleLogout} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
+              <Logout sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
     </Box>
@@ -194,15 +163,9 @@ const GasDashboard = () => {
       <AppBar
         position="fixed"
         sx={{
-          width: { 
-            xs: '100%',
-            md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%'
-          },
-          ml: { 
-            xs: 0,
-            md: desktopOpen ? `${DRAWER_WIDTH}px` : 0
-          },
-          background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
+          width: { xs: '100%', md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%' },
+          ml: { xs: 0, md: desktopOpen ? `${DRAWER_WIDTH}px` : 0 },
+          background: DEPT_GRADIENT,
           boxShadow: 2,
           transition: theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,
@@ -211,44 +174,31 @@ const GasDashboard = () => {
         }}
       >
         <Toolbar>
-          <IconButton
-            color="inherit"
-            aria-label="open drawer"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2 }}
-          >
+          <IconButton color="inherit" edge="start" onClick={handleDrawerToggle} sx={{ mr: 2 }}>
             {desktopOpen && !isMobile ? <ChevronLeft /> : <MenuIcon />}
           </IconButton>
-          
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 600 }}>
             Gas Distribution Admin
           </Typography>
-
           <Tooltip title="Account settings">
-            <IconButton onClick={handleMenuOpen} sx={{ p: 0 }}>
-              <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>
+            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0 }}>
+              <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 36, height: 36 }}>
                 {user?.name?.charAt(0) || 'G'}
               </Avatar>
             </IconButton>
           </Tooltip>
-          
           <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            PaperProps={{
-              sx: { mt: 1.5, minWidth: 180 }
-            }}
+            onClose={() => setAnchorEl(null)}
+            PaperProps={{ sx: { mt: 1.5, minWidth: 180 } }}
           >
             <MenuItem disabled>
               <Typography variant="body2">{user?.name || 'Gas Admin'}</Typography>
             </MenuItem>
             <Divider />
             <MenuItem onClick={handleLogout}>
-              <ListItemIcon>
-                <Logout fontSize="small" />
-              </ListItemIcon>
+              <ListItemIcon><Logout fontSize="small" /></ListItemIcon>
               Logout
             </MenuItem>
           </Menu>
@@ -263,10 +213,7 @@ const GasDashboard = () => {
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': { 
-            boxSizing: 'border-box', 
-            width: DRAWER_WIDTH,
-          },
+          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: DRAWER_WIDTH },
         }}
       >
         {drawer}
@@ -278,11 +225,12 @@ const GasDashboard = () => {
         open={desktopOpen}
         sx={{
           display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': { 
-            boxSizing: 'border-box', 
+          width: desktopOpen ? DRAWER_WIDTH : 0,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            boxSizing: 'border-box',
             width: DRAWER_WIDTH,
-            borderRight: '1px solid',
-            borderColor: 'divider',
+            borderRight: '1px solid rgba(0,0,0,0.08)',
           },
         }}
       >
@@ -294,18 +242,15 @@ const GasDashboard = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
-          width: { 
-            xs: '100%',
-            md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%'
-          },
-          mt: 8,
+          p: { xs: 2, md: 3 },
+          width: { xs: '100%', md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%' },
+          mt: '64px',
+          bgcolor: 'background.default',
+          minHeight: 'calc(100vh - 64px)',
           transition: theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),
-          bgcolor: 'background.default',
-          minHeight: 'calc(100vh - 64px)',
         }}
       >
         <Outlet />

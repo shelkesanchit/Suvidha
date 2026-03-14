@@ -227,42 +227,6 @@ const ManageComplaints = () => {
         </Button>
       </Box>
 
-      {/* Summary Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#ffebee' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="error.main">{openCount}</Typography>
-              <Typography variant="body2" color="text.secondary">Open</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#e3f2fd' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="info.main">{assignedCount}</Typography>
-              <Typography variant="body2" color="text.secondary">Assigned</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#fff3e0' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="warning.main">{inProgressCount}</Typography>
-              <Typography variant="body2" color="text.secondary">In Progress</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#e8f5e9' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="success.main">{complaints.length}</Typography>
-              <Typography variant="body2" color="text.secondary">Total</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -335,7 +299,8 @@ const ManageComplaints = () => {
               <Typography color="text.secondary">No complaints found</Typography>
             </Box>
           ) : (
-            <Table>
+            <Box sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: 900 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                   <TableCell><strong>Complaint #</strong></TableCell>
@@ -430,6 +395,7 @@ const ManageComplaints = () => {
                 ))}
               </TableBody>
             </Table>
+            </Box>
           )}
         </CardContent>
       </Card>

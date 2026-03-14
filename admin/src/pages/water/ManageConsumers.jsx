@@ -176,42 +176,6 @@ const ManageConsumers = () => {
         </Button>
       </Box>
 
-      {/* Summary Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#e8f5e9' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="success.main">{activeCount}</Typography>
-              <Typography variant="body2" color="text.secondary">Active Consumers</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#ffebee' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="error.main">{inactiveCount}</Typography>
-              <Typography variant="body2" color="text.secondary">Inactive</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#e3f2fd' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="primary.main">{consumers.length}</Typography>
-              <Typography variant="body2" color="text.secondary">Total Consumers</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} md={3}>
-          <Card sx={{ bgcolor: '#fff3e0' }}>
-            <CardContent sx={{ py: 2 }}>
-              <Typography variant="h4" fontWeight={700} color="warning.main">₹{totalDues.toLocaleString()}</Typography>
-              <Typography variant="body2" color="text.secondary">Total Outstanding</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -285,7 +249,8 @@ const ManageConsumers = () => {
               <Typography color="text.secondary">No consumers found</Typography>
             </Box>
           ) : (
-            <Table>
+            <Box sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: 860 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                   <TableCell><strong>Consumer #</strong></TableCell>
@@ -388,6 +353,7 @@ const ManageConsumers = () => {
                 ))}
               </TableBody>
             </Table>
+            </Box>
           )}
         </CardContent>
       </Card>

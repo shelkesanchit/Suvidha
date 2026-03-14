@@ -128,44 +128,6 @@ export default function Reports() {
         <Alert severity="info">No payment records found for the selected date range ({startDate} to {endDate}).</Alert>
       ) : (
         <>
-          {/* Summary Cards */}
-          <Grid container spacing={2.5} sx={{ mb: 3 }}>
-            <Grid item xs={6} sm={3}>
-              <Card sx={{ bgcolor: '#e3f2fd' }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Typography variant="h4" fontWeight={700} color="primary.main">₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</Typography>
-                  <Typography variant="body2" color="text.secondary">Total Revenue</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Card sx={{ bgcolor: '#e8f5e9' }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Typography variant="h4" fontWeight={700} color="success.main">{totalTxns.toLocaleString()}</Typography>
-                  <Typography variant="body2" color="text.secondary">Total Transactions</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Card sx={{ bgcolor: '#fff3e0' }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Typography variant="h4" fontWeight={700} color="warning.main">{byDate.length}</Typography>
-                  <Typography variant="body2" color="text.secondary">Active Days</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Card sx={{ bgcolor: '#f3e5f5' }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Typography variant="h4" fontWeight={700} color="secondary.main">
-                    ₹{totalTxns > 0 ? Math.round(totalRevenue / totalTxns).toLocaleString() : 0}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">Avg per Transaction</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-
           {/* Charts */}
           <Grid container spacing={2.5} sx={{ mb: 3 }}>
             {/* Revenue by Date */}

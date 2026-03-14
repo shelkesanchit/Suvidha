@@ -1,67 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box, Drawer, AppBar, Toolbar, Typography, List, ListItem,
-  ListItemButton, ListItemIcon, ListItemText, IconButton, Avatar,
-  Divider, Badge, Tooltip, Menu, MenuItem, useMediaQuery, useTheme,
+  Box,
+  Drawer,
+  AppBar,
+  Toolbar,
+  Typography,
+  IconButton,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Avatar,
+  Menu,
+  MenuItem,
+  Divider,
+  useTheme,
+  useMediaQuery,
+  Tooltip,
 } from '@mui/material';
 import {
-  Dashboard as DashboardIcon,
-  Assignment as ApplicationIcon,
-  Report as ComplaintIcon,
-  Speed as MeterIcon,
-  People as ConsumerIcon,
-  ManageAccounts as UsersIcon,
-  BarChart as ReportsIcon,
-  Settings as SettingsIcon,
-  Bolt as TariffIcon,
   Menu as MenuIcon,
-  Logout as LogoutIcon,
-  ElectricBolt,
+  Dashboard,
+  Description,
+  Report,
+  People,
+  Assessment,
+  Settings,
+  Logout,
+  AccountBalance as MunicipalIcon,
   ChevronLeft,
+  VerifiedUser,
+  CardMembership,
+  Payment,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import api from '../../utils/api';
+import toast from 'react-hot-toast';
 
 const DRAWER_WIDTH = 240;
-const DEPT_COLOR = '#1976d2';
-const DEPT_DARK = '#115293';
-const DEPT_GRADIENT = 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)';
+const DEPT_COLOR = '#2e7d32';
+const DEPT_DARK = '#1b5e20';
+const DEPT_GRADIENT = 'linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%)';
 
-const NAV_ITEMS = [
-  { label: 'Dashboard',        icon: DashboardIcon,    path: '/electricity' },
-  { label: 'Applications',     icon: ApplicationIcon,  path: '/electricity/applications',  badgeKey: 'pending_applications' },
-  { label: 'Complaints',       icon: ComplaintIcon,    path: '/electricity/complaints',     badgeKey: 'open_complaints' },
-  { label: 'Meter Readings',   icon: MeterIcon,        path: '/electricity/meter-readings' },
-  { label: 'Consumers',        icon: ConsumerIcon,     path: '/electricity/consumers' },
-  { label: 'Users',            icon: UsersIcon,        path: '/electricity/users' },
-  { label: 'Reports',          icon: ReportsIcon,      path: '/electricity/reports' },
-  { label: 'Tariff Rates',     icon: TariffIcon,       path: '/electricity/tariff' },
-  { label: 'System Settings',  icon: SettingsIcon,     path: '/electricity/settings' },
+const menuItems = [
+  { text: 'Dashboard', icon: <Dashboard />, path: '/municipal' },
+  { text: 'Applications', icon: <Description />, path: '/municipal/applications' },
+  { text: 'Complaints', icon: <Report />, path: '/municipal/complaints' },
+  { text: 'Consumers', icon: <People />, path: '/municipal/consumers' },
+  { text: 'Licenses', icon: <VerifiedUser />, path: '/municipal/licenses' },
+  { text: 'Certificates', icon: <CardMembership />, path: '/municipal/certificates' },
+  { text: 'Payments', icon: <Payment />, path: '/municipal/payments' },
+  { text: 'Reports', icon: <Assessment />, path: '/municipal/reports' },
+  { text: 'Settings', icon: <Settings />, path: '/municipal/settings' },
 ];
 
-export default function AdminDashboard() {
+const MunicipalDashboard = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
-  const [badges, setBadges] = useState({});
   const [anchorEl, setAnchorEl] = useState(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await api.get('/admin/dashboard/stats');
-        setBadges(res.data);
-      } catch (_) {}
-    };
-    load();
-    const id = setInterval(load, 60000);
-    return () => clearInterval(id);
-  }, []);
 
   const handleDrawerToggle = () => {
     if (isMobile) setMobileOpen(!mobileOpen);
@@ -70,13 +72,14 @@ export default function AdminDashboard() {
 
   const handleLogout = () => {
     logout();
-    navigate('/electricity/login');
+    toast.success('Logged out successfully');
+    navigate('/');
   };
 
-  const isActive = (path) =>
-    path === '/electricity'
-      ? location.pathname === '/electricity'
-      : location.pathname.startsWith(path);
+  const handleNavigation = (path) => {
+    navigate(path);
+    if (isMobile) setMobileOpen(false);
+  };
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -84,46 +87,45 @@ export default function AdminDashboard() {
       <Box sx={{ p: 2, background: DEPT_GRADIENT, color: 'white' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ElectricBolt sx={{ fontSize: 24 }} />
+            <MunicipalIcon sx={{ fontSize: 24 }} />
           </Box>
           <Box>
             <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-              Electricity Admin
+              Municipal Admin
             </Typography>
             <Typography variant="caption" sx={{ opacity: 0.85, fontSize: '0.7rem' }}>
-              Power Distribution Dept.
+              Corporation Dept.
             </Typography>
           </Box>
         </Box>
       </Box>
 
-      {/* Navigation */}
+      {/* Navigation Menu */}
       <List sx={{ flex: 1, px: 1.5, py: 1.5 }}>
-        {NAV_ITEMS.map(({ label, icon: Icon, path, badgeKey }) => {
-          const active = isActive(path);
-          const count = badgeKey ? (badges[badgeKey] || 0) : 0;
+        {menuItems.map((item) => {
+          const isActive = location.pathname === item.path ||
+            (item.path !== '/municipal' && location.pathname.startsWith(item.path));
+
           return (
-            <ListItem key={path} disablePadding sx={{ mb: 0.3 }}>
+            <ListItem key={item.text} disablePadding sx={{ mb: 0.3 }}>
               <ListItemButton
-                onClick={() => { navigate(path); if (isMobile) setMobileOpen(false); }}
+                onClick={() => handleNavigation(item.path)}
                 sx={{
                   borderRadius: 1.5,
                   py: 1,
                   px: 1.5,
-                  bgcolor: active ? DEPT_COLOR : 'transparent',
-                  color: active ? 'white' : 'text.primary',
-                  '&:hover': { bgcolor: active ? DEPT_DARK : 'action.hover' },
+                  bgcolor: isActive ? DEPT_COLOR : 'transparent',
+                  color: isActive ? 'white' : 'text.primary',
+                  '&:hover': { bgcolor: isActive ? DEPT_DARK : 'action.hover' },
                   transition: 'background 0.15s',
                 }}
               >
-                <ListItemIcon sx={{ color: active ? 'white' : DEPT_COLOR, minWidth: 36 }}>
-                  <Badge badgeContent={count > 0 ? count : null} color="error" max={99}>
-                    <Icon sx={{ fontSize: 20 }} />
-                  </Badge>
+                <ListItemIcon sx={{ color: isActive ? 'white' : DEPT_COLOR, minWidth: 36 }}>
+                  {item.icon}
                 </ListItemIcon>
                 <ListItemText
-                  primary={label}
-                  primaryTypographyProps={{ fontWeight: active ? 600 : 400, fontSize: '0.9rem' }}
+                  primary={item.text}
+                  primaryTypographyProps={{ fontWeight: isActive ? 600 : 400, fontSize: '0.9rem' }}
                 />
               </ListItemButton>
             </ListItem>
@@ -135,19 +137,19 @@ export default function AdminDashboard() {
       <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Avatar sx={{ bgcolor: DEPT_COLOR, width: 36, height: 36, fontSize: '0.9rem' }}>
-            {user?.full_name?.[0]?.toUpperCase() || 'A'}
+            {user?.full_name?.charAt(0) || user?.name?.charAt(0) || 'M'}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.85rem' }}>
-              {user?.full_name || 'Admin'}
+              {user?.full_name || user?.name || 'Municipal Admin'}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: '0.7rem' }}>
-              {user?.role || 'admin'}
+              {user?.role?.replace('_', ' ') || 'admin'}
             </Typography>
           </Box>
           <Tooltip title="Logout">
             <IconButton size="small" onClick={handleLogout} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-              <LogoutIcon sx={{ fontSize: 18 }} />
+              <Logout sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
         </Box>
@@ -176,12 +178,12 @@ export default function AdminDashboard() {
             {desktopOpen && !isMobile ? <ChevronLeft /> : <MenuIcon />}
           </IconButton>
           <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 600 }}>
-            Electricity Department Admin
+            Municipal Corporation Admin
           </Typography>
           <Tooltip title="Account settings">
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0 }}>
               <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 36, height: 36 }}>
-                {user?.full_name?.[0]?.toUpperCase() || 'A'}
+                {user?.full_name?.charAt(0) || user?.name?.charAt(0) || 'M'}
               </Avatar>
             </IconButton>
           </Tooltip>
@@ -192,11 +194,11 @@ export default function AdminDashboard() {
             PaperProps={{ sx: { mt: 1.5, minWidth: 180 } }}
           >
             <MenuItem disabled>
-              <Typography variant="body2">{user?.full_name || 'Admin'}</Typography>
+              <Typography variant="body2">{user?.full_name || user?.name || 'Municipal Admin'}</Typography>
             </MenuItem>
             <Divider />
             <MenuItem onClick={handleLogout}>
-              <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
+              <ListItemIcon><Logout fontSize="small" /></ListItemIcon>
               Logout
             </MenuItem>
           </Menu>
@@ -207,7 +209,7 @@ export default function AdminDashboard() {
       <Drawer
         variant="temporary"
         open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
+        onClose={handleDrawerToggle}
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', md: 'none' },
@@ -255,4 +257,6 @@ export default function AdminDashboard() {
       </Box>
     </Box>
   );
-}
+};
+
+export default MunicipalDashboard;

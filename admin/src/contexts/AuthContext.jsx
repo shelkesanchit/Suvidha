@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import electricityApi from '../utils/electricity/api';
 import gasApi from '../utils/gas/api';
 import waterApi from '../utils/water/api';
+import municipalApi from '../utils/municipal/api';
 import toast from 'react-hot-toast';
 
 const AuthContext = createContext();
@@ -27,6 +28,8 @@ export const AuthProvider = ({ children }) => {
         return gasApi;
       case 'water':
         return waterApi;
+      case 'municipal':
+        return municipalApi;
       case 'electricity':
       default:
         return electricityApi;
@@ -44,8 +47,10 @@ export const AuthProvider = ({ children }) => {
   const fetchUser = async () => {
     try {
       const api = getApi();
-      const endpoint = department === 'gas' || department === 'water' 
-        ? `/${department}/admin/auth/me` 
+      const endpoint = department === 'gas' || department === 'water'
+        ? `/${department}/admin/auth/me`
+        : department === 'municipal'
+        ? '/municipal/auth/me'
         : '/auth/me';
       
       const response = await api.get(endpoint);
@@ -73,10 +78,19 @@ export const AuthProvider = ({ children }) => {
     try {
       let response;
       
-      if (dept === 'gas' || dept === 'water') {
-        // Gas and Water admin login
-        const api = dept === 'gas' ? gasApi : waterApi;
-        response = await api.post(`/${dept}/admin/login`, credentials);
+      if (dept === 'gas' || dept === 'water' || dept === 'municipal') {
+        // Gas, Water and Municipal admin login
+        const apiMap = { gas: gasApi, water: waterApi, municipal: municipalApi };
+        const endpoint = dept === 'municipal' ? '/municipal/auth/login' : `/${dept}/admin/login`;
+        response = await apiMap[dept].post(endpoint, credentials);
+        // Validate role for municipal
+        if (dept === 'municipal') {
+          const u = response.data.user || response.data.admin;
+          if (u?.role !== 'admin' && u?.role !== 'staff') {
+            toast.error('Access denied. Admin or staff only.');
+            throw new Error('Unauthorized');
+          }
+        }
       } else {
         // Electricity admin login
         response = await electricityApi.post('/auth/login', credentials);

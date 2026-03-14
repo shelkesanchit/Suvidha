@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -44,22 +44,117 @@ import WaterReports from './pages/water/Reports';
 import WaterTariffManagement from './pages/water/TariffManagement';
 import WaterSettings from './pages/water/Settings';
 
+// Municipal Pages
+import MunicipalDashboard from './pages/municipal/MunicipalDashboard';
+import MunicipalDashboardOverview from './pages/municipal/DashboardOverview';
+import MunicipalManageApplications from './pages/municipal/ManageApplications';
+import MunicipalManageComplaints from './pages/municipal/ManageComplaints';
+import MunicipalManageConsumers from './pages/municipal/ManageConsumers';
+import MunicipalLicenses from './pages/municipal/Licenses';
+import MunicipalCertificates from './pages/municipal/Certificates';
+import MunicipalPayments from './pages/municipal/Payments';
+import MunicipalReports from './pages/municipal/Reports';
+import MunicipalSettings from './pages/municipal/Settings';
+
 // Create theme
 const theme = createTheme({
   palette: {
     primary: {
       main: '#1976d2',
       dark: '#115293',
+      light: '#42a5f5',
     },
     secondary: {
       main: '#f57c00',
     },
     background: {
-      default: '#f5f5f5',
+      default: '#f0f2f5',
+      paper: '#ffffff',
     },
+    divider: 'rgba(0,0,0,0.08)',
+  },
+  shape: {
+    borderRadius: 10,
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    h4: { fontWeight: 700, letterSpacing: '-0.5px' },
+    h5: { fontWeight: 700 },
+    h6: { fontWeight: 600 },
+    subtitle1: { fontWeight: 600 },
+    button: { textTransform: 'none', fontWeight: 500 },
+  },
+  components: {
+    MuiCard: {
+      defaultProps: { elevation: 0 },
+      styleOverrides: {
+        root: {
+          border: '1px solid rgba(0,0,0,0.08)',
+          borderRadius: 12,
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: { backgroundImage: 'none' },
+        elevation1: { boxShadow: '0 1px 4px rgba(0,0,0,0.08)' },
+        elevation2: { boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
+        elevation4: { boxShadow: '0 4px 16px rgba(0,0,0,0.1)' },
+        elevation10: { boxShadow: '0 8px 40px rgba(0,0,0,0.12)' },
+      },
+    },
+    MuiButton: {
+      defaultProps: { disableElevation: true },
+      styleOverrides: {
+        root: { borderRadius: 8, fontWeight: 500 },
+        containedPrimary: {
+          '&:hover': { filter: 'brightness(1.08)' },
+        },
+      },
+    },
+    MuiTableHead: {
+      styleOverrides: {
+        root: {
+          '& .MuiTableCell-head': {
+            backgroundColor: '#f8f9fa',
+            fontWeight: 600,
+            fontSize: '0.78rem',
+            color: '#5f6b7a',
+            letterSpacing: '0.3px',
+            textTransform: 'uppercase',
+            borderBottom: '2px solid rgba(0,0,0,0.08)',
+          },
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          '&:last-child td': { borderBottom: 0 },
+          '&.MuiTableRow-hover:hover': { backgroundColor: '#f8f9ff' },
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: { fontWeight: 500, letterSpacing: '0.2px' },
+        sizeSmall: { fontSize: '0.72rem', height: 22 },
+      },
+    },
+    MuiTextField: {
+      defaultProps: { size: 'small' },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: 16 },
+      },
+    },
+    MuiDialogTitle: {
+      styleOverrides: {
+        root: { fontWeight: 700, fontSize: '1.1rem' },
+      },
+    },
   },
 });
 
@@ -68,7 +163,11 @@ const ProtectedRoute = ({ children, dept }) => {
   const { isAuthenticated, loading, department } = useAuth();
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   if (!isAuthenticated) {
@@ -88,7 +187,11 @@ const PublicRoute = ({ children, dept }) => {
   const { isAuthenticated, loading, department } = useAuth();
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   if (isAuthenticated && department) {
@@ -191,6 +294,34 @@ function AppRoutes() {
         <Route path="reports" element={<WaterReports />} />
         <Route path="tariff" element={<WaterTariffManagement />} />
         <Route path="settings" element={<WaterSettings />} />
+      </Route>
+
+      {/* ============ MUNICIPAL ROUTES ============ */}
+      <Route
+        path="/municipal/login"
+        element={
+          <PublicRoute dept="municipal">
+            <LoginPage department="municipal" />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/municipal/*"
+        element={
+          <ProtectedRoute dept="municipal">
+            <MunicipalDashboard />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<MunicipalDashboardOverview />} />
+        <Route path="applications" element={<MunicipalManageApplications />} />
+        <Route path="complaints" element={<MunicipalManageComplaints />} />
+        <Route path="consumers" element={<MunicipalManageConsumers />} />
+        <Route path="licenses" element={<MunicipalLicenses />} />
+        <Route path="certificates" element={<MunicipalCertificates />} />
+        <Route path="payments" element={<MunicipalPayments />} />
+        <Route path="reports" element={<MunicipalReports />} />
+        <Route path="settings" element={<MunicipalSettings />} />
       </Route>
 
       {/* Catch all - redirect to role selection */}
