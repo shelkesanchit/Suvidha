@@ -65,7 +65,7 @@ const DashboardOverview = () => {
     try {
       setRefreshing(true);
       const response = await api.get('/water/admin/dashboard/stats');
-      setStats(response.data);
+      setStats(response.data.data);
       if (showToast) {
         toast.success('Dashboard refreshed');
       }

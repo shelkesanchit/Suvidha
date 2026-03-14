@@ -66,9 +66,9 @@ const ManageComplaints = () => {
   const handleStatusUpdate = async (complaintId, newStatus) => {
     try {
       setProcessing(true);
-      await api.put(`/api/gas/admin/complaints/${complaintId}/status`, {
+      await api.put(`/gas/admin/complaints/${complaintId}/status`, {
         status: newStatus,
-        resolution_remarks: resolutionRemarks,
+        resolution_notes: resolutionRemarks,
       });
       toast.success(`Complaint ${newStatus} successfully`);
       fetchComplaints();
@@ -83,9 +83,9 @@ const ManageComplaints = () => {
 
   const columns = [
     { field: 'complaint_number', headerName: 'Complaint No.', width: 150 },
-    { 
-      field: 'complaint_category', 
-      headerName: 'Category', 
+    {
+      field: 'complaint_type',
+      headerName: 'Category',
       width: 150,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -94,10 +94,10 @@ const ManageComplaints = () => {
         </Box>
       )
     },
-    { field: 'contact_name', headerName: 'Name', width: 150 },
+    { field: 'full_name', headerName: 'Name', width: 150 },
     { field: 'mobile', headerName: 'Mobile', width: 120 },
     {
-      field: 'urgency',
+      field: 'priority',
       headerName: 'Priority',
       width: 110,
       renderCell: (params) => (
@@ -105,7 +105,7 @@ const ManageComplaints = () => {
           label={params.value}
           size="small"
           color={
-            params.value === 'critical' ? 'error' :
+            params.value === 'urgent' ? 'error' :
             params.value === 'high' ? 'warning' :
             params.value === 'medium' ? 'info' : 'default'
           }
@@ -168,10 +168,10 @@ const ManageComplaints = () => {
   ];
 
   const filteredComplaints = complaints.filter(c =>
-    c.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.complaint_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.mobile?.includes(searchTerm) ||
-    c.complaint_category?.toLowerCase().includes(searchTerm.toLowerCase())
+    c.complaint_type?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -181,12 +181,12 @@ const ManageComplaints = () => {
       </Typography>
 
       {/* Emergency Alert */}
-      {complaints.filter(c => c.urgency === 'critical' && c.status !== 'resolved' && c.status !== 'closed').length > 0 && (
+      {complaints.filter(c => c.priority === 'urgent' && c.status !== 'resolved' && c.status !== 'closed').length > 0 && (
         <Paper sx={{ p: 2, mb: 3, bgcolor: 'error.light', color: 'white' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Warning />
             <Typography fontWeight={600}>
-              {complaints.filter(c => c.urgency === 'critical' && c.status !== 'resolved' && c.status !== 'closed').length} Emergency Complaints Require Immediate Attention!
+              {complaints.filter(c => c.priority === 'urgent' && c.status !== 'resolved' && c.status !== 'closed').length} Emergency Complaints Require Immediate Attention!
             </Typography>
           </Box>
         </Paper>
@@ -216,9 +216,11 @@ const ManageComplaints = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <MenuItem value="all">All Status</MenuItem>
-                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="open">Open</MenuItem>
+                <MenuItem value="assigned">Assigned</MenuItem>
                 <MenuItem value="in_progress">In Progress</MenuItem>
                 <MenuItem value="resolved">Resolved</MenuItem>
+                <MenuItem value="closed">Closed</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -271,18 +273,18 @@ const ManageComplaints = () => {
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Category</Typography>
-                <Typography variant="body1" gutterBottom>{selectedComplaint.category}</Typography>
+                <Typography variant="body1" gutterBottom>{selectedComplaint.complaint_type?.replace(/-/g, ' ')}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Priority</Typography>
-                <Chip 
-                  label={selectedComplaint.priority} 
-                  color={selectedComplaint.priority === 'emergency' ? 'error' : 'warning'} 
+                <Chip
+                  label={selectedComplaint.priority}
+                  color={selectedComplaint.priority === 'urgent' ? 'error' : 'warning'}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Complainant</Typography>
-                <Typography variant="body1" gutterBottom>{selectedComplaint.complainant_name}</Typography>
+                <Typography variant="body1" gutterBottom>{selectedComplaint.full_name}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Mobile</Typography>
@@ -314,7 +316,7 @@ const ManageComplaints = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailsOpen(false)}>Close</Button>
-          {selectedComplaint?.status === 'pending' && (
+          {selectedComplaint?.status === 'open' && (
             <Button
               onClick={() => handleStatusUpdate(selectedComplaint.id, 'in_progress')}
               color="info"

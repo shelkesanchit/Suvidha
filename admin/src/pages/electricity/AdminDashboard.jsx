@@ -1,236 +1,183 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box,
-  Drawer,
-  AppBar,
-  Toolbar,
-  List,
-  Typography,
-  IconButton,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Avatar,
-  Menu,
-  MenuItem,
-  Divider,
-  Badge,
-  Chip,
+  Box, Drawer, AppBar, Toolbar, Typography, List, ListItem,
+  ListItemButton, ListItemIcon, ListItemText, IconButton, Avatar,
+  Divider, Badge, Tooltip, Chip, useMediaQuery, useTheme,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
-  Description as ApplicationIcon,
+  Assignment as ApplicationIcon,
   Report as ComplaintIcon,
-  People as PeopleIcon,
-  Assessment as ReportsIcon,
+  Speed as MeterIcon,
+  People as ConsumerIcon,
+  ManageAccounts as UsersIcon,
+  BarChart as ReportsIcon,
   Settings as SettingsIcon,
-  AccountCircle as AccountIcon,
+  Bolt as TariffIcon,
   Menu as MenuIcon,
   Logout as LogoutIcon,
-  Power as PowerIcon,
-  Receipt as BillIcon,
-  FlashOn as ElectricityIcon,
-  ContactMail as ConsumersIcon,
+  ElectricBolt,
+  ChevronRight,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 
-const drawerWidth = 260;
+const DRAWER_WIDTH = 255;
 
-const AdminDashboard = () => {
+const NAV_ITEMS = [
+  { label: 'Dashboard',        icon: DashboardIcon,    path: '/electricity' },
+  { label: 'Applications',     icon: ApplicationIcon,  path: '/electricity/applications',  badgeKey: 'pending_applications' },
+  { label: 'Complaints',       icon: ComplaintIcon,    path: '/electricity/complaints',     badgeKey: 'open_complaints' },
+  { label: 'Meter Readings',   icon: MeterIcon,        path: '/electricity/meter-readings' },
+  { label: 'Consumers',        icon: ConsumerIcon,     path: '/electricity/consumers' },
+  { label: 'Users',            icon: UsersIcon,        path: '/electricity/users' },
+  { label: 'Reports',          icon: ReportsIcon,      path: '/electricity/reports' },
+  { label: 'Tariff Rates',     icon: TariffIcon,       path: '/electricity/tariff' },
+  { label: 'System Settings',  icon: SettingsIcon,     path: '/electricity/settings' },
+];
+
+export default function AdminDashboard() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [badges, setBadges] = useState({});
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [badges, setBadges] = useState({ applications: 0, complaints: 0 });
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   useEffect(() => {
-    // Fetch live badge counts
-    api.get('/admin/dashboard/stats')
-      .then((res) => {
-        const data = res.data.data || res.data;
-        setBadges({
-          applications: data.pending_applications || 0,
-          complaints: data.open_complaints || 0,
-        });
-      })
-      .catch(() => {});
+    const load = async () => {
+      try {
+        const res = await api.get('/admin/dashboard/stats');
+        setBadges(res.data);
+      } catch (_) {}
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
   }, []);
 
-  const menuItems = [
-    { text: 'Dashboard', icon: DashboardIcon, path: '/electricity' },
-    { text: 'Applications', icon: ApplicationIcon, path: '/electricity/applications', badge: badges.applications },
-    { text: 'Complaints', icon: ComplaintIcon, path: '/electricity/complaints', badge: badges.complaints },
-    { text: 'Meter Readings', icon: ElectricityIcon, path: '/electricity/meter-readings' },
-    { text: 'Consumers', icon: ConsumersIcon, path: '/electricity/consumers' },
-    { text: 'Users', icon: AccountIcon, path: '/electricity/users' },
-    { text: 'Reports', icon: ReportsIcon, path: '/electricity/reports' },
-    { text: 'Tariffs', icon: BillIcon, path: '/electricity/tariff' },
-    { text: 'Settings', icon: SettingsIcon, path: '/electricity/settings' },
-  ];
+  const handleLogout = () => { logout(); navigate('/electricity/login'); };
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
-
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLogout = () => {
-    handleMenuClose();
-    logout();
-    navigate('/');
-  };
+  const isActive = (path) =>
+    path === '/electricity'
+      ? location.pathname === '/electricity'
+      : location.pathname.startsWith(path);
 
   const drawer = (
-    <Box>
-      <Box sx={{ p: 3, textAlign: 'center', bgcolor: 'primary.dark', color: 'white' }}>
-        <PowerIcon sx={{ fontSize: 48, mb: 1 }} />
-        <Typography variant="h6" fontWeight={600}>
-          SUVIDHA
-        </Typography>
-        <Typography variant="caption">
-          Admin Panel
-        </Typography>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#0d1b2a' }}>
+      <Box sx={{ p: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ width: 38, height: 38, borderRadius: 2, bgcolor: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <ElectricBolt sx={{ color: '#fff', fontSize: 22 }} />
+        </Box>
+        <Box>
+          <Typography variant="subtitle1" fontWeight={700} color="#fff" lineHeight={1.2}>Electricity</Typography>
+          <Typography variant="caption" color="rgba(255,255,255,0.45)">Admin Panel</Typography>
+        </Box>
       </Box>
 
-      <List sx={{ px: 2, pt: 2 }}>
-        {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
-              sx={{
-                borderRadius: 2,
-                '&.Mui-selected': {
-                  bgcolor: 'primary.lighter',
-                  '&:hover': {
-                    bgcolor: 'primary.lighter',
-                  },
-                },
-              }}
-            >
-              <ListItemIcon>
-                {item.badge !== undefined && item.badge > 0 ? (
-                  <Badge badgeContent={item.badge} color="error">
-                    <item.icon />
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', mx: 1.5 }} />
+
+      <List sx={{ flex: 1, py: 1.5, px: 1 }}>
+        {NAV_ITEMS.map(({ label, icon: Icon, path, badgeKey }) => {
+          const active = isActive(path);
+          const count = badgeKey ? (badges[badgeKey] || 0) : 0;
+          return (
+            <ListItem key={path} disablePadding sx={{ mb: 0.25 }}>
+              <ListItemButton
+                onClick={() => { navigate(path); if (isMobile) setMobileOpen(false); }}
+                sx={{
+                  borderRadius: 1.5,
+                  py: 0.9,
+                  px: 1.5,
+                  bgcolor: active ? '#1976d2' : 'transparent',
+                  '&:hover': { bgcolor: active ? '#1565c0' : 'rgba(255,255,255,0.06)' },
+                  transition: 'background 0.15s',
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 34 }}>
+                  <Badge badgeContent={count > 0 ? count : null} color="error" max={99}>
+                    <Icon sx={{ fontSize: 19, color: active ? '#fff' : 'rgba(255,255,255,0.5)' }} />
                   </Badge>
-                ) : (
-                  <item.icon />
-                )}
-              </ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
+                </ListItemIcon>
+                <ListItemText
+                  primary={label}
+                  primaryTypographyProps={{
+                    fontSize: '0.83rem',
+                    fontWeight: active ? 600 : 400,
+                    color: active ? '#fff' : 'rgba(255,255,255,0.65)',
+                  }}
+                />
+                {active && <ChevronRight sx={{ fontSize: 15, color: 'rgba(255,255,255,0.6)' }} />}
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
       </List>
+
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', mx: 1.5 }} />
+
+      <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Avatar sx={{ width: 32, height: 32, bgcolor: '#1976d2', fontSize: '0.8rem', flexShrink: 0 }}>
+          {user?.full_name?.[0]?.toUpperCase() || 'A'}
+        </Avatar>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={600} color="#fff" noWrap sx={{ fontSize: '0.8rem' }}>
+            {user?.full_name || 'Admin'}
+          </Typography>
+          <Typography variant="caption" color="rgba(255,255,255,0.4)" sx={{ fontSize: '0.68rem' }}>
+            {user?.role || 'admin'}
+          </Typography>
+        </Box>
+        <Tooltip title="Logout">
+          <IconButton onClick={handleLogout} size="small" sx={{ color: 'rgba(255,255,255,0.4)', '&:hover': { color: '#ef5350' } }}>
+            <LogoutIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
     </Box>
   );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <AppBar
-        position="fixed"
-        sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
-          bgcolor: 'primary.dark',
-        }}
-      >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
-          >
-            <MenuIcon />
-          </IconButton>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f0f2f5' }}>
+      {isMobile && (
+        <AppBar position="fixed" elevation={0} sx={{ bgcolor: '#0d1b2a', borderBottom: '1px solid rgba(255,255,255,0.07)', zIndex: theme.zIndex.drawer + 1 }}>
+          <Toolbar variant="dense">
+            <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(!mobileOpen)} sx={{ mr: 1 }}>
+              <MenuIcon />
+            </IconButton>
+            <ElectricBolt sx={{ mr: 0.5, color: '#64b5f6' }} />
+            <Typography variant="subtitle1" fontWeight={700}>Electricity Admin</Typography>
+            <Box sx={{ flex: 1 }} />
+            <Tooltip title="Logout">
+              <IconButton color="inherit" size="small" onClick={handleLogout}><LogoutIcon /></IconButton>
+            </Tooltip>
+          </Toolbar>
+        </AppBar>
+      )}
 
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Admin Dashboard - {user?.full_name}
-          </Typography>
-
-          <Typography variant="body2" sx={{ mr: 2, display: { xs: 'none', sm: 'block' } }}>
-            {user?.role === 'admin' ? 'Administrator' : 'Staff Member'}
-          </Typography>
-
-          <IconButton onClick={handleMenuOpen} color="inherit">
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-              {user?.full_name?.charAt(0)}
-            </Avatar>
-          </IconButton>
-
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-          >
-            <MenuItem disabled>
-              <Typography variant="body2">{user?.email}</Typography>
-            </MenuItem>
-            <Divider />
-            <MenuItem onClick={() => navigate('/settings')}>
-              <ListItemIcon><SettingsIcon /></ListItemIcon>
-              Settings
-            </MenuItem>
-            <MenuItem onClick={handleLogout}>
-              <ListItemIcon><LogoutIcon /></ListItemIcon>
-              Logout
-            </MenuItem>
-          </Menu>
-        </Toolbar>
-      </AppBar>
-
-      <Box
-        component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-      >
+      {isMobile ? (
         <Drawer
           variant="temporary"
           open={mobileOpen}
-          onClose={handleDrawerToggle}
+          onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
-          sx={{
-            display: { xs: 'block', sm: 'none' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-          }}
+          sx={{ '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', border: 'none' } }}
         >
           {drawer}
         </Drawer>
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-          }}
-          open
-        >
-          {drawer}
-        </Drawer>
-      </Box>
+      ) : (
+        <Box sx={{ width: DRAWER_WIDTH, flexShrink: 0 }}>
+          <Box sx={{ width: DRAWER_WIDTH, height: '100vh', position: 'fixed', top: 0, left: 0, overflow: 'auto' }}>
+            {drawer}
+          </Box>
+        </Box>
+      )}
 
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          mt: 8,
-        }}
-      >
+      <Box component="main" sx={{ flex: 1, minWidth: 0, mt: isMobile ? 6 : 0, p: { xs: 2, md: 3 } }}>
         <Outlet />
       </Box>
     </Box>
   );
-};
-
-export default AdminDashboard;
+}

@@ -53,8 +53,8 @@ export const AuthProvider = ({ children }) => {
       
       // Validate user role based on department
       if (department === 'electricity') {
-        if (userData.role !== 'admin' && userData.role !== 'staff') {
-          toast.error('Access denied. Admin/Staff only.');
+        if (userData.role !== 'admin') {
+          toast.error('Access denied. Admin only.');
           logout();
           return;
         }
@@ -83,8 +83,8 @@ export const AuthProvider = ({ children }) => {
         
         // Validate role for electricity
         const { user: userData } = response.data;
-        if (userData.role !== 'admin' && userData.role !== 'staff') {
-          toast.error('Access denied. Admin/Staff only.');
+        if (userData.role !== 'admin') {
+          toast.error('Access denied. Admin only.');
           throw new Error('Unauthorized access');
         }
       }

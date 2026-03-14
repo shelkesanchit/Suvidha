@@ -33,12 +33,14 @@ const TariffManagement = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTariff, setEditingTariff] = useState(null);
   const [formData, setFormData] = useState({
-    category: '',
-    gas_type: 'PNG',
-    rate_per_unit: '',
-    fixed_charges: '',
-    min_charges: '',
+    state: '',
+    city: '',
+    cylinder_type: '14kg',
+    price_per_cylinder: '',
+    base_price: '',
+    subsidy_amount: '',
     effective_from: '',
+    supplier: '',
   });
 
   useEffect(() => {
@@ -49,7 +51,7 @@ const TariffManagement = () => {
     try {
       setLoading(true);
       const response = await api.get('/gas/admin/tariffs');
-      setTariffs(response.data.tariffs || []);
+      setTariffs(response.data.data || []);
     } catch (error) {
       console.error('Failed to fetch tariffs:', error);
       toast.error('Failed to load tariffs');
@@ -62,22 +64,26 @@ const TariffManagement = () => {
     if (tariff) {
       setEditingTariff(tariff);
       setFormData({
-        category: tariff.category,
-        gas_type: tariff.gas_type,
-        rate_per_unit: tariff.rate_per_unit,
-        fixed_charges: tariff.fixed_charges,
-        min_charges: tariff.min_charges || '',
+        state: tariff.state || '',
+        city: tariff.city || '',
+        cylinder_type: tariff.cylinder_type || '14kg',
+        price_per_cylinder: tariff.price_per_cylinder || '',
+        base_price: tariff.base_price || '',
+        subsidy_amount: tariff.subsidy_amount || '',
         effective_from: tariff.effective_from?.split('T')[0] || '',
+        supplier: tariff.supplier || '',
       });
     } else {
       setEditingTariff(null);
       setFormData({
-        category: '',
-        gas_type: 'PNG',
-        rate_per_unit: '',
-        fixed_charges: '',
-        min_charges: '',
+        state: '',
+        city: '',
+        cylinder_type: '14kg',
+        price_per_cylinder: '',
+        base_price: '',
+        subsidy_amount: '',
         effective_from: '',
+        supplier: '',
       });
     }
     setDialogOpen(true);
@@ -86,7 +92,7 @@ const TariffManagement = () => {
   const handleSave = async () => {
     try {
       if (editingTariff) {
-        await api.put(`/api/gas/admin/tariffs/${editingTariff.id}`, formData);
+        await api.put(`/gas/admin/tariffs/${editingTariff.id}`, formData);
         toast.success('Tariff updated successfully');
       } else {
         await api.post('/gas/admin/tariffs', formData);
@@ -100,46 +106,44 @@ const TariffManagement = () => {
   };
 
   const columns = [
-    { field: 'category', headerName: 'Category', width: 180 },
-    { 
-      field: 'gas_type', 
-      headerName: 'Gas Type', 
-      width: 100,
+    { field: 'state', headerName: 'State', width: 130 },
+    { field: 'city', headerName: 'City', width: 130 },
+    {
+      field: 'cylinder_type',
+      headerName: 'Cylinder Type',
+      width: 130,
       renderCell: (params) => (
-        <Chip 
-          label={params.value} 
-          size="small" 
-          color={params.value === 'PNG' ? 'primary' : 'secondary'} 
-        />
+        <Chip label={params.value} size="small" color="primary" variant="outlined" />
       )
     },
-    { 
-      field: 'rate_per_unit', 
-      headerName: 'Rate/Unit (₹)', 
-      width: 130,
-      valueFormatter: (params) => `₹${params.value}`
-    },
-    { 
-      field: 'fixed_charges', 
-      headerName: 'Fixed Charges (₹)', 
+    {
+      field: 'price_per_cylinder',
+      headerName: 'Price/Cylinder (₹)',
       width: 150,
-      valueFormatter: (params) => `₹${params.value}`
+      valueFormatter: (params) => `₹${params.value || 0}`
     },
-    { 
-      field: 'min_charges', 
-      headerName: 'Min Charges (₹)', 
-      width: 140,
+    {
+      field: 'base_price',
+      headerName: 'Base Price (₹)',
+      width: 130,
+      valueFormatter: (params) => `₹${params.value || 0}`
+    },
+    {
+      field: 'subsidy_amount',
+      headerName: 'Subsidy (₹)',
+      width: 120,
       valueFormatter: (params) => params.value ? `₹${params.value}` : '-'
     },
+    { field: 'supplier', headerName: 'Supplier', width: 130 },
     {
       field: 'is_active',
       headerName: 'Status',
       width: 100,
       renderCell: (params) => (
-        <Chip 
-          label={params.value ? 'Active' : 'Inactive'} 
-          size="small" 
-          color={params.value ? 'success' : 'default'} 
+        <Chip
+          label={params.value ? 'Active' : 'Inactive'}
+          size="small"
+          color={params.value ? 'success' : 'default'}
         />
       ),
     },
@@ -185,29 +189,29 @@ const TariffManagement = () => {
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 2, bgcolor: 'primary.light', color: 'white' }}>
-            <Typography variant="h6">PNG Tariffs</Typography>
+            <Typography variant="h6">Total Tariff Rates</Typography>
             <Typography variant="h4" fontWeight={700}>
-              {tariffs.filter(t => t.gas_type === 'PNG').length}
+              {tariffs.length}
             </Typography>
-            <Typography variant="body2">Active categories</Typography>
+            <Typography variant="body2">All cylinder types</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 2, bgcolor: 'secondary.main', color: 'white' }}>
-            <Typography variant="h6">LPG Tariffs</Typography>
+            <Typography variant="h6">Active Rates</Typography>
             <Typography variant="h4" fontWeight={700}>
-              {tariffs.filter(t => t.gas_type === 'LPG').length}
+              {tariffs.filter(t => t.is_active !== false).length}
             </Typography>
-            <Typography variant="body2">Active categories</Typography>
+            <Typography variant="body2">Currently in effect</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 2, bgcolor: 'success.main', color: 'white' }}>
-            <Typography variant="h6">Avg Rate</Typography>
+            <Typography variant="h6">Avg Price</Typography>
             <Typography variant="h4" fontWeight={700}>
-              ₹{tariffs.length > 0 ? (tariffs.reduce((a, t) => a + parseFloat(t.rate_per_unit || 0), 0) / tariffs.length).toFixed(2) : 0}
+              ₹{tariffs.length > 0 ? (tariffs.reduce((a, t) => a + parseFloat(t.price_per_cylinder || 0), 0) / tariffs.length).toFixed(0) : 0}
             </Typography>
-            <Typography variant="body2">Per SCM/Kg</Typography>
+            <Typography variant="body2">Per cylinder</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -233,50 +237,70 @@ const TariffManagement = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="Category"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                placeholder="e.g., Domestic, Commercial"
+                label="State"
+                value={formData.state}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                placeholder="e.g., Maharashtra"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="City"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                placeholder="e.g., Mumbai"
               />
             </Grid>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth>
-                <InputLabel>Gas Type</InputLabel>
+                <InputLabel>Cylinder Type</InputLabel>
                 <Select
-                  value={formData.gas_type}
-                  label="Gas Type"
-                  onChange={(e) => setFormData({ ...formData, gas_type: e.target.value })}
+                  value={formData.cylinder_type}
+                  label="Cylinder Type"
+                  onChange={(e) => setFormData({ ...formData, cylinder_type: e.target.value })}
                 >
-                  <MenuItem value="PNG">PNG</MenuItem>
-                  <MenuItem value="LPG">LPG</MenuItem>
+                  <MenuItem value="5kg">5 kg</MenuItem>
+                  <MenuItem value="14kg">14 kg</MenuItem>
+                  <MenuItem value="19kg">19 kg</MenuItem>
+                  <MenuItem value="47kg">47 kg</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="Rate per Unit (₹)"
+                label="Price per Cylinder (₹)"
                 type="number"
-                value={formData.rate_per_unit}
-                onChange={(e) => setFormData({ ...formData, rate_per_unit: e.target.value })}
+                value={formData.price_per_cylinder}
+                onChange={(e) => setFormData({ ...formData, price_per_cylinder: e.target.value })}
               />
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="Fixed Charges (₹)"
+                label="Base Price (₹)"
                 type="number"
-                value={formData.fixed_charges}
-                onChange={(e) => setFormData({ ...formData, fixed_charges: e.target.value })}
+                value={formData.base_price}
+                onChange={(e) => setFormData({ ...formData, base_price: e.target.value })}
               />
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="Minimum Charges (₹)"
+                label="Subsidy Amount (₹)"
                 type="number"
-                value={formData.min_charges}
-                onChange={(e) => setFormData({ ...formData, min_charges: e.target.value })}
+                value={formData.subsidy_amount}
+                onChange={(e) => setFormData({ ...formData, subsidy_amount: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Supplier"
+                value={formData.supplier}
+                onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                placeholder="e.g., HPCL"
               />
             </Grid>
             <Grid item xs={12} md={6}>

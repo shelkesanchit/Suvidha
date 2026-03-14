@@ -15,14 +15,13 @@ import {
   Visibility,
   VisibilityOff,
   WaterDrop,
-  Person,
+  Email,
   Lock,
 } from '@mui/icons-material';
 import { useAuth } from "../../contexts/AuthContext";
-import toast from 'react-hot-toast';
 
 const LoginPage = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,21 +31,21 @@ const LoginPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
-    if (!username || !password) {
-      setError('Please enter both username and password');
+
+    if (!email || !password) {
+      setError('Please enter both email and password');
       return;
     }
 
     setLoading(true);
-    const result = await login(username, password);
-    setLoading(false);
-
-    if (result.success) {
-      toast.success('Login successful!');
-    } else {
-      setError(result.error);
-      toast.error(result.error);
+    try {
+      await login({ email, password }, 'water');
+      // AuthContext handles toast + redirect on success
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || 'Login failed';
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -135,15 +134,16 @@ const LoginPage = () => {
           <form onSubmit={handleSubmit}>
             <TextField
               fullWidth
-              label="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               margin="normal"
               variant="outlined"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Person color="primary" />
+                    <Email color="primary" />
                   </InputAdornment>
                 ),
               }}
@@ -216,7 +216,7 @@ const LoginPage = () => {
           <Box sx={{ mt: 3, p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
             <Typography variant="caption" color="text.secondary" display="block" textAlign="center">
               <strong>Demo Credentials:</strong><br />
-              Username: water_admin | Password: admin123
+              Email: water.admin@municipal.gov | Password: WaterAdmin@123
             </Typography>
           </Box>
         </CardContent>

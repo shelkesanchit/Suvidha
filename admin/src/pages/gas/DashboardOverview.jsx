@@ -312,15 +312,15 @@ const DashboardOverview = () => {
                     recentApplications.slice(0, 5).map((app, index) => (
                       <TableRow key={index}>
                         <TableCell>{app.application_number}</TableCell>
-                        <TableCell>{app.applicant_name}</TableCell>
+                        <TableCell>{app.full_name}</TableCell>
                         <TableCell>{app.connection_type}</TableCell>
                         <TableCell>
                           <Chip
-                            label={app.status}
+                            label={app.application_status?.replace(/_/g, ' ')}
                             size="small"
                             color={
-                              app.status === 'approved' ? 'success' :
-                              app.status === 'pending' ? 'warning' : 'default'
+                              app.application_status === 'approved' ? 'success' :
+                              app.application_status === 'pending' ? 'warning' : 'default'
                             }
                           />
                         </TableCell>
@@ -358,13 +358,13 @@ const DashboardOverview = () => {
                     recentComplaints.slice(0, 5).map((complaint, index) => (
                       <TableRow key={index}>
                         <TableCell>{complaint.complaint_number}</TableCell>
-                        <TableCell>{complaint.category}</TableCell>
+                        <TableCell>{complaint.complaint_type?.replace(/-/g, ' ')}</TableCell>
                         <TableCell>
                           <Chip
                             label={complaint.priority}
                             size="small"
                             color={
-                              complaint.priority === 'emergency' ? 'error' :
+                              complaint.priority === 'urgent' ? 'error' :
                               complaint.priority === 'high' ? 'warning' : 'default'
                             }
                           />

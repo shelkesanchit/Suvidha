@@ -65,7 +65,7 @@ const CylinderBookings = () => {
   const handleStatusUpdate = async (bookingId, newStatus) => {
     try {
       setProcessing(true);
-      await api.put(`/api/gas/admin/cylinder-bookings/${bookingId}/status`, {
+      await api.put(`/gas/admin/cylinder-bookings/${bookingId}/status`, {
         status: newStatus,
       });
       toast.success(`Booking ${newStatus} successfully`);
@@ -80,11 +80,11 @@ const CylinderBookings = () => {
 
   const columns = [
     { field: 'booking_number', headerName: 'Booking No.', width: 150 },
-    { field: 'consumer_name', headerName: 'Consumer', width: 150 },
+    { field: 'full_name', headerName: 'Consumer', width: 150 },
     { field: 'cylinder_type', headerName: 'Cylinder Type', width: 130 },
     { field: 'quantity', headerName: 'Qty', width: 70 },
     {
-      field: 'delivery_preference',
+      field: 'delivery_type',
       headerName: 'Delivery',
       width: 110,
       renderCell: (params) => (
@@ -97,30 +97,30 @@ const CylinderBookings = () => {
       ),
     },
     {
-      field: 'status',
+      field: 'booking_status',
       headerName: 'Status',
       width: 120,
       renderCell: (params) => (
         <Chip
-          label={params.value}
+          label={params.value?.replace(/_/g, ' ')}
           size="small"
           color={
             params.value === 'delivered' ? 'success' :
-            params.value === 'out_for_delivery' ? 'info' :
+            params.value === 'dispatched' ? 'info' :
             params.value === 'confirmed' ? 'primary' :
-            params.value === 'pending' ? 'warning' : 'default'
+            params.value === 'placed' ? 'warning' : 'default'
           }
         />
       ),
     },
-    { 
-      field: 'total_amount', 
-      headerName: 'Amount', 
+    {
+      field: 'total_amount',
+      headerName: 'Amount',
       width: 100,
       valueFormatter: (params) => `₹${params.value || 0}`
     },
     {
-      field: 'created_at',
+      field: 'booking_date',
       headerName: 'Booked On',
       width: 110,
       valueFormatter: (params) => {
@@ -142,10 +142,10 @@ const CylinderBookings = () => {
               <Visibility />
             </IconButton>
           </Tooltip>
-          {params.row.status === 'confirmed' && (
-            <Tooltip title="Out for Delivery">
+          {params.row.booking_status === 'confirmed' && (
+            <Tooltip title="Dispatch">
               <IconButton
-                onClick={() => handleStatusUpdate(params.row.id, 'out_for_delivery')}
+                onClick={() => handleStatusUpdate(params.row.id, 'dispatched')}
                 size="small"
                 color="info"
               >
@@ -153,7 +153,7 @@ const CylinderBookings = () => {
               </IconButton>
             </Tooltip>
           )}
-          {params.row.status === 'out_for_delivery' && (
+          {params.row.booking_status === 'dispatched' && (
             <Tooltip title="Mark Delivered">
               <IconButton
                 onClick={() => handleStatusUpdate(params.row.id, 'delivered')}
@@ -170,7 +170,7 @@ const CylinderBookings = () => {
   ];
 
   const filteredBookings = bookings.filter(b =>
-    b.consumer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    b.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     b.booking_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     b.mobile?.includes(searchTerm)
   );
@@ -205,9 +205,9 @@ const CylinderBookings = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <MenuItem value="all">All Status</MenuItem>
-                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="placed">Placed</MenuItem>
                 <MenuItem value="confirmed">Confirmed</MenuItem>
-                <MenuItem value="out_for_delivery">Out for Delivery</MenuItem>
+                <MenuItem value="dispatched">Dispatched</MenuItem>
                 <MenuItem value="delivered">Delivered</MenuItem>
                 <MenuItem value="cancelled">Cancelled</MenuItem>
               </Select>
@@ -255,14 +255,14 @@ const CylinderBookings = () => {
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Status</Typography>
-                <Chip 
-                  label={selectedBooking.status} 
-                  color={selectedBooking.status === 'delivered' ? 'success' : 'warning'} 
+                <Chip
+                  label={selectedBooking.booking_status?.replace(/_/g, ' ')}
+                  color={selectedBooking.booking_status === 'delivered' ? 'success' : 'warning'}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Consumer</Typography>
-                <Typography variant="body1" gutterBottom>{selectedBooking.consumer_name}</Typography>
+                <Typography variant="body1" gutterBottom>{selectedBooking.full_name}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Consumer Number</Typography>
@@ -277,8 +277,8 @@ const CylinderBookings = () => {
                 <Typography variant="body1" gutterBottom>{selectedBooking.quantity}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Delivery Preference</Typography>
-                <Typography variant="body1" gutterBottom>{selectedBooking.delivery_preference}</Typography>
+                <Typography variant="subtitle2" color="text.secondary">Delivery Type</Typography>
+                <Typography variant="body1" gutterBottom>{selectedBooking.delivery_type}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Total Amount</Typography>
@@ -293,7 +293,7 @@ const CylinderBookings = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailsOpen(false)}>Close</Button>
-          {selectedBooking?.status === 'pending' && (
+          {selectedBooking?.booking_status === 'placed' && (
             <Button
               onClick={() => handleStatusUpdate(selectedBooking.id, 'confirmed')}
               color="primary"
@@ -303,17 +303,17 @@ const CylinderBookings = () => {
               Confirm Booking
             </Button>
           )}
-          {selectedBooking?.status === 'confirmed' && (
+          {selectedBooking?.booking_status === 'confirmed' && (
             <Button
-              onClick={() => handleStatusUpdate(selectedBooking.id, 'out_for_delivery')}
+              onClick={() => handleStatusUpdate(selectedBooking.id, 'dispatched')}
               color="info"
               variant="contained"
               disabled={processing}
             >
-              Out for Delivery
+              Dispatch
             </Button>
           )}
-          {selectedBooking?.status === 'out_for_delivery' && (
+          {selectedBooking?.booking_status === 'dispatched' && (
             <Button
               onClick={() => handleStatusUpdate(selectedBooking.id, 'delivered')}
               color="success"

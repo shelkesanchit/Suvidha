@@ -86,7 +86,7 @@ const ManageApplications = () => {
   const fetchDocuments = async (applicationNumber) => {
     try {
       setLoadingDocs(true);
-      const response = await api.get(`/api/gas/applications/documents/${applicationNumber}`);
+      const response = await api.get(`/gas/applications/documents/${applicationNumber}`);
       setDocuments(response.data.data || []);
     } catch (error) {
       console.error('Failed to fetch documents:', error);
@@ -114,7 +114,6 @@ const ManageApplications = () => {
     if (mimeType?.includes('image')) return <Image color="primary" />;
     return <Description />;
   };
-
   const getDocumentTypeLabel = (type) => {
     const labels = {
       'aadhaar': 'Aadhaar Card',
@@ -151,7 +150,7 @@ const ManageApplications = () => {
   const handleStatusUpdate = async (appId, newStatus, remarks = '') => {
     try {
       setProcessing(true);
-      await api.put(`/api/gas/admin/applications/${appId}/status`, {
+      await api.put(`/gas/admin/applications/${appId}/status`, {
         status: newStatus,
         remarks,
       });
@@ -167,8 +166,8 @@ const ManageApplications = () => {
 
   const columns = [
     { field: 'application_number', headerName: 'App No.', width: 150 },
-    { field: 'full_name', headerName: 'Applicant', width: 180 },
-    { field: 'mobile', headerName: 'Mobile', width: 130 },
+    { field: 'applicant_name', headerName: 'Applicant', width: 180 },
+    { field: 'applicant_phone', headerName: 'Mobile', width: 130 },
     { field: 'application_type', headerName: 'Type', width: 120 },
     { field: 'gas_type', headerName: 'Gas Type', width: 100 },
     {
@@ -188,7 +187,7 @@ const ManageApplications = () => {
       ),
     },
     {
-      field: 'submitted_at',
+      field: 'submission_date',
       headerName: 'Applied On',
       width: 120,
       valueFormatter: (params) => {
@@ -238,9 +237,9 @@ const ManageApplications = () => {
   ];
 
   const filteredApplications = applications.filter(app =>
-    app.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    app.applicant_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     app.application_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    app.mobile?.includes(searchTerm)
+    app.applicant_phone?.includes(searchTerm)
   );
 
   return (
@@ -341,7 +340,7 @@ const ManageApplications = () => {
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="subtitle2" color="text.secondary">Mobile</Typography>
-                    <Typography variant="body1" gutterBottom>{selectedApp.mobile}</Typography>
+                    <Typography variant="body1" gutterBottom>{selectedApp.applicant_phone}</Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="subtitle2" color="text.secondary">Email</Typography>
@@ -410,7 +409,7 @@ const ManageApplications = () => {
                             }}
                           >
                             <ListItemIcon>
-                              {getDocumentIcon(doc.mimeType)}
+                              {getDocumentIcon(doc.type)}
                             </ListItemIcon>
                             <ListItemText
                               primary={
@@ -424,7 +423,7 @@ const ManageApplications = () => {
                               secondary={
                                 <Box sx={{ mt: 0.5 }}>
                                   <Typography variant="caption" color="text.secondary" display="block">
-                                    {doc.originalName}
+                                    {doc.name}
                                   </Typography>
                                   <Typography variant="caption" color="text.secondary">
                                     {formatFileSize(doc.size)} • Uploaded: {doc.uploadedAt ? format(new Date(doc.uploadedAt), 'dd/MM/yyyy HH:mm') : 'N/A'}
@@ -446,8 +445,8 @@ const ManageApplications = () => {
                                 <IconButton
                                   edge="end"
                                   component="a"
-                                  href={`http://localhost:5000${doc.path}`}
-                                  download={doc.originalName}
+                                  href={doc.url}
+                                  download={doc.name}
                                   target="_blank"
                                 >
                                   <Download />
@@ -515,15 +514,15 @@ const ManageApplications = () => {
                         {documents.filter(d => d.documentType?.includes('aadhaar')).map((doc) => (
                           <Card key={doc.id} sx={{ display: 'inline-block', mr: 2 }}>
                             <CardContent sx={{ p: 1 }}>
-                              {doc.mimeType?.includes('image') ? (
-                                <img 
-                                  src={`http://localhost:5000${doc.path}`} 
-                                  alt="Aadhaar" 
+                              {doc.type?.includes('image') ? (
+                                <img
+                                  src={doc.url}
+                                  alt="Aadhaar"
                                   style={{ maxWidth: 300, maxHeight: 200, objectFit: 'contain', cursor: 'pointer' }}
                                   onClick={() => handlePreviewDocument(doc)}
                                 />
                               ) : (
-                                <Button 
+                                <Button
                                   startIcon={<PictureAsPdf />}
                                   onClick={() => handlePreviewDocument(doc)}
                                 >
@@ -579,16 +578,16 @@ const ManageApplications = () => {
         <DialogContent>
           {previewDoc && (
             <Box sx={{ textAlign: 'center', py: 2 }}>
-              {previewDoc.mimeType?.includes('image') ? (
-                <img 
-                  src={`http://localhost:5000${previewDoc.path}`} 
-                  alt={previewDoc.originalName}
+              {previewDoc.type?.includes('image') ? (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.name}
                   style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
                 />
-              ) : previewDoc.mimeType?.includes('pdf') ? (
+              ) : previewDoc.type?.includes('pdf') ? (
                 <iframe
-                  src={`http://localhost:5000${previewDoc.path}`}
-                  title={previewDoc.originalName}
+                  src={previewDoc.url}
+                  title={previewDoc.name}
                   width="100%"
                   height="600px"
                   style={{ border: 'none' }}
@@ -606,8 +605,8 @@ const ManageApplications = () => {
           {previewDoc && (
             <Button
               component="a"
-              href={`http://localhost:5000${previewDoc.path}`}
-              download={previewDoc.originalName}
+              href={previewDoc.url}
+              download={previewDoc.name}
               target="_blank"
               startIcon={<Download />}
               variant="contained"

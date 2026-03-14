@@ -1,323 +1,254 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TablePagination, Chip, TextField, MenuItem,
-  Select, FormControl, InputLabel, InputAdornment, IconButton, Tooltip,
-  Dialog, DialogTitle, DialogContent, DialogActions, Button, Grid,
-  Skeleton, Alert
+  Box, Typography, Card, CardContent, Table, TableHead, TableRow, TableCell,
+  TableBody, TablePagination, Chip, IconButton, Button, TextField, InputAdornment,
+  Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel,
+  Select, MenuItem, Tooltip, CircularProgress, Grid, Avatar, Divider,
 } from '@mui/material';
 import {
-  Search as SearchIcon, Refresh as RefreshIcon, Visibility as ViewIcon,
-  Person as PersonIcon, LocationOn as LocationIcon, ElectricBolt as MeterIcon
+  Search, Refresh, Visibility, People, Home, Business, Agriculture,
+  Factory, ElectricBolt,
 } from '@mui/icons-material';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import api from '../../utils/electricity/api';
 
-const STATUS_COLORS = {
-  active: 'success',
-  disconnected: 'error',
-  suspended: 'warning',
+const STATUS_CONFIG = {
+  active:       { label: 'Active',       color: 'success' },
+  disconnected: { label: 'Disconnected', color: 'error' },
+  suspended:    { label: 'Suspended',    color: 'warning' },
 };
 
-const CATEGORY_LABELS = {
-  domestic: 'Domestic',
-  commercial: 'Commercial',
-  industrial: 'Industrial',
-  agricultural: 'Agricultural',
+const CATEGORY_ICONS = {
+  domestic:      Home,
+  commercial:    Business,
+  industrial:    Factory,
+  agricultural:  Agriculture,
 };
-
-function DetailRow({ label, value }) {
-  return (
-    <Box sx={{ mb: 1.5 }}>
-      <Typography variant="caption" color="text.secondary" display="block">
-        {label}
-      </Typography>
-      <Typography variant="body2" fontWeight={500}>
-        {value || '—'}
-      </Typography>
-    </Box>
-  );
-}
 
 export default function ConsumerAccounts() {
   const [consumers, setConsumers] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
-  const [total, setTotal] = useState(0);
-  const [selected, setSelected] = useState(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailDialog, setDetailDialog] = useState(null);
 
-  const fetchConsumers = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const fetchConsumers = async () => {
     try {
-      const params = { page: page + 1, limit: rowsPerPage };
-      if (statusFilter) params.status = statusFilter;
-      if (categoryFilter) params.category = categoryFilter;
-      const res = await api.get('/admin/consumers', { params });
+      setLoading(true);
+      const params = new URLSearchParams({ page: page + 1, limit: rowsPerPage });
+      if (statusFilter) params.append('status', statusFilter);
+      if (categoryFilter) params.append('category', categoryFilter);
+      const res = await api.get(`/admin/consumers?${params}`);
       const rows = Array.isArray(res.data) ? res.data : (res.data.data || []);
       setConsumers(rows);
       setTotal(res.data.total || rows.length);
-    } catch (err) {
-      setError('Failed to load consumers.');
+    } catch {
       toast.error('Failed to load consumers');
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, statusFilter, categoryFilter]);
+  };
 
-  useEffect(() => {
-    fetchConsumers();
-  }, [fetchConsumers]);
+  useEffect(() => { fetchConsumers(); }, [page, rowsPerPage, statusFilter, categoryFilter]);
 
-  const filtered = search.trim()
-    ? consumers.filter((c) => {
+  const filtered = search
+    ? consumers.filter(c => {
         const q = search.toLowerCase();
         return (
-          (c.consumer_number || '').toLowerCase().includes(q) ||
-          (c.full_name || '').toLowerCase().includes(q) ||
-          (c.email || '').toLowerCase().includes(q) ||
-          (c.phone || '').toLowerCase().includes(q) ||
-          (c.meter_number || '').toLowerCase().includes(q)
+          c.consumer_number?.toLowerCase().includes(q) ||
+          c.full_name?.toLowerCase().includes(q) ||
+          c.email?.toLowerCase().includes(q) ||
+          c.phone?.toLowerCase().includes(q) ||
+          c.meter_number?.toLowerCase().includes(q)
         );
       })
     : consumers;
 
-  const handleView = (consumer) => {
-    setSelected(consumer);
-    setDetailOpen(true);
-  };
-
-  const handleChangePage = (_, newPage) => setPage(newPage);
-  const handleChangeRowsPerPage = (e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); };
-
-  const summaryStats = [
-    { label: 'Total', value: total, color: '#1976d2' },
-    { label: 'Active', value: consumers.filter(c => c.connection_status === 'active').length, color: '#2e7d32' },
-    { label: 'Disconnected', value: consumers.filter(c => c.connection_status === 'disconnected').length, color: '#c62828' },
-    { label: 'Suspended', value: consumers.filter(c => c.connection_status === 'suspended').length, color: '#e65100' },
-  ];
-
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>Consumer Accounts</Typography>
-        <Tooltip title="Refresh">
-          <IconButton onClick={fetchConsumers} disabled={loading}><RefreshIcon /></IconButton>
-        </Tooltip>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant="h4" fontWeight={700} color="#0d1b2a" sx={{ mb: 0.5 }}>Consumers</Typography>
+          <Typography variant="body2" color="text.secondary">{total} registered consumers</Typography>
+        </Box>
+        <Button variant="outlined" startIcon={<Refresh />} onClick={fetchConsumers} disabled={loading}>Refresh</Button>
       </Box>
 
-      {/* Summary Stats */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {summaryStats.map((s) => (
-          <Grid item xs={6} sm={3} key={s.label}>
-            <Paper sx={{ p: 2, textAlign: 'center', borderTop: `3px solid ${s.color}` }}>
-              <Typography variant="h5" fontWeight={700} sx={{ color: s.color }}>
-                {loading ? <Skeleton width={40} sx={{ mx: 'auto' }} /> : s.value}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">{s.label}</Typography>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Filters */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={5}>
+      <Card>
+        <CardContent sx={{ pb: 0 }}>
+          {/* Filters */}
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <TextField
-              fullWidth
-              size="small"
-              placeholder="Search by name, consumer #, email, phone, meter #"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>
-                ),
-              }}
+              size="small" placeholder="Search name, consumer no., email, meter no..."
+              value={search} onChange={e => setSearch(e.target.value)}
+              sx={{ flex: '1 1 260px', maxWidth: 360 }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: 18 }} /></InputAdornment> }}
             />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <FormControl fullWidth size="small">
+            <FormControl size="small" sx={{ minWidth: 130 }}>
               <InputLabel>Status</InputLabel>
-              <Select value={statusFilter} label="Status" onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}>
-                <MenuItem value="">All Statuses</MenuItem>
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="disconnected">Disconnected</MenuItem>
-                <MenuItem value="suspended">Suspended</MenuItem>
+              <Select label="Status" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0); }}>
+                <MenuItem value="">All Status</MenuItem>
+                {Object.entries(STATUS_CONFIG).map(([k, v]) => <MenuItem key={k} value={k}>{v.label}</MenuItem>)}
               </Select>
             </FormControl>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <FormControl fullWidth size="small">
+            <FormControl size="small" sx={{ minWidth: 140 }}>
               <InputLabel>Category</InputLabel>
-              <Select value={categoryFilter} label="Category" onChange={(e) => { setCategoryFilter(e.target.value); setPage(0); }}>
+              <Select label="Category" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(0); }}>
                 <MenuItem value="">All Categories</MenuItem>
-                <MenuItem value="domestic">Domestic</MenuItem>
-                <MenuItem value="commercial">Commercial</MenuItem>
-                <MenuItem value="industrial">Industrial</MenuItem>
-                <MenuItem value="agricultural">Agricultural</MenuItem>
+                {Object.keys(CATEGORY_ICONS).map(k => (
+                  <MenuItem key={k} value={k} sx={{ textTransform: 'capitalize' }}>{k}</MenuItem>
+                ))}
               </Select>
             </FormControl>
-          </Grid>
-        </Grid>
-      </Paper>
+          </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
+          ) : filtered.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <People sx={{ fontSize: 56, color: '#e0e0e0', mb: 1 }} />
+              <Typography color="text.secondary">No consumers found</Typography>
+            </Box>
+          ) : (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f8f9fa' }}>
+                    <TableCell sx={{ fontWeight: 600 }}>Consumer</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Consumer No.</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Meter No.</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Location</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="center">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filtered.map((c) => {
+                    const sc = STATUS_CONFIG[c.connection_status || c.status] || { label: c.connection_status || c.status || 'Unknown', color: 'default' };
+                    const CatIcon = CATEGORY_ICONS[c.category] || ElectricBolt;
+                    return (
+                      <TableRow key={c.id} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Avatar sx={{ width: 30, height: 30, bgcolor: '#1976d222', fontSize: '0.75rem', color: '#1976d2' }}>
+                              {c.full_name?.[0]?.toUpperCase()}
+                            </Avatar>
+                            <Box>
+                              <Typography variant="body2" fontWeight={500}>{c.full_name}</Typography>
+                              <Typography variant="caption" color="text.secondary">{c.email}</Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                            {c.consumer_number || '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                            {c.meter_number || '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <CatIcon sx={{ fontSize: 15, color: '#666' }} />
+                            <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{c.category}</Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{c.city}</Typography>
+                          <Typography variant="caption" color="text.secondary">{c.state}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={sc.label} color={sc.color} size="small" sx={{ fontSize: '0.7rem', height: 22 }} />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Tooltip title="View Details">
+                            <IconButton size="small" onClick={() => setDetailDialog(c)}>
+                              <Visibility sx={{ fontSize: 17 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
+        </CardContent>
 
-      {/* Table */}
-      <Paper>
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'grey.50' } }}>
-                <TableCell>Consumer #</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Email / Phone</TableCell>
-                <TableCell>Category</TableCell>
-                <TableCell>Meter #</TableCell>
-                <TableCell>Location</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading
-                ? Array.from({ length: 8 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
-                        <TableCell key={j}><Skeleton /></TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                : filtered.length === 0
-                ? (
-                    <TableRow>
-                      <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                        No consumers found
-                      </TableCell>
-                    </TableRow>
-                  )
-                : filtered.map((c) => (
-                    <TableRow key={c.id} hover>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={600} fontFamily="monospace">
-                          {c.consumer_number || '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{c.full_name || '—'}</TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{c.email || '—'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{c.phone || ''}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={CATEGORY_LABELS[c.category] || c.category || '—'}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" fontFamily="monospace">
-                          {c.meter_number || '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{c.city || '—'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{c.state || ''}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={c.connection_status || 'unknown'}
-                          size="small"
-                          color={STATUS_COLORS[c.connection_status] || 'default'}
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Tooltip title="View Details">
-                          <IconButton size="small" onClick={() => handleView(c)}>
-                            <ViewIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
         <TablePagination
-          rowsPerPageOptions={[10, 25, 50, 100]}
           component="div"
-          count={total}
-          rowsPerPage={rowsPerPage}
+          count={search ? filtered.length : total}
           page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
+          onPageChange={(_, p) => setPage(p)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={e => { setRowsPerPage(+e.target.value); setPage(0); }}
+          rowsPerPageOptions={[10, 15, 25, 50]}
         />
-      </Paper>
+      </Card>
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PersonIcon color="primary" />
-          Consumer Details
-        </DialogTitle>
+      <Dialog open={!!detailDialog} onClose={() => setDetailDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Consumer Details</DialogTitle>
         <DialogContent dividers>
-          {selected && (
+          {detailDialog && (
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <Typography variant="subtitle2" color="primary" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <PersonIcon fontSize="small" /> Personal Information
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                  <Avatar sx={{ width: 52, height: 52, bgcolor: '#1976d2', fontSize: '1.2rem' }}>
+                    {detailDialog.full_name?.[0]?.toUpperCase()}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6" fontWeight={700}>{detailDialog.full_name}</Typography>
+                    <Chip
+                      label={(STATUS_CONFIG[detailDialog.connection_status || detailDialog.status] || { label: detailDialog.connection_status || 'Unknown', color: 'default' }).label}
+                      color={(STATUS_CONFIG[detailDialog.connection_status || detailDialog.status] || { color: 'default' }).color}
+                      size="small"
+                    />
+                  </Box>
+                </Box>
               </Grid>
-              <Grid item xs={6}><DetailRow label="Full Name" value={selected.full_name} /></Grid>
-              <Grid item xs={6}><DetailRow label="Email" value={selected.email} /></Grid>
-              <Grid item xs={6}><DetailRow label="Phone" value={selected.phone} /></Grid>
-              <Grid item xs={6}><DetailRow label="Consumer Number" value={selected.consumer_number} /></Grid>
 
               <Grid item xs={12}>
-                <Typography variant="subtitle2" color="primary" sx={{ mt: 1, mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <MeterIcon fontSize="small" /> Connection Details
-                </Typography>
+                <Divider><Typography variant="caption" color="text.secondary">Personal Info</Typography></Divider>
               </Grid>
-              <Grid item xs={6}><DetailRow label="Meter Number" value={selected.meter_number} /></Grid>
-              <Grid item xs={6}><DetailRow label="Category" value={CATEGORY_LABELS[selected.category] || selected.category} /></Grid>
-              <Grid item xs={6}><DetailRow label="Tariff Type" value={selected.tariff_type} /></Grid>
-              <Grid item xs={6}><DetailRow label="Sanctioned Load" value={selected.sanctioned_load ? `${selected.sanctioned_load} kW` : null} /></Grid>
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary" display="block">Status</Typography>
-                <Chip
-                  label={selected.connection_status || 'unknown'}
-                  size="small"
-                  color={STATUS_COLORS[selected.connection_status] || 'default'}
-                  sx={{ mt: 0.5 }}
-                />
-              </Grid>
-              <Grid item xs={6}><DetailRow label="Member Since" value={selected.created_at ? new Date(selected.created_at).toLocaleDateString() : null} /></Grid>
+              {[['Email', detailDialog.email], ['Phone', detailDialog.phone], ['Member Since', detailDialog.created_at && new Date(detailDialog.created_at).toLocaleDateString('en-IN')]].map(([k, v]) => v && (
+                <Grid item xs={6} key={k}>
+                  <Typography variant="caption" color="text.secondary">{k}</Typography>
+                  <Typography variant="body2" fontWeight={500}>{v}</Typography>
+                </Grid>
+              ))}
 
               <Grid item xs={12}>
-                <Typography variant="subtitle2" color="primary" sx={{ mt: 1, mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <LocationIcon fontSize="small" /> Address
+                <Divider><Typography variant="caption" color="text.secondary">Connection Details</Typography></Divider>
+              </Grid>
+              {[['Consumer No.', detailDialog.consumer_number], ['Meter No.', detailDialog.meter_number], ['Category', detailDialog.category], ['Tariff Type', detailDialog.tariff_type], ['Sanctioned Load', detailDialog.sanctioned_load && `${detailDialog.sanctioned_load} kW`]].map(([k, v]) => v && (
+                <Grid item xs={6} key={k}>
+                  <Typography variant="caption" color="text.secondary">{k}</Typography>
+                  <Typography variant="body2" fontWeight={500} sx={{ textTransform: 'capitalize' }}>{v}</Typography>
+                </Grid>
+              ))}
+
+              <Grid item xs={12}>
+                <Divider><Typography variant="caption" color="text.secondary">Address</Typography></Divider>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="body2">
+                  {[detailDialog.address_line1, detailDialog.address_line2, detailDialog.city, detailDialog.state, detailDialog.pincode].filter(Boolean).join(', ')}
                 </Typography>
               </Grid>
-              <Grid item xs={12}><DetailRow label="Address Line 1" value={selected.address_line1} /></Grid>
-              {selected.address_line2 && (
-                <Grid item xs={12}><DetailRow label="Address Line 2" value={selected.address_line2} /></Grid>
-              )}
-              <Grid item xs={4}><DetailRow label="City" value={selected.city} /></Grid>
-              <Grid item xs={4}><DetailRow label="State" value={selected.state} /></Grid>
-              <Grid item xs={4}><DetailRow label="Pincode" value={selected.pincode} /></Grid>
             </Grid>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDetailOpen(false)}>Close</Button>
+          <Button onClick={() => setDetailDialog(null)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

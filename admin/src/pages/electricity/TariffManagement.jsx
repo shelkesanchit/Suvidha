@@ -1,302 +1,213 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Grid,
-  InputAdornment,
-  Chip,
-  CircularProgress,
-  Alert,
-  Divider,
-  IconButton,
-  Tooltip,
+  Box, Typography, Card, CardContent, Table, TableHead, TableRow, TableCell,
+  TableBody, Chip, IconButton, Button, TextField,
+  Dialog, DialogTitle, DialogContent, DialogActions, Tooltip, CircularProgress,
+  Alert, Grid, Divider, InputAdornment,
 } from '@mui/material';
-import {
-  Edit as EditIcon,
-  Refresh as RefreshIcon,
-  ElectricBolt as TariffIcon,
-  Save as SaveIcon,
-} from '@mui/icons-material';
-import api from '../../utils/electricity/api';
+import { Edit, Save, Bolt, Refresh, Warning } from '@mui/icons-material';
+import electricityApi from '../../utils/electricity/api';
 import toast from 'react-hot-toast';
 
-// Human-readable labels for tariff keys
-const tariffLabels = {
-  tariff_residential_upto_100: 'Residential — 0 to 100 units',
-  tariff_residential_101_300: 'Residential — 101 to 300 units',
-  tariff_residential_above_300: 'Residential — Above 300 units',
-  tariff_commercial: 'Commercial (LT-II)',
-  tariff_industrial: 'Industrial (HT)',
-  tariff_agricultural: 'Agricultural',
-  tariff_lt_i: 'LT-I Residential',
-  tariff_lt_ii: 'LT-II Commercial',
-  tariff_lt_iii: 'LT-III Industrial (Small)',
-  tariff_ht_i: 'HT-I Industrial',
-  tariff_ht_ii: 'HT-II Bulk',
-  fixed_charge_residential: 'Fixed Charge — Residential',
-  fixed_charge_commercial: 'Fixed Charge — Commercial',
-  fixed_charge_industrial: 'Fixed Charge — Industrial',
-  fixed_charge_agricultural: 'Fixed Charge — Agricultural',
-  fixed_charge_lt_i: 'Fixed Charge — LT-I',
-  fixed_charge_lt_ii: 'Fixed Charge — LT-II',
-  tax_rate: 'Tax Rate (%)',
-  late_payment_surcharge: 'Late Payment Surcharge (%)',
+const TARIFF_LABELS = {
+  tariff_residential_upto_100:      { label: 'Residential — 0 to 100 units',    category: 'Residential', unit: '₹/kWh' },
+  tariff_residential_101_300:       { label: 'Residential — 101 to 300 units',   category: 'Residential', unit: '₹/kWh' },
+  tariff_residential_above_300:     { label: 'Residential — Above 300 units',    category: 'Residential', unit: '₹/kWh' },
+  tariff_commercial:                { label: 'Commercial (All units)',            category: 'Commercial',  unit: '₹/kWh' },
+  tariff_industrial:                { label: 'Industrial (All units)',            category: 'Industrial',  unit: '₹/kWh' },
+  tariff_agricultural:              { label: 'Agricultural (All units)',          category: 'Agricultural', unit: '₹/kWh' },
+  fixed_charge_residential:         { label: 'Residential Fixed Charge',         category: 'Fixed Charges', unit: '₹/month' },
+  fixed_charge_commercial:          { label: 'Commercial Fixed Charge',          category: 'Fixed Charges', unit: '₹/month' },
+  fixed_charge_industrial:          { label: 'Industrial Fixed Charge',          category: 'Fixed Charges', unit: '₹/month' },
+  tax_rate:                         { label: 'Electricity Tax Rate',             category: 'Taxes',       unit: '%' },
+  late_payment_surcharge:           { label: 'Late Payment Surcharge',           category: 'Taxes',       unit: '%' },
 };
 
-const TariffManagement = () => {
+const CATEGORY_COLORS = {
+  Residential:    { color: '#1976d2', bg: '#e3f2fd' },
+  Commercial:     { color: '#2e7d32', bg: '#e8f5e9' },
+  Industrial:     { color: '#f57c00', bg: '#fff3e0' },
+  Agricultural:   { color: '#0097a7', bg: '#e0f7fa' },
+  'Fixed Charges':{ color: '#7b1fa2', bg: '#f3e5f5' },
+  Taxes:          { color: '#d32f2f', bg: '#ffebee' },
+};
+
+export default function TariffManagement() {
   const [tariffs, setTariffs] = useState({});
   const [loading, setLoading] = useState(true);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedKey, setSelectedKey] = useState('');
+  const [editDialog, setEditDialog] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetchTariffs();
-  }, []);
 
   const fetchTariffs = async () => {
     try {
       setLoading(true);
-      // GET /settings/tariffs/all returns {tariff_key: rate, ...}
-      const response = await api.get('/settings/tariffs/all');
-      setTariffs(response.data || {});
-    } catch (error) {
-      // Fallback: get all settings and filter tariff/fixed/tax keys
+      let raw = {};
       try {
-        const response = await api.get('/settings');
-        const all = response.data || {};
-        const filtered = {};
+        const res = await electricityApi.get('/settings/tariffs/all');
+        raw = res.data || {};
+      } catch {
+        // fallback to all settings
+        const res = await electricityApi.get('/settings');
+        const all = res.data || {};
         Object.entries(all).forEach(([k, v]) => {
-          if (k.startsWith('tariff_') || k.startsWith('fixed_charge') || k === 'tax_rate' || k === 'late_payment_surcharge') {
-            filtered[k] = typeof v === 'object' ? v.value : v;
+          if (k.startsWith('tariff_') || k.startsWith('fixed_charge') || k.startsWith('tax_') || k.startsWith('late_')) {
+            raw[k] = typeof v === 'object' ? v.value : v;
           }
         });
-        setTariffs(filtered);
-      } catch (e2) {
-        toast.error('Failed to load tariff settings');
       }
+      setTariffs(raw);
+    } catch {
+      toast.error('Failed to load tariffs');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => { fetchTariffs(); }, []);
+
   const handleEdit = (key) => {
-    setSelectedKey(key);
+    setEditDialog(key);
     setEditValue(String(tariffs[key] || ''));
-    setEditDialogOpen(true);
   };
 
   const handleSave = async () => {
-    const numVal = parseFloat(editValue);
-    if (isNaN(numVal) || numVal < 0) {
-      toast.error('Please enter a valid positive number');
-      return;
-    }
+    const val = parseFloat(editValue);
+    if (isNaN(val) || val < 0) { toast.error('Value must be a valid positive number'); return; }
     try {
       setSaving(true);
-      await api.put(`/settings/${selectedKey}`, { value: String(numVal) });
-      toast.success('Tariff updated successfully');
-      setTariffs((prev) => ({ ...prev, [selectedKey]: numVal }));
-      setEditDialogOpen(false);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to update tariff');
+      await electricityApi.put(`/settings/${editDialog}`, { value: val });
+      toast.success('Tariff rate updated successfully');
+      setTariffs(prev => ({ ...prev, [editDialog]: val }));
+      setEditDialog(null);
+    } catch {
+      toast.error('Failed to update tariff rate');
     } finally {
       setSaving(false);
     }
   };
 
-  const tariffEntries = Object.entries(tariffs).filter(([k]) => k.startsWith('tariff_'));
-  const fixedEntries = Object.entries(tariffs).filter(([k]) => k.startsWith('fixed_charge'));
-  const otherEntries = Object.entries(tariffs).filter(([k]) => !k.startsWith('tariff_') && !k.startsWith('fixed_charge'));
+  // Build grouped structure
+  const grouped = {};
+  Object.entries(tariffs).forEach(([key, value]) => {
+    const meta = TARIFF_LABELS[key];
+    const category = meta?.category || 'Other';
+    if (!grouped[category]) grouped[category] = [];
+    grouped[category].push({ key, value, label: meta?.label || key, unit: meta?.unit || '₹/kWh' });
+  });
 
-  const renderTable = (entries, unit = 'Rs./kWh') => (
-    <Table size="small">
-      <TableHead>
-        <TableRow sx={{ bgcolor: 'grey.50' }}>
-          <TableCell><strong>Category / Slab</strong></TableCell>
-          <TableCell><strong>Rate ({unit})</strong></TableCell>
-          <TableCell><strong>Setting Key</strong></TableCell>
-          <TableCell align="center"><strong>Action</strong></TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {entries.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-              <Typography color="text.secondary" variant="body2">No entries</Typography>
-            </TableCell>
-          </TableRow>
-        ) : (
-          entries.map(([key, val]) => (
-            <TableRow key={key} hover>
-              <TableCell>
-                <Typography variant="body2" fontWeight={600}>
-                  {tariffLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                </Typography>
-              </TableCell>
-              <TableCell>
-                <Chip
-                  label={`${unit === '%' ? '' : '\u20b9'}${Number(val).toFixed(2)}${unit === '%' ? '%' : ''}`}
-                  color="primary"
-                  variant="outlined"
-                  size="small"
-                  sx={{ fontWeight: 700, fontSize: '0.85rem' }}
-                />
-              </TableCell>
-              <TableCell>
-                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                  {key}
-                </Typography>
-              </TableCell>
-              <TableCell align="center">
-                <Tooltip title="Edit Rate">
-                  <IconButton size="small" color="primary" onClick={() => handleEdit(key)}>
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </TableCell>
-            </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
-  );
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const editMeta = editDialog ? TARIFF_LABELS[editDialog] : null;
 
   return (
     <Box>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h4" fontWeight={600} gutterBottom>
-            Tariff Management
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage electricity tariff rates, fixed charges, and applicable taxes
-          </Typography>
+          <Typography variant="h4" fontWeight={700} color="#0d1b2a" sx={{ mb: 0.5 }}>Tariff Rates</Typography>
+          <Typography variant="body2" color="text.secondary">Energy charges, fixed charges, and applicable taxes</Typography>
         </Box>
-        <Tooltip title="Refresh Tariffs">
-          <IconButton onClick={fetchTariffs} sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}>
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+        <Button variant="outlined" startIcon={<Refresh />} onClick={fetchTariffs} disabled={loading}>Refresh</Button>
       </Box>
 
-      <Alert severity="warning" sx={{ mb: 3 }}>
-        Tariff changes affect all new bills immediately. Existing unpaid bills will not be recalculated.
+      <Alert severity="warning" icon={<Warning />} sx={{ mb: 3 }}>
+        <strong>Important:</strong> Changes to tariff rates affect all new bill calculations. Existing bills are not retroactively updated.
       </Alert>
 
-      <Grid container spacing={3}>
-        {/* Energy Charges */}
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <TariffIcon color="primary" />
-                <Typography variant="h6" fontWeight={600}>Energy Charges (Rs./kWh)</Typography>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-              {renderTable(tariffEntries, 'Rs./kWh')}
-            </CardContent>
-          </Card>
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+      ) : Object.keys(grouped).length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}>
+          <Bolt sx={{ fontSize: 56, color: '#e0e0e0', mb: 1 }} />
+          <Typography color="text.secondary">No tariff rates found in database</Typography>
+          <Typography variant="caption" color="text.secondary">Check that electricity_system_settings table has tariff entries</Typography>
+        </Box>
+      ) : (
+        <Grid container spacing={2.5}>
+          {Object.entries(grouped).map(([category, items]) => {
+            const cc = CATEGORY_COLORS[category] || { color: '#616161', bg: '#f5f5f5' };
+            return (
+              <Grid item xs={12} md={6} key={category}>
+                <Card>
+                  <Box sx={{ px: 2.5, py: 1.5, bgcolor: cc.bg, display: 'flex', alignItems: 'center', gap: 1, borderBottom: `2px solid ${cc.color}33` }}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: cc.color }} />
+                    <Typography fontWeight={700} sx={{ color: cc.color }}>{category}</Typography>
+                    <Chip label={`${items.length} rates`} size="small" sx={{ height: 18, fontSize: '0.68rem', bgcolor: `${cc.color}22`, color: cc.color, ml: 'auto' }} />
+                  </Box>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#fafafa' }}>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.78rem' }}>Rate Name</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.78rem' }} align="right">Rate</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.78rem' }} align="center">Edit</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {items.map(({ key, value, label, unit }) => (
+                        <TableRow key={key} hover>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>{label}</Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>{key}</Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                              <Typography variant="body1" fontWeight={700} sx={{ color: cc.color }}>
+                                {unit.startsWith('₹') ? '₹' : ''}{Number(value || 0).toFixed(2)}{unit === '%' ? '%' : ''}
+                              </Typography>
+                              {unit !== '%' && <Typography variant="caption" color="text.secondary">/kWh</Typography>}
+                            </Box>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Tooltip title="Edit rate">
+                              <IconButton size="small" onClick={() => handleEdit(key)} color="primary">
+                                <Edit sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </Grid>
+            );
+          })}
         </Grid>
-
-        {/* Fixed Charges */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <TariffIcon color="warning" />
-                <Typography variant="h6" fontWeight={600}>Fixed Charges (Rs./month)</Typography>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-              {renderTable(fixedEntries, 'Rs./mo')}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Other (Tax, Surcharge) */}
-        {otherEntries.length > 0 && (
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <TariffIcon color="error" />
-                  <Typography variant="h6" fontWeight={600}>Taxes & Surcharges</Typography>
-                </Box>
-                <Divider sx={{ mb: 2 }} />
-                {renderTable(otherEntries, '%')}
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-      </Grid>
+      )}
 
       {/* Edit Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <EditIcon />
-          Edit Tariff Rate
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
-          <Box sx={{ p: 2, mb: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-            <Typography variant="caption" color="text.secondary">Setting Key</Typography>
-            <Typography variant="body1" fontWeight={600} sx={{ fontFamily: 'monospace' }}>{selectedKey}</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {tariffLabels[selectedKey] || ''}
-            </Typography>
-          </Box>
-          <TextField
-            fullWidth
-            label="New Rate *"
-            type="number"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            inputProps={{ min: 0, step: 0.01 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  {selectedKey === 'tax_rate' || selectedKey === 'late_payment_surcharge' ? '%' : '\u20b9'}
-                </InputAdornment>
-              ),
-            }}
-          />
+      <Dialog open={!!editDialog} onClose={() => setEditDialog(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Update Tariff Rate</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {editDialog && (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {editMeta?.label || editDialog}
+              </Typography>
+              <TextField
+                fullWidth label="Rate" type="number" value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                inputProps={{ min: 0, step: 0.01 }}
+                InputProps={{
+                  startAdornment: editMeta?.unit?.startsWith('₹')
+                    ? <InputAdornment position="start">₹</InputAdornment>
+                    : undefined,
+                  endAdornment: editMeta?.unit === '%'
+                    ? <InputAdornment position="end">%</InputAdornment>
+                    : editMeta?.unit?.includes('month')
+                    ? <InputAdornment position="end">/month</InputAdornment>
+                    : <InputAdornment position="end">/kWh</InputAdornment>,
+                }}
+                helperText="Enter a positive numeric value"
+              />
+            </>
+          )}
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={() => setEditDialogOpen(false)} disabled={saving}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            disabled={saving || !editValue}
-            startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-          >
-            {saving ? 'Saving...' : 'Save'}
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setEditDialog(null)}>Cancel</Button>
+          <Button variant="contained" startIcon={saving ? null : <Save />} onClick={handleSave} disabled={saving}>
+            {saving ? <CircularProgress size={18} color="inherit" /> : 'Update Rate'}
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
-};
-
-export default TariffManagement;
+}

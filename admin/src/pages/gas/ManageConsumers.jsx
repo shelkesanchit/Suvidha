@@ -58,8 +58,7 @@ const ManageConsumers = () => {
   const columns = [
     { field: 'consumer_number', headerName: 'Consumer No.', width: 150 },
     { field: 'full_name', headerName: 'Name', width: 180 },
-    { field: 'mobile', headerName: 'Mobile', width: 130 },
-    { field: 'gas_type', headerName: 'Gas Type', width: 100 },
+    { field: 'phone', headerName: 'Phone', width: 130 },
     { field: 'connection_type', headerName: 'Connection', width: 120 },
     {
       field: 'connection_status',
@@ -98,7 +97,7 @@ const ManageConsumers = () => {
   const filteredConsumers = consumers.filter(c =>
     c.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.consumer_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.mobile?.includes(searchTerm)
+    c.phone?.includes(searchTerm)
   );
 
   return (
@@ -169,19 +168,15 @@ const ManageConsumers = () => {
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Status</Typography>
-                <Chip label={selectedConsumer.status} color={selectedConsumer.status === 'active' ? 'success' : 'default'} />
+                <Chip label={selectedConsumer.connection_status} color={selectedConsumer.connection_status === 'active' ? 'success' : 'default'} />
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Name</Typography>
-                <Typography variant="body1" gutterBottom>{selectedConsumer.name}</Typography>
+                <Typography variant="body1" gutterBottom>{selectedConsumer.full_name}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Mobile</Typography>
-                <Typography variant="body1" gutterBottom>{selectedConsumer.mobile}</Typography>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">Gas Type</Typography>
-                <Typography variant="body1" gutterBottom>{selectedConsumer.gas_type}</Typography>
+                <Typography variant="subtitle2" color="text.secondary">Phone</Typography>
+                <Typography variant="body1" gutterBottom>{selectedConsumer.phone}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Connection Type</Typography>

@@ -49,8 +49,8 @@ const LoginPage = ({ department = 'electricity' }) => {
       icon: <Water sx={{ fontSize: 40 }} />,
       color: '#0288d1',
       gradient: 'linear-gradient(135deg, #0288d1 0%, #03a9f4 100%)',
-      fields: { username: 'Username', password: 'Password' },
-      usernameType: 'text',
+      fields: { username: 'Email Address', password: 'Password' },
+      usernameType: 'email',
     },
   };
 
@@ -61,9 +61,9 @@ const LoginPage = ({ department = 'electricity' }) => {
     
     try {
       setIsSubmitting(true);
-      const credentials = department === 'electricity' 
-        ? { email: data.username, password: data.password }
-        : { username: data.username, password: data.password };
+      const credentials = department === 'gas'
+        ? { username: data.username, password: data.password }
+        : { email: data.username, password: data.password };
       
       await login(credentials, department);
       // Navigation will be handled by useEffect after state updates
@@ -177,7 +177,7 @@ const LoginPage = ({ department = 'electricity' }) => {
               <Typography variant="caption" color="text.secondary" display="block">
                 {department === 'electricity' && 'admin@electricity.gov.in / Admin@123'}
                 {department === 'gas' && 'gas_admin / GasAdmin@123'}
-                {department === 'water' && 'water_admin / WaterAdmin@123'}
+                {department === 'water' && 'water.admin@municipal.gov / WaterAdmin@123'}
               </Typography>
             </Box>
           </Box>

@@ -1,473 +1,400 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  LinearProgress,
-  CircularProgress,
-  Paper,
-  Chip,
-  IconButton,
-  Tooltip,
+  Box, Grid, Card, CardContent, Typography, CircularProgress,
+  IconButton, Tooltip, Chip, Table, TableHead, TableRow,
+  TableCell, TableBody, Button,
 } from '@mui/material';
 import {
   People as PeopleIcon,
-  Description as ApplicationIcon,
+  Assignment as AppIcon,
   Report as ComplaintIcon,
-  Payment as PaymentIcon,
-  TrendingUp as TrendingIcon,
-  CheckCircle as SuccessIcon,
+  ElectricBolt as BoltIcon,
+  AttachMoney as RevenueIcon,
   Refresh as RefreshIcon,
-  ShowChart as ChartIcon,
-  Speed as SpeedIcon,
+  ArrowForward as ArrowIcon,
+  CheckCircle as CheckIcon,
+  HourglassEmpty as PendingIcon,
+  Warning as WarnIcon,
+  OpenInNew as OpenIcon,
 } from '@mui/icons-material';
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as ChartTooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+const STATUS_COLOR = {
+  submitted:             'info',
+  document_verification: 'warning',
+  site_inspection:       'warning',
+  approval_pending:      'warning',
+  approved:              'success',
+  work_in_progress:      'info',
+  rejected:              'error',
+  completed:             'success',
+  open:                  'error',
+  assigned:              'warning',
+  in_progress:           'info',
+  resolved:              'success',
+  closed:                'default',
+};
 
-const AdminOverview = () => {
+const PRIORITY_COLOR = {
+  low: 'success', medium: 'warning', high: 'error', critical: 'error',
+};
+
+const StatCard = ({ title, value, icon: Icon, color, bgColor, subtitle, onClick }) => (
+  <Card
+    onClick={onClick}
+    sx={{
+      height: '100%',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'box-shadow 0.2s, transform 0.2s',
+      '&:hover': onClick ? { boxShadow: 4, transform: 'translateY(-2px)' } : {},
+    }}
+  >
+    <CardContent sx={{ p: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.5 }}>
+        <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: bgColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon sx={{ color, fontSize: 24 }} />
+        </Box>
+        {subtitle && (
+          <Chip label={subtitle} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: bgColor, color }} />
+        )}
+      </Box>
+      <Typography variant="h4" fontWeight={700} sx={{ color, mb: 0.5 }}>{value}</Typography>
+      <Typography variant="body2" color="text.secondary">{title}</Typography>
+    </CardContent>
+  </Card>
+);
+
+export default function AdminOverview() {
   const [stats, setStats] = useState(null);
+  const [recentApps, setRecentApps] = useState([]);
+  const [recentComplaints, setRecentComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchStats();
-    // Auto-refresh every 30 seconds for real-time monitoring
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchStats = async (showToast = false) => {
+  const fetchAll = async (showToast = false) => {
     try {
       setRefreshing(true);
-      const response = await api.get('/admin/dashboard/stats');
-      // Handle the new response format {success: true, data: {...}}
-      const statsData = response.data.data || response.data;
-      setStats(statsData);
-      if (showToast) {
-        toast.success('Dashboard refreshed');
-      }
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-      toast.error('Failed to fetch statistics');
+      const [statsRes, appsRes, complaintsRes] = await Promise.all([
+        api.get('/admin/dashboard/stats'),
+        api.get('/admin/applications?status=submitted'),
+        api.get('/admin/complaints?status=open'),
+      ]);
+      setStats(statsRes.data.data || statsRes.data);
+      const apps = Array.isArray(appsRes.data) ? appsRes.data : (appsRes.data.data || []);
+      const complaints = Array.isArray(complaintsRes.data) ? complaintsRes.data : (complaintsRes.data.data || []);
+      setRecentApps(apps.slice(0, 8));
+      setRecentComplaints(complaints.slice(0, 8));
+      if (showToast) toast.success('Dashboard refreshed');
+    } catch {
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleRefresh = () => {
-    fetchStats(true);
-  };
+  useEffect(() => {
+    fetchAll();
+    const id = setInterval(() => fetchAll(), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 400, gap: 2 }}>
-        <CircularProgress size={50} />
-        <Typography variant="h6" color="text.secondary">Loading dashboard...</Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 2 }}>
+        <CircularProgress size={48} />
+        <Typography color="text.secondary">Loading dashboard...</Typography>
       </Box>
     );
   }
 
-  // Mock data for charts - in production, this would come from API
-  const applicationsTrend = [
-    { month: 'Jan', applications: 45, approved: 38, rejected: 7 },
-    { month: 'Feb', applications: 52, approved: 44, rejected: 8 },
-    { month: 'Mar', applications: 61, approved: 53, rejected: 8 },
-    { month: 'Apr', applications: 58, approved: 50, rejected: 8 },
-    { month: 'May', applications: 70, approved: 62, rejected: 8 },
-    { month: 'Jun', applications: 85, approved: 75, rejected: 10 },
-  ];
+  const s = stats || {};
+  const monthRevenue = Number(s.month_revenue || 0);
+  const todayRevenue = Number(s.today_revenue || 0);
 
-  const revenueTrend = [
-    { month: 'Jan', revenue: 125000 },
-    { month: 'Feb', revenue: 142000 },
-    { month: 'Mar', revenue: 168000 },
-    { month: 'Apr', revenue: 155000 },
-    { month: 'May', revenue: 195000 },
-    { month: 'Jun', revenue: 225000 },
-  ];
-
-  const applicationsByType = [
-    { name: 'New Connection', value: stats?.pending_applications || 0 },
-    { name: 'Load Change', value: 12 },
-    { name: 'Name Change', value: 8 },
-    { name: 'Reconnection', value: 15 },
-    { name: 'Solar Rooftop', value: 5 },
-  ];
-
-  const complaintsByStatus = [
-    { name: 'Open', value: stats?.open_complaints || 0 },
-    { name: 'In Progress', value: 8 },
-    { name: 'Resolved', value: 45 },
-    { name: 'Closed', value: 32 },
-  ];
-
-  const statCards = [
-    {
-      title: 'Total Customers',
-      value: stats?.total_customers || 0,
-      icon: PeopleIcon,
-      color: '#1976d2',
-      bgColor: '#e3f2fd',
-      trend: '+12%',
-      trendUp: true,
-    },
-    {
-      title: 'Active Connections',
-      value: stats?.active_connections || 0,
-      icon: SuccessIcon,
-      color: '#2e7d32',
-      bgColor: '#e8f5e9',
-      trend: '+8%',
-      trendUp: true,
-    },
-    {
-      title: 'Pending Applications',
-      value: stats?.pending_applications || 0,
-      icon: ApplicationIcon,
-      color: '#ed6c02',
-      bgColor: '#fff3e0',
-      trend: '+5',
-      trendUp: false,
-      needsAction: true,
-    },
-    {
-      title: 'Open Complaints',
-      value: stats?.open_complaints || 0,
-      icon: ComplaintIcon,
-      color: '#d32f2f',
-      bgColor: '#ffebee',
-      trend: '-3',
-      trendUp: true,
-      needsAction: true,
-    },
-    {
-      title: "Today's Revenue",
-      value: `₹${stats?.today_revenue?.toLocaleString() || 0}`,
-      icon: PaymentIcon,
-      color: '#0288d1',
-      bgColor: '#e1f5fe',
-      trend: '+15%',
-      trendUp: true,
-    },
-    {
-      title: 'Monthly Revenue',
-      value: `₹${stats?.month_revenue?.toLocaleString() || 0}`,
-      icon: TrendingIcon,
-      color: '#388e3c',
-      bgColor: '#f1f8e9',
-      trend: '+24%',
-      trendUp: true,
-    },
+  const quickActions = [
+    { label: 'Pending Applications', count: s.pending_applications || 0, color: '#f57c00', bg: '#fff3e0', path: '/electricity/applications', icon: PendingIcon },
+    { label: 'Open Complaints',       count: s.open_complaints || 0,      color: '#d32f2f', bg: '#ffebee', path: '/electricity/complaints',   icon: WarnIcon },
+    { label: 'Submit Meter Readings', count: null,                         color: '#1976d2', bg: '#e3f2fd', path: '/electricity/meter-readings', icon: BoltIcon },
+    { label: 'View All Consumers',    count: s.total_customers || 0,      color: '#2e7d32', bg: '#e8f5e9', path: '/electricity/consumers',    icon: PeopleIcon },
   ];
 
   return (
     <Box>
-      {/* Header with Refresh Button */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom fontWeight={600}>
-            Dashboard Overview
-          </Typography>
+          <Typography variant="h4" fontWeight={700} color="#0d1b2a" sx={{ mb: 0.5 }}>Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
-            Real-time system statistics and performance metrics
+            Live electricity department overview — auto-refreshes every 60 seconds
           </Typography>
         </Box>
-        <Tooltip title="Refresh Dashboard">
-          <IconButton 
-            onClick={handleRefresh} 
+        <Tooltip title="Refresh now">
+          <IconButton
+            onClick={() => fetchAll(true)}
             disabled={refreshing}
-            sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
+            sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' }, '&:disabled': { bgcolor: '#bbdefb' } }}
           >
-            <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            <RefreshIcon
+              sx={{
+                animation: refreshing ? 'spin 1s linear infinite' : 'none',
+                '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+              }}
+            />
           </IconButton>
         </Tooltip>
       </Box>
 
-      {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {statCards.map((card, index) => (
-          <Grid item xs={12} sm={6} md={4} lg={2} key={index}>
-            <Card
-              elevation={0}
-              sx={{
-                height: '100%',
-                borderLeft: `4px solid ${card.color}`,
-                bgcolor: card.bgColor,
-                transition: 'all 0.3s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                },
-              }}
-            >
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
-                  <Box
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 2,
-                      bgcolor: 'white',
-                      boxShadow: 1,
-                    }}
-                  >
-                    <card.icon sx={{ fontSize: 28, color: card.color }} />
-                  </Box>
-                  {card.needsAction && (
-                    <Chip 
-                      label="Action Required" 
-                      size="small" 
-                      color="error" 
-                      sx={{ height: 24, fontSize: '0.7rem' }}
-                    />
-                  )}
+      {/* Stat Cards */}
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={4} md={2}>
+          <StatCard title="Total Consumers"        value={(s.total_customers || 0).toLocaleString()}        icon={PeopleIcon}    color="#1976d2" bgColor="#e3f2fd" onClick={() => navigate('/electricity/consumers')} />
+        </Grid>
+        <Grid item xs={6} sm={4} md={2}>
+          <StatCard title="Active Connections"      value={(s.active_connections || 0).toLocaleString()}     icon={BoltIcon}      color="#2e7d32" bgColor="#e8f5e9" />
+        </Grid>
+        <Grid item xs={6} sm={4} md={2}>
+          <StatCard title="Pending Applications"    value={(s.pending_applications || 0).toLocaleString()}   icon={AppIcon}       color="#f57c00" bgColor="#fff3e0" subtitle="Action needed" onClick={() => navigate('/electricity/applications')} />
+        </Grid>
+        <Grid item xs={6} sm={4} md={2}>
+          <StatCard title="Approved Applications"   value={(s.approved_applications || 0).toLocaleString()}  icon={CheckIcon}     color="#2e7d32" bgColor="#e8f5e9" />
+        </Grid>
+        <Grid item xs={6} sm={4} md={2}>
+          <StatCard title="Open Complaints"         value={(s.open_complaints || 0).toLocaleString()}        icon={ComplaintIcon} color="#d32f2f" bgColor="#ffebee" subtitle="Action needed" onClick={() => navigate('/electricity/complaints')} />
+        </Grid>
+        <Grid item xs={6} sm={4} md={2}>
+          <StatCard title="Monthly Revenue"         value={`₹${monthRevenue.toLocaleString()}`}             icon={RevenueIcon}   color="#7b1fa2" bgColor="#f3e5f5" />
+        </Grid>
+      </Grid>
+
+      {/* Recent Work */}
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
+        {/* Pending Applications */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ pb: 0 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                <Typography variant="h6" fontWeight={600}>Pending Applications</Typography>
+                <Button
+                  size="small" endIcon={<OpenIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => navigate('/electricity/applications')}
+                  sx={{ fontSize: '0.75rem' }}
+                >
+                  View All
+                </Button>
+              </Box>
+              {recentApps.length === 0 ? (
+                <Box sx={{ py: 4, textAlign: 'center' }}>
+                  <CheckIcon sx={{ fontSize: 40, color: '#c8e6c9', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary">No pending applications</Typography>
                 </Box>
-                <Typography variant="h4" fontWeight={700} sx={{ mb: 0.5, color: card.color }}>
-                  {card.value}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  {card.title}
-                </Typography>
-                {card.trend && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <ChartIcon 
-                      sx={{ 
-                        fontSize: 16, 
-                        color: card.trendUp ? 'success.main' : 'error.main',
-                        transform: card.trendUp ? 'rotate(0deg)' : 'rotate(180deg)'
-                      }} 
-                    />
-                    <Typography 
-                      variant="caption" 
-                      sx={{ 
-                        color: card.trendUp ? 'success.main' : 'error.main',
-                        fontWeight: 600 
+              ) : (
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#f8f9fa' }}>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>App No.</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Applicant</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Type</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Date</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }} align="center">Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {recentApps.map((app) => (
+                        <TableRow
+                          key={app.id}
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => navigate('/electricity/applications')}
+                        >
+                          <TableCell>
+                            <Typography variant="caption" fontWeight={600} color="primary.main" sx={{ fontFamily: 'monospace' }}>
+                              {app.application_number?.slice(-8) || '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" fontWeight={500}>{app.full_name}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" sx={{ textTransform: 'capitalize' }}>
+                              {app.application_type?.replace(/_/g, ' ')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(app.created_at).toLocaleDateString('en-IN')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Chip
+                              label={app.status?.replace(/_/g, ' ')}
+                              color={STATUS_COLOR[app.status] || 'default'}
+                              size="small"
+                              sx={{ fontSize: '0.65rem', height: 20, textTransform: 'capitalize' }}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Open Complaints */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ pb: 0 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                <Typography variant="h6" fontWeight={600}>Open Complaints</Typography>
+                <Button
+                  size="small" endIcon={<OpenIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => navigate('/electricity/complaints')}
+                  sx={{ fontSize: '0.75rem' }}
+                >
+                  View All
+                </Button>
+              </Box>
+              {recentComplaints.length === 0 ? (
+                <Box sx={{ py: 4, textAlign: 'center' }}>
+                  <CheckIcon sx={{ fontSize: 40, color: '#c8e6c9', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary">No open complaints</Typography>
+                </Box>
+              ) : (
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#f8f9fa' }}>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Complaint No.</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Consumer</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Type</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Priority</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Date</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {recentComplaints.map((c) => (
+                        <TableRow
+                          key={c.id}
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => navigate('/electricity/complaints')}
+                        >
+                          <TableCell>
+                            <Typography variant="caption" fontWeight={600} color="primary.main" sx={{ fontFamily: 'monospace' }}>
+                              {c.complaint_number?.slice(-8) || '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" fontWeight={500}>{c.full_name}</Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {c.consumer_number}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" sx={{ textTransform: 'capitalize' }}>
+                              {c.complaint_type?.replace(/_/g, ' ')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={c.priority || '—'}
+                              color={PRIORITY_COLOR[c.priority] || 'default'}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.65rem', height: 20 }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(c.created_at).toLocaleDateString('en-IN')}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Revenue Summary + Quick Actions */}
+      <Grid container spacing={2.5}>
+        {/* Revenue */}
+        <Grid item xs={12} md={4}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} gutterBottom>Revenue Summary</Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Box sx={{ p: 2, bgcolor: '#f3e5f5', borderRadius: 2 }}>
+                  <Typography variant="caption" color="text.secondary">Today's Collections</Typography>
+                  <Typography variant="h5" fontWeight={700} color="#7b1fa2">
+                    ₹{todayRevenue.toLocaleString()}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 2, bgcolor: '#e8f5e9', borderRadius: 2 }}>
+                  <Typography variant="caption" color="text.secondary">This Month's Collections</Typography>
+                  <Typography variant="h5" fontWeight={700} color="#2e7d32">
+                    ₹{monthRevenue.toLocaleString()}
+                  </Typography>
+                </Box>
+                <Button
+                  variant="outlined" size="small" fullWidth
+                  onClick={() => navigate('/electricity/reports')}
+                  endIcon={<ArrowIcon />}
+                >
+                  View Full Reports
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Quick Actions */}
+        <Grid item xs={12} md={8}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} gutterBottom>Quick Actions</Typography>
+              <Grid container spacing={1.5}>
+                {quickActions.map((qa) => (
+                  <Grid item xs={12} sm={6} key={qa.label}>
+                    <Box
+                      onClick={() => navigate(qa.path)}
+                      sx={{
+                        p: 2, borderRadius: 2, bgcolor: qa.bg, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 1.5,
+                        border: `1px solid ${qa.color}22`,
+                        transition: 'all 0.15s',
+                        '&:hover': { boxShadow: 2, transform: 'translateY(-1px)' },
                       }}
                     >
-                      {card.trend} from last month
-                    </Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Charts Section */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Applications Trend Chart */}
-        <Grid item xs={12} lg={8}>
-          <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-              <Box>
-                <Typography variant="h6" fontWeight={600}>Applications Trend</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Monthly application submissions and processing
-                </Typography>
-              </Box>
-              <SpeedIcon sx={{ color: 'primary.main' }} />
-            </Box>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={applicationsTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <ChartTooltip />
-                <Legend />
-                <Bar dataKey="applications" fill="#1976d2" name="Total Applications" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="approved" fill="#2e7d32" name="Approved" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="rejected" fill="#d32f2f" name="Rejected" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        {/* Applications by Type */}
-        <Grid item xs={12} lg={4}>
-          <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', height: '100%' }}>
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
-              Applications by Type
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={applicationsByType}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {applicationsByType.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <ChartTooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        {/* Revenue Trend Chart */}
-        <Grid item xs={12} lg={8}>
-          <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-              <Box>
-                <Typography variant="h6" fontWeight={600}>Revenue Trend</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Monthly revenue collection analysis
-                </Typography>
-              </Box>
-              <TrendingIcon sx={{ color: 'success.main' }} />
-            </Box>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={revenueTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <ChartTooltip formatter={(value) => `₹${value.toLocaleString()}`} />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="#388e3c" 
-                  strokeWidth={3}
-                  name="Revenue (₹)"
-                  dot={{ fill: '#388e3c', r: 6 }}
-                  activeDot={{ r: 8 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        {/* Complaints by Status */}
-        <Grid item xs={12} lg={4}>
-          <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', height: '100%' }}>
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
-              Complaints Status
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={complaintsByStatus}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {complaintsByStatus.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <ChartTooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </Paper>
+                      <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: `${qa.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <qa.icon sx={{ color: qa.color, fontSize: 20 }} />
+                      </Box>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body2" fontWeight={600} color={qa.color}>{qa.label}</Typography>
+                        {qa.count !== null && (
+                          <Typography variant="caption" color="text.secondary">{qa.count} records</Typography>
+                        )}
+                      </Box>
+                      <ArrowIcon sx={{ color: qa.color, fontSize: 16 }} />
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
-
-      {/* Performance Metrics */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-              System Performance
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2">Application Processing Rate</Typography>
-                <Typography variant="body2" fontWeight={600}>87%</Typography>
-              </Box>
-              <LinearProgress variant="determinate" value={87} sx={{ height: 8, borderRadius: 4 }} />
-            </Box>
-            <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2">Complaint Resolution Rate</Typography>
-                <Typography variant="body2" fontWeight={600}>92%</Typography>
-              </Box>
-              <LinearProgress variant="determinate" value={92} color="success" sx={{ height: 8, borderRadius: 4 }} />
-            </Box>
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2">Customer Satisfaction</Typography>
-                <Typography variant="body2" fontWeight={600}>94%</Typography>
-              </Box>
-              <LinearProgress variant="determinate" value={94} color="success" sx={{ height: 8, borderRadius: 4 }} />
-            </Box>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-              Quick Actions
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'warning.lighter', borderRadius: 2 }}>
-                <Box>
-                  <Typography variant="body2" fontWeight={600}>Pending Approvals</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {stats?.pending_applications || 0} applications waiting
-                  </Typography>
-                </Box>
-                <Chip label="Review" color="warning" size="small" />
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'error.lighter', borderRadius: 2 }}>
-                <Box>
-                  <Typography variant="body2" fontWeight={600}>Open Complaints</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {stats?.open_complaints || 0} complaints need attention
-                  </Typography>
-                </Box>
-                <Chip label="Resolve" color="error" size="small" />
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'info.lighter', borderRadius: 2 }}>
-                <Box>
-                  <Typography variant="body2" fontWeight={600}>System Health</Typography>
-                  <Typography variant="caption" color="text.secondary">All systems operational</Typography>
-                </Box>
-                <Chip label="Healthy" color="success" size="small" />
-              </Box>
-            </Box>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* CSS for spin animation */}
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </Box>
   );
-};
-
-export default AdminOverview;
+}

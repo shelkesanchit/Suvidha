@@ -9,9 +9,6 @@ import {
   Paper,
   Chip,
   Divider,
-  Stepper,
-  Step,
-  StepLabel,
   Alert,
   DialogContent,
   DialogActions,
@@ -23,32 +20,34 @@ import {
 } from '@mui/material';
 import {
   CheckCircle,
-  RadioButtonUnchecked,
-  AccessTime,
   Search,
   ContentCopy,
   ExpandMore,
   ExpandLess,
   Warning,
   Info,
+  FiberManualRecord,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
+// All water application prefixes
+const WATER_APP_PREFIXES = ['WNC', 'WRC', 'WDC', 'WTR', 'WPS', 'WMC', 'WTS', 'WCM', 'WAPP'];
+
 const statusColors = {
-  submitted: '#2196f3',
-  open: '#ff9800',
-  document_verification: '#9c27b0',
-  site_inspection: '#00bcd4',
-  approval_pending: '#ff9800',
-  assigned: '#2196f3',
-  in_progress: '#4caf50',
-  work_in_progress: '#4caf50',
-  approved: '#4caf50',
-  completed: '#4caf50',
-  resolved: '#4caf50',
-  closed: '#607d8b',
-  rejected: '#f44336',
+  submitted: 'info',
+  open: 'warning',
+  document_verification: 'info',
+  site_inspection: 'warning',
+  approval_pending: 'warning',
+  assigned: 'info',
+  in_progress: 'warning',
+  work_in_progress: 'warning',
+  approved: 'success',
+  completed: 'success',
+  resolved: 'success',
+  closed: 'default',
+  rejected: 'error',
 };
 
 const statusLabels = {
@@ -68,6 +67,7 @@ const statusLabels = {
 };
 
 const categoryLabels = {
+  // Complaint categories
   'no-water': 'No Water Supply',
   'low-pressure': 'Low Pressure',
   contaminated: 'Contaminated Water',
@@ -77,18 +77,20 @@ const categoryLabels = {
   'illegal-connection': 'Illegal Connection',
   sewerage: 'Sewerage Issue',
   other: 'Other',
+  // Application types
   new_connection: 'New Connection',
   reconnection: 'Reconnection',
   disconnection: 'Disconnection',
   transfer: 'Ownership Transfer',
   pipe_size_change: 'Pipe Size Change',
   meter_change: 'Meter Change',
+  tanker_service: 'Tanker Service',
+  connection_management: 'Connection Management',
 };
 
 const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-IN', {
+  if (!dateString) return null;
+  return new Date(dateString).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -97,203 +99,196 @@ const formatDate = (dateString) => {
   });
 };
 
+// Custom timeline step
+const TimelineStep = ({ step, isLast, isComplete }) => {
+  const dotColor = isComplete
+    ? '#2e7d32'
+    : isLast
+    ? '#1976d2'
+    : '#9e9e9e';
+
+  return (
+    <Box sx={{ display: 'flex', gap: 1.5, position: 'relative' }}>
+      {!isLast && (
+        <Box
+          sx={{
+            position: 'absolute',
+            left: 9,
+            top: 22,
+            bottom: 0,
+            width: 2,
+            bgcolor: isComplete ? '#c8e6c9' : '#e0e0e0',
+          }}
+        />
+      )}
+      <Box sx={{ flexShrink: 0, mt: 0.5, zIndex: 1 }}>
+        {isComplete ? (
+          <CheckCircle sx={{ fontSize: 20, color: '#2e7d32' }} />
+        ) : isLast ? (
+          <FiberManualRecord sx={{ fontSize: 20, color: '#1976d2' }} />
+        ) : (
+          <FiberManualRecord sx={{ fontSize: 20, color: '#9e9e9e' }} />
+        )}
+      </Box>
+      <Box sx={{ pb: isLast ? 0 : 2.5, flex: 1 }}>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ color: isLast && !isComplete ? '#1976d2' : '#0d1b2a' }}>
+          {step.status}
+        </Typography>
+        {step.date && (
+          <Typography variant="caption" color="text.secondary" display="block">
+            {step.date}
+          </Typography>
+        )}
+        {step.description && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {step.description}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 const WaterTrackingForm = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [trackingData, setTrackingData] = useState(null);
   const [error, setError] = useState(null);
   const [trackingType, setTrackingType] = useState('auto');
   const [showDetails, setShowDetails] = useState(true);
-  const [formData, setFormData] = useState({
-    reference_number: '',
-  });
+  const [referenceNumber, setReferenceNumber] = useState('');
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard!');
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value.toUpperCase() });
-    setError(null);
+  const detectType = (refNumber) => {
+    if (refNumber.startsWith('WCP')) return 'complaint';
+    if (WATER_APP_PREFIXES.some((p) => refNumber.startsWith(p))) return 'application';
+    return null;
   };
 
   const handleTrack = async () => {
-    if (!formData.reference_number) {
-      toast.error('Please enter Reference Number');
+    const ref = referenceNumber.trim().toUpperCase();
+    if (!ref) {
+      toast.error('Please enter a reference number');
       return;
+    }
+
+    // Determine type
+    let resolvedType = trackingType;
+    if (trackingType === 'auto') {
+      resolvedType = detectType(ref);
+      if (!resolvedType) {
+        setError('Reference number not recognised. Check your receipt or SMS — it starts with WNC, WRC, WDC, WTR, WPS, WMC, WTS, WCM (applications) or WCP (complaints).');
+        return;
+      }
     }
 
     setLoading(true);
     setError(null);
-
     try {
-      const refNumber = formData.reference_number.trim().toUpperCase();
-      const isComplaint = trackingType === 'complaint' || (trackingType === 'auto' && refNumber.startsWith('WCP'));
-      const isApplication = trackingType === 'application' || (trackingType === 'auto' && refNumber.startsWith('WNC'));
+      const endpoint =
+        resolvedType === 'complaint'
+          ? `/water/complaints/track/${ref}`
+          : `/water/applications/track/${ref}`;
 
-      if (!isComplaint && !isApplication) {
-        setError('Invalid reference number format. Use WNC... for applications or WCP... for complaints');
-        setLoading(false);
+      const response = await api.get(endpoint);
+
+      if (!response.data.success) {
+        setError(response.data.message || 'Reference number not found');
         return;
       }
 
-      let response;
+      const data = response.data.data;
+      const isComplaint = resolvedType === 'complaint';
+
+      // Build timeline
+      let timeline = [];
+
       if (isComplaint) {
-        response = await api.get(`/water/complaints/track/${refNumber}`);
-      } else {
-        response = await api.get(`/water/applications/track/${refNumber}`);
-      }
-
-      if (response.data.success) {
-        const data = response.data.data;
-
-        let timeline = [];
-
-        if (isComplaint) {
-          timeline.push({
-            status: 'Registered',
-            date: formatDate(data.created_at),
-            description: 'Complaint registered successfully',
+        timeline.push({ status: 'Registered', date: formatDate(data.created_at || data.submitted_at), description: 'Complaint registered successfully' });
+        if (data.stage_history && Array.isArray(data.stage_history) && data.stage_history.length > 0) {
+          data.stage_history.forEach((h) => {
+            timeline.push({
+              status: h.stage || h.status,
+              date: formatDate(h.timestamp),
+              description: h.remarks || h.resolution_notes || '',
+            });
           });
+        } else {
           if (data.assigned_engineer) {
-            timeline.push({
-              status: 'Assigned',
-              date: 'Pending',
-              description: `Assigned to ${data.assigned_engineer}`,
-            });
+            timeline.push({ status: 'Assigned', date: null, description: `Assigned to ${data.assigned_engineer}` });
           }
-          if (data.status === 'in_progress') {
-            timeline.push({
-              status: 'In Progress',
-              date: 'Current',
-              description: 'Work in progress',
-            });
+          if (data.status === 'in_progress' || data.status === 'work_in_progress') {
+            timeline.push({ status: 'In Progress', date: null, description: 'Work is in progress' });
           }
           if (data.resolved_at) {
-            timeline.push({
-              status: 'Resolved',
-              date: formatDate(data.resolved_at),
-              description: data.resolution_notes || 'Issue resolved',
-            });
+            timeline.push({ status: 'Resolved', date: formatDate(data.resolved_at), description: data.resolution_notes || 'Issue resolved' });
           }
           if (data.closed_at) {
-            timeline.push({
-              status: 'Closed',
-              date: formatDate(data.closed_at),
-              description: 'Complaint closed',
-            });
-          }
-        } else {
-          if (data.stage_history && Array.isArray(data.stage_history) && data.stage_history.length > 0) {
-            timeline = data.stage_history.map((stage) => ({
-              status: stage.stage || stage.status,
-              date: formatDate(stage.timestamp),
-              description: stage.remarks || stage.description || '',
-            }));
-          } else {
-            timeline.push({
-              status: 'Submitted',
-              date: formatDate(data.submitted_at),
-              description: 'Application submitted successfully',
-            });
-            if (data.current_stage && data.current_stage !== 'Application Submitted') {
-              timeline.push({
-                status: data.current_stage,
-                date: 'Current',
-                description: `Status: ${statusLabels[data.status] || data.status}`,
-              });
-            }
-          }
-          if (data.processed_at && !timeline.find((t) => t.status === 'Processed')) {
-            timeline.push({
-              status: 'Processed',
-              date: formatDate(data.processed_at),
-              description: 'Application processed',
-            });
-          }
-          if (data.completed_at) {
-            timeline.push({
-              status: 'Completed',
-              date: formatDate(data.completed_at),
-              description: 'Application completed',
-            });
+            timeline.push({ status: 'Closed', date: formatDate(data.closed_at), description: 'Complaint closed' });
           }
         }
-
-        const trackingResult = {
-          type: isComplaint ? 'Complaint' : 'Application',
-          reference_number: refNumber,
-          name: data.contact_name || data.full_name,
-          mobile: data.mobile,
-          email: data.email,
-          registered_date: formatDate(data.created_at || data.submitted_at),
-          category: categoryLabels[data.complaint_category || data.application_type] || data.complaint_category || data.application_type,
-          current_status: statusLabels[data.status] || data.status,
-          status_key: data.status,
-          ward: data.ward || 'N/A',
-          address: data.address,
-          landmark: data.landmark,
-          assigned_to: data.assigned_engineer || 'Not yet assigned',
-          description: data.description,
-          urgency: data.urgency,
-          pipe_size: data.pipe_size_requested,
-          connection_type: data.connection_type_requested,
-          property_type: data.property_type,
-          total_fee: data.total_fee,
-          fee_paid: data.fee_paid,
-          rejection_reason: data.rejection_reason,
-          resolution_notes: data.resolution_notes,
-          timeline,
-        };
-
-        setTrackingData(trackingResult);
-        toast.success('Status found!');
       } else {
-        setError(response.data.message || 'Reference number not found');
+        // Application
+        if (data.stage_history && Array.isArray(data.stage_history) && data.stage_history.length > 0) {
+          timeline = data.stage_history.map((h) => ({
+            status: h.stage || h.status,
+            date: formatDate(h.timestamp),
+            description: h.remarks || h.description || '',
+          }));
+        } else {
+          timeline.push({ status: 'Submitted', date: formatDate(data.submitted_at), description: 'Application submitted successfully' });
+          if (data.current_stage && data.current_stage !== 'Application Submitted') {
+            timeline.push({ status: data.current_stage, date: null, description: statusLabels[data.status] || data.status });
+          }
+        }
+        if (data.completed_at && !timeline.some((t) => t.status === 'Completed')) {
+          timeline.push({ status: 'Completed', date: formatDate(data.completed_at), description: 'Application completed' });
+        }
       }
+
+      const appType = data.complaint_category || data.application_type || '';
+      setTrackingData({
+        type: isComplaint ? 'Complaint' : 'Application',
+        reference_number: ref,
+        name: data.contact_name || data.full_name || 'N/A',
+        mobile: data.mobile || 'N/A',
+        email: data.email,
+        registered_date: formatDate(data.created_at || data.submitted_at),
+        category: categoryLabels[appType] || appType.replace(/_/g, ' ') || 'N/A',
+        current_status: statusLabels[data.status] || data.status,
+        status_key: data.status,
+        ward: data.ward || 'N/A',
+        address: data.address,
+        assigned_to: data.assigned_engineer,
+        description: data.description,
+        rejection_reason: data.rejection_reason || data.remarks,
+        resolution_notes: data.resolution_notes,
+        timeline,
+      });
+      toast.success('Status found!');
     } catch (err) {
-      console.error('Track error:', err);
       if (err.response?.status === 404) {
-        setError('Reference number not found. Please check and try again.');
+        setError('Reference number not found. Please double-check and try again.');
       } else {
-        setError(err.response?.data?.message || 'Failed to fetch status. Please try again.');
+        setError(err.response?.data?.message || err.response?.data?.error || 'Failed to fetch status. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColorName = (status) => {
-    const colorMap = {
-      submitted: 'info',
-      open: 'warning',
-      document_verification: 'info',
-      site_inspection: 'warning',
-      approval_pending: 'warning',
-      assigned: 'info',
-      in_progress: 'warning',
-      work_in_progress: 'warning',
-      approved: 'success',
-      completed: 'success',
-      resolved: 'success',
-      closed: 'default',
-      rejected: 'error',
-    };
-    return colorMap[status] || 'default';
-  };
-
-  const getStatusIcon = (isCompleted, isCurrent) => {
-    if (isCompleted) return <CheckCircle color="success" />;
-    if (isCurrent) return <AccessTime color="primary" />;
-    return <RadioButtonUnchecked color="disabled" />;
-  };
-
   const getProgressPercentage = () => {
-    if (!trackingData?.timeline?.length) return 0;
+    if (!trackingData) return 0;
+    const finalStatuses = ['completed', 'resolved', 'approved', 'closed', 'rejected'];
+    if (finalStatuses.includes(trackingData.status_key)) return 100;
     const expectedStages = trackingData.type === 'Application' ? 6 : 4;
-    return Math.min((trackingData.timeline.length / expectedStages) * 100, 100);
+    return Math.min(Math.round((trackingData.timeline.length / expectedStages) * 100), 95);
   };
+
+  const isFinished = ['completed', 'resolved', 'approved', 'closed', 'rejected'].includes(trackingData?.status_key);
 
   return (
     <Box>
@@ -302,101 +297,84 @@ const WaterTrackingForm = ({ onClose }) => {
           Track Application / Complaint
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Enter your reference number to check real-time status and track progress
+          Enter your reference number to check real-time status and progress
         </Typography>
 
         {!trackingData ? (
           <Box>
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2, mb: 3 }}>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary">
-                Search Criteria
+                Search
               </Typography>
               <Divider sx={{ mb: 3 }} />
-
-              <Grid container spacing={3}>
+              <Grid container spacing={2}>
                 <Grid item xs={12} md={4}>
                   <TextField
                     fullWidth
                     select
-                    label="Select Track Type"
+                    label="Type"
                     value={trackingType}
-                    onChange={(e) => {
-                      setTrackingType(e.target.value);
-                      setTrackingData(null);
-                      setError(null);
-                    }}
+                    onChange={(e) => { setTrackingType(e.target.value); setError(null); }}
                   >
                     <MenuItem value="auto">Auto Detect</MenuItem>
                     <MenuItem value="application">Application</MenuItem>
                     <MenuItem value="complaint">Complaint</MenuItem>
                   </TextField>
                 </Grid>
-
                 <Grid item xs={12} md={8}>
                   <TextField
                     fullWidth
                     required
                     label="Reference Number *"
-                    name="reference_number"
-                    value={formData.reference_number}
-                    onChange={handleChange}
-                    placeholder="E.g., WNC2026000001 or WCP2026000001"
-                    helperText="Found on your application receipt or SMS"
+                    value={referenceNumber}
+                    onChange={(e) => { setReferenceNumber(e.target.value.toUpperCase()); setError(null); }}
+                    placeholder="WNC2026000001, WRC2026000001 or WCP2026000001"
+                    helperText="All application types supported — found on your receipt or SMS"
                     onKeyDown={(e) => e.key === 'Enter' && handleTrack()}
                   />
                 </Grid>
               </Grid>
             </Paper>
 
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
+            {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
             {loading && (
               <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2 }}>
-                <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                  <LinearProgress sx={{ width: '100%', borderRadius: 1 }} />
-                  <Typography variant="body2" color="text.secondary">
-                    Fetching your details, please wait...
-                  </Typography>
-                </Box>
+                <LinearProgress sx={{ borderRadius: 1, mb: 2 }} />
+                <Typography variant="body2" color="text.secondary" textAlign="center">
+                  Fetching your details, please wait...
+                </Typography>
               </Paper>
             )}
 
             {!loading && !error && (
               <Paper elevation={0} sx={{ p: 4, bgcolor: 'background.default', borderRadius: 2, textAlign: 'center' }}>
-                <Search sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                <Search sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
                 <Typography variant="body1" color="text.secondary" gutterBottom>
-                  Enter your reference number above to track the status
+                  Enter your reference number above to track status
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  You can track both applications and complaints using their reference numbers
+                  Supported: New Connection, Reconnection, Disconnection, Transfer, Pipe Size Change, Meter Change, Tanker Service and Complaints
                 </Typography>
               </Paper>
             )}
           </Box>
         ) : (
           <Box>
+            {/* Status Overview */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2, mb: 3 }}>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary">
-                Status Overview
-              </Typography>
+              <Typography variant="subtitle1" fontWeight={600} color="primary" gutterBottom>Status Overview</Typography>
               <Divider sx={{ mb: 3 }} />
-
-              <Grid container spacing={3}>
+              <Grid container spacing={2.5}>
                 <Grid item xs={12}>
                   <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
                     <Box>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Reference Number
-                      </Typography>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>Reference Number</Typography>
                       <Box display="flex" alignItems="center" gap={1}>
-                        <Typography variant="h6" fontWeight={700} color="primary">
+                        <Typography variant="h6" fontWeight={700} color="primary" sx={{ fontFamily: 'monospace' }}>
                           {trackingData.reference_number}
                         </Typography>
-                        <Tooltip title="Copy to clipboard">
+                        <Tooltip title="Copy">
                           <IconButton size="small" onClick={() => copyToClipboard(trackingData.reference_number)}>
                             <ContentCopy fontSize="small" />
                           </IconButton>
@@ -404,158 +382,142 @@ const WaterTrackingForm = ({ onClose }) => {
                       </Box>
                     </Box>
                     <Chip
-                      label={(trackingData.current_status || '').toUpperCase()}
-                      color={getStatusColorName(trackingData.status_key)}
-                      sx={{ fontWeight: 600, fontSize: '0.875rem', px: 2, py: 2.5 }}
+                      label={trackingData.current_status.toUpperCase()}
+                      color={statusColors[trackingData.status_key] || 'default'}
+                      sx={{ fontWeight: 700, fontSize: '0.82rem', px: 1.5, py: 2.5 }}
                     />
                   </Box>
                 </Grid>
-
                 <Grid item xs={12}><Divider /></Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={6} sm={3}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>Type</Typography>
-                  <Typography variant="body1" fontWeight={600}>{trackingData.type}</Typography>
+                  <Typography variant="body2" fontWeight={600}>{trackingData.type}</Typography>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>Registered Date</Typography>
-                  <Typography variant="body1" fontWeight={600}>{trackingData.registered_date}</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={6} sm={3}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>Category</Typography>
-                  <Typography variant="body1" fontWeight={600}>{trackingData.category}</Typography>
+                  <Typography variant="body2" fontWeight={600}>{trackingData.category}</Typography>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>Registered On</Typography>
+                  <Typography variant="body2" fontWeight={600}>{trackingData.registered_date}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>Ward</Typography>
-                  <Typography variant="body1" fontWeight={600}>{trackingData.ward}</Typography>
+                  <Typography variant="body2" fontWeight={600}>{trackingData.ward}</Typography>
                 </Grid>
-
                 <Grid item xs={12}>
-                  <Box sx={{ mt: 1 }}>
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                      <Typography variant="body2" color="text.secondary" fontWeight={600}>Overall Progress</Typography>
-                      <Typography variant="body2" color="primary" fontWeight={600}>{Math.round(getProgressPercentage())}%</Typography>
-                    </Box>
-                    <LinearProgress variant="determinate" value={getProgressPercentage()} sx={{ height: 8, borderRadius: 4 }} />
+                  <Box display="flex" justifyContent="space-between" mb={1}>
+                    <Typography variant="body2" color="text.secondary" fontWeight={600}>Overall Progress</Typography>
+                    <Typography variant="body2" color="primary" fontWeight={700}>{getProgressPercentage()}%</Typography>
                   </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={getProgressPercentage()}
+                    sx={{ height: 8, borderRadius: 4, bgcolor: '#e0e0e0' }}
+                  />
                 </Grid>
               </Grid>
             </Paper>
 
+            {/* Details */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2, mb: 3 }}>
               <Box
-                display="flex"
-                justifyContent="space-between"
-                alignItems="center"
+                display="flex" justifyContent="space-between" alignItems="center"
                 onClick={() => setShowDetails(!showDetails)}
                 sx={{ cursor: 'pointer', userSelect: 'none' }}
               >
-                <Typography variant="subtitle1" fontWeight={600} color="primary">
-                  {trackingData.type} Details
-                </Typography>
+                <Typography variant="subtitle1" fontWeight={600} color="primary">{trackingData.type} Details</Typography>
                 <IconButton size="small">{showDetails ? <ExpandLess /> : <ExpandMore />}</IconButton>
               </Box>
-
               <Collapse in={showDetails}>
                 <Divider sx={{ my: 2 }} />
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>Name</Typography>
-                    <Typography variant="body1" fontWeight={600}>{trackingData.name}</Typography>
+                    <Typography variant="body2" fontWeight={600}>{trackingData.name}</Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>Mobile</Typography>
-                    <Typography variant="body1" fontWeight={600}>{trackingData.mobile}</Typography>
+                    <Typography variant="body2" fontWeight={600}>{trackingData.mobile}</Typography>
                   </Grid>
                   {trackingData.email && (
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary" gutterBottom>Email</Typography>
-                      <Typography variant="body1" fontWeight={600}>{trackingData.email}</Typography>
+                      <Typography variant="body2" fontWeight={600}>{trackingData.email}</Typography>
                     </Grid>
                   )}
                   {trackingData.address && (
                     <Grid item xs={12}>
                       <Typography variant="body2" color="text.secondary" gutterBottom>Address</Typography>
-                      <Typography variant="body1">{trackingData.address}</Typography>
+                      <Typography variant="body2">{trackingData.address}</Typography>
                     </Grid>
                   )}
                   {trackingData.description && (
                     <Grid item xs={12}>
                       <Typography variant="body2" color="text.secondary" gutterBottom>Description</Typography>
-                      <Typography variant="body1">{trackingData.description}</Typography>
+                      <Typography variant="body2">{trackingData.description}</Typography>
                     </Grid>
                   )}
-                  {trackingData.assigned_to && trackingData.assigned_to !== 'Not yet assigned' && (
+                  {trackingData.assigned_to && (
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary" gutterBottom>Assigned To</Typography>
-                      <Typography variant="body1" fontWeight={600}>{trackingData.assigned_to}</Typography>
+                      <Typography variant="body2" fontWeight={600}>{trackingData.assigned_to}</Typography>
                     </Grid>
                   )}
                 </Grid>
               </Collapse>
             </Paper>
 
+            {/* Timeline */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2, mb: 3 }}>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary">
-                Progress Timeline
-              </Typography>
+              <Typography variant="subtitle1" fontWeight={600} color="primary" gutterBottom>Progress Timeline</Typography>
               <Typography variant="body2" color="text.secondary" mb={2}>
-                Track the journey of your {trackingData.type.toLowerCase()}
+                Step-by-step journey of your {trackingData.type.toLowerCase()}
               </Typography>
               <Divider sx={{ mb: 3 }} />
-
               {trackingData.timeline.length > 0 ? (
-                <Stepper orientation="vertical">
+                <Box>
                   {trackingData.timeline.map((step, index) => {
                     const isLast = index === trackingData.timeline.length - 1;
-                    const completed = !isLast || ['completed', 'resolved', 'approved', 'closed'].includes(trackingData.status_key);
+                    const isComplete = !isLast || isFinished;
                     return (
-                      <Step key={index} active completed={completed}>
-                        <StepLabel icon={getStatusIcon(completed, isLast && !completed)}>
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight={600}>{step.status}</Typography>
-                            <Typography variant="caption" color="text.secondary">{step.date}</Typography>
-                            {step.description && <Typography variant="body2">{step.description}</Typography>}
-                          </Box>
-                        </StepLabel>
-                      </Step>
+                      <TimelineStep key={index} step={step} isLast={isLast} isComplete={isComplete} />
                     );
                   })}
-                </Stepper>
+                </Box>
               ) : (
-                <Typography color="text.secondary">No timeline available yet</Typography>
+                <Typography color="text.secondary" variant="body2">No timeline information available yet.</Typography>
               )}
             </Paper>
 
+            {/* Rejection / Resolution */}
             {(trackingData.status_key === 'rejected' || trackingData.rejection_reason) && (
               <Alert severity="error" sx={{ mb: 3 }} icon={<Warning />}>
-                {trackingData.rejection_reason || 'Your request was rejected. Please contact the office for more details.'}
+                <strong>Rejected:</strong> {trackingData.rejection_reason || 'Your request was rejected. Please contact the office for more details.'}
               </Alert>
             )}
-
             {trackingData.resolution_notes && (
               <Alert severity="success" sx={{ mb: 3 }}>
                 <strong>Resolution:</strong> {trackingData.resolution_notes}
               </Alert>
             )}
 
-            <Paper elevation={0} sx={{ p: 3, bgcolor: 'info.lighter', borderRadius: 2, border: '1px solid', borderColor: 'info.light', mb: 3 }}>
-              <Box display="flex" alignItems="flex-start" gap={2}>
-                <Info color="info" />
+            {/* Help */}
+            <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#e3f2fd', borderRadius: 2, border: '1px solid #90caf9', mb: 3 }}>
+              <Box display="flex" alignItems="flex-start" gap={1.5}>
+                <Info sx={{ color: '#1976d2', mt: 0.25 }} />
                 <Box>
                   <Typography variant="body2" fontWeight={600} gutterBottom>Need Assistance?</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    For any queries related to your water application or complaint, contact helpline <strong>1916</strong>.
+                    Call our helpline <strong>1916</strong> or visit your nearest water department office for help with your {trackingData.type.toLowerCase()}.
                   </Typography>
                 </Box>
               </Box>
             </Paper>
 
             <Button
-              variant="outlined"
-              size="large"
-              fullWidth
-              onClick={() => { setTrackingData(null); setFormData({ reference_number: '' }); setError(null); }}
+              variant="outlined" size="large" fullWidth
+              onClick={() => { setTrackingData(null); setReferenceNumber(''); setError(null); }}
             >
               Track Another Application / Complaint
             </Button>
@@ -570,10 +532,11 @@ const WaterTrackingForm = ({ onClose }) => {
             <Button
               variant="contained"
               onClick={handleTrack}
-              disabled={loading}
+              disabled={loading || !referenceNumber.trim()}
+              startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <Search />}
               sx={{ bgcolor: '#0288d1', '&:hover': { bgcolor: '#01579b' } }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Track Status'}
+              {loading ? 'Searching...' : 'Track Status'}
             </Button>
           </>
         ) : (

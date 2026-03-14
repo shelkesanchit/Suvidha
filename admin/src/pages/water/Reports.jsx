@@ -72,12 +72,63 @@ const Reports = () => {
     try {
       setLoading(true);
       const response = await api.get(`/water/admin/reports?type=${reportType}&month=${selectedMonth}`);
-      setReportData(response.data.data || {
-        summary: { totalConsumers: 0, activeConnections: 0, totalBilled: 0, totalCollected: 0, totalApplications: 0, totalComplaints: 0, resolvedComplaints: 0 },
-        collections: [],
-        applications: [],
-        complaints: [],
-        categoryWise: [],
+      const raw = response.data.data || {};
+
+      // Summary
+      const totalConsumers = (raw.consumers || []).reduce((s, c) => s + Number(c.total || 0), 0);
+      const activeConnections = (raw.consumers || []).reduce((s, c) => s + Number(c.active || 0), 0);
+      const totalCollected = Number(raw.revenue?.total || 0);
+      const totalApplications = (raw.applications || []).reduce((s, a) => s + Number(a.count || 0), 0);
+      const totalComplaints = (raw.complaints || []).reduce((s, c) => s + Number(c.total || 0), 0);
+      const resolvedComplaints = (raw.complaints || []).reduce((s, c) => s + Number(c.resolved || 0), 0);
+
+      // Daily revenue as collections
+      const collections = (raw.revenue?.daily || []).map(d => ({
+        month: d.date,
+        billed: Number(d.revenue || 0),
+        collected: Number(d.revenue || 0),
+      }));
+
+      // Applications by type with status breakdown
+      const appMap = {};
+      for (const row of (raw.applications || [])) {
+        const type = row.application_type || 'Other';
+        if (!appMap[type]) appMap[type] = { type, pending: 0, approved: 0, rejected: 0 };
+        const status = (row.status || '').toLowerCase();
+        const cnt = Number(row.count || 0);
+        if (status === 'approved' || status === 'completed') appMap[type].approved += cnt;
+        else if (status === 'rejected') appMap[type].rejected += cnt;
+        else appMap[type].pending += cnt;
+      }
+
+      // Complaints by category
+      const complaints = (raw.complaints || []).map(c => ({
+        category: c.complaint_category || 'Other',
+        open: Math.max(0, Number(c.total || 0) - Number(c.resolved || 0)),
+        resolved: Number(c.resolved || 0),
+      }));
+
+      // Category wise consumers
+      const categoryWise = (raw.consumers || []).map(c => ({
+        category: c.category || 'Other',
+        consumers: Number(c.total || 0),
+        revenue: Number(c.outstanding_dues || 0),
+      }));
+
+      setReportData({
+        summary: {
+          totalConsumers,
+          activeConnections,
+          totalBilled: totalCollected,
+          totalCollected,
+          totalApplications,
+          totalComplaints,
+          resolvedComplaints,
+        },
+        collections,
+        applications: Object.values(appMap),
+        complaints,
+        categoryWise,
         wardWise: [],
       });
     } catch (error) {

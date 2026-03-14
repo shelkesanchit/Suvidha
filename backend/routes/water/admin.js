@@ -579,4 +579,84 @@ router.patch('/users/:id/toggle-status', verifyWaterAdminToken, async (req, res)
   }
 });
 
+// Settings
+router.get('/settings', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT setting_key, setting_value FROM water_system_settings ORDER BY setting_key'
+    );
+    const settings = {};
+    result.rows.forEach(r => { settings[r.setting_key] = r.setting_value; });
+    res.json({ success: true, data: settings });
+  } catch (_) {
+    res.json({ success: true, data: {} });
+  }
+});
+
+router.put('/settings', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const settings = req.body;
+    for (const [key, value] of Object.entries(settings)) {
+      await pool.query(
+        `INSERT INTO water_system_settings (setting_key, setting_value)
+         VALUES ($1, $2)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = NOW()`,
+        [key, String(value)]
+      );
+    }
+    res.json({ success: true, message: 'Settings saved' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Tariffs
+router.get('/tariffs', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM water_tariffs ORDER BY category, min_units'
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (_) {
+    res.json({ success: true, data: [] });
+  }
+});
+
+router.post('/tariffs', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const { category, slab_name, min_units, max_units, rate_per_kl, fixed_charge, is_active } = req.body;
+    const result = await pool.query(
+      `INSERT INTO water_tariffs (category, slab_name, min_units, max_units, rate_per_kl, fixed_charge, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [category, slab_name, min_units || 0, max_units || null, rate_per_kl, fixed_charge || 0, is_active !== false]
+    );
+    res.status(201).json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.put('/tariffs/:id', verifyWaterAdminToken, async (req, res) => {
+  try {
+    const { category, slab_name, min_units, max_units, rate_per_kl, fixed_charge, is_active } = req.body;
+    await pool.query(
+      `UPDATE water_tariffs SET category=$1, slab_name=$2, min_units=$3, max_units=$4,
+       rate_per_kl=$5, fixed_charge=$6, is_active=$7, updated_at=NOW() WHERE id=$8`,
+      [category, slab_name, min_units, max_units || null, rate_per_kl, fixed_charge || 0, is_active !== false, req.params.id]
+    );
+    res.json({ success: true, message: 'Tariff updated' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.delete('/tariffs/:id', verifyWaterAdminToken, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM water_tariffs WHERE id=$1', [req.params.id]);
+    res.json({ success: true, message: 'Tariff deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;

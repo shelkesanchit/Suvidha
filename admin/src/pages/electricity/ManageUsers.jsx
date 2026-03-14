@@ -1,404 +1,279 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Grid,
-  CircularProgress,
-  InputAdornment,
-  Avatar,
-  Tooltip,
-  TablePagination,
-  MenuItem,
+  Box, Typography, Card, CardContent, Table, TableHead, TableRow, TableCell,
+  TableBody, TablePagination, Chip, IconButton, Button, TextField, InputAdornment,
+  Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel,
+  Select, MenuItem, Tooltip, CircularProgress, Alert, Grid, Avatar, Switch,
+  FormControlLabel,
 } from '@mui/material';
 import {
-  Block as BlockIcon,
-  CheckCircle as ActiveIcon,
-  PersonAdd as PersonAddIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
-  Search as SearchIcon,
-  People as PeopleIcon,
-  AdminPanelSettings as AdminIcon,
-  Support as StaffIcon,
-  Person as ConsumerIcon,
+  Search, Refresh, PersonAdd, Visibility, VisibilityOff, ManageAccounts,
 } from '@mui/icons-material';
-import api from '../../utils/electricity/api';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
-const ManageUsers = () => {
+const ROLE_CONFIG = {
+  admin:    { label: 'Admin',    color: 'error' },
+  staff:    { label: 'Staff',    color: 'warning' },
+  customer: { label: 'Customer', color: 'info' },
+};
+
+export default function ManageUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [newStaff, setNewStaff] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    password: '',
-  });
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [createDialog, setCreateDialog] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', password: '' });
+  const [errors, setErrors] = useState({});
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/admin/users');
-      const data = Array.isArray(response.data) ? response.data : (response.data.data || []);
-      setUsers(data);
-    } catch (error) {
-      toast.error('Failed to fetch users');
+      const res = await api.get('/admin/users');
+      setUsers(Array.isArray(res.data) ? res.data : (res.data.data || []));
+    } catch {
+      toast.error('Failed to load users');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleUserStatus = async (userId, currentStatus) => {
+  useEffect(() => { fetchUsers(); }, []);
+
+  const toggleStatus = async (u) => {
     try {
-      await api.patch(`/admin/users/${userId}/toggle-status`);
-      toast.success(`User ${currentStatus ? 'deactivated' : 'activated'} successfully`);
+      await api.patch(`/admin/users/${u.id}/toggle-status`);
+      toast.success(`User ${u.is_active ? 'deactivated' : 'activated'} successfully`);
       fetchUsers();
-    } catch (error) {
-      toast.error('Failed to update user status');
+    } catch {
+      toast.error('Failed to toggle user status');
     }
   };
 
-  const handleCreateStaff = async () => {
-    if (!newStaff.full_name || !newStaff.email || !newStaff.phone || !newStaff.password) {
-      toast.error('All fields are required');
-      return;
-    }
-    if (newStaff.password.length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return;
-    }
-    if (!/^[0-9]{10}$/.test(newStaff.phone)) {
-      toast.error('Phone must be 10 digits');
-      return;
-    }
+  const validate = () => {
+    const e = {};
+    if (!form.full_name.trim()) e.full_name = 'Name is required';
+    if (!/^[^@]+@[^@]+\.[^@]+$/.test(form.email)) e.email = 'Valid email required';
+    if (!/^\d{10}$/.test(form.phone)) e.phone = '10-digit phone required';
+    if (form.password.length < 8) e.password = 'Min 8 characters';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleCreate = async () => {
+    if (!validate()) return;
     try {
-      setCreating(true);
-      await api.post('/admin/users/staff', newStaff);
+      setSaving(true);
+      await api.post('/admin/users/staff', form);
       toast.success('Staff member created successfully');
-      setCreateDialogOpen(false);
-      setNewStaff({ full_name: '', email: '', phone: '', password: '' });
+      setCreateDialog(false);
+      setForm({ full_name: '', email: '', phone: '', password: '' });
+      setErrors({});
       fetchUsers();
-    } catch (error) {
-      toast.error(error.response?.data?.errors?.[0]?.msg || error.response?.data?.error || 'Failed to create staff');
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to create staff member');
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      !searchQuery ||
-      u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.phone?.includes(searchQuery);
-    const matchesRole = !roleFilter || u.role === roleFilter;
-    return matchesSearch && matchesRole;
+  const filtered = users.filter(u => {
+    const q = search.toLowerCase();
+    const matchSearch = !search || u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.toLowerCase().includes(q);
+    const matchRole = !roleFilter || u.role === roleFilter;
+    return matchSearch && matchRole;
   });
 
-  const paginatedUsers = filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const paginated = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
-  const getRoleColor = (role) => {
-    if (role === 'admin') return 'error';
-    if (role === 'staff') return 'warning';
-    return 'default';
-  };
-
-  const getRoleIcon = (role) => {
-    if (role === 'admin') return <AdminIcon fontSize="small" />;
-    if (role === 'staff') return <StaffIcon fontSize="small" />;
-    return <ConsumerIcon fontSize="small" />;
-  };
-
-  const stats = {
-    total: users.length,
-    admins: users.filter((u) => u.role === 'admin').length,
-    staff: users.filter((u) => u.role === 'staff').length,
-    consumers: users.filter((u) => u.role === 'consumer').length,
-    active: users.filter((u) => u.is_active).length,
-  };
+  const counts = {};
+  users.forEach(u => { counts[u.role] = (counts[u.role] || 0) + 1; });
+  const activeCount = users.filter(u => u.is_active).length;
 
   return (
     <Box>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom fontWeight={600}>
-            Manage Users
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            View and manage system users across all roles
-          </Typography>
+          <Typography variant="h4" fontWeight={700} color="#0d1b2a" sx={{ mb: 0.5 }}>Users</Typography>
+          <Typography variant="body2" color="text.secondary">{users.length} total users &nbsp;·&nbsp; {activeCount} active</Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<PersonAddIcon />}
-          onClick={() => setCreateDialogOpen(true)}
-          size="large"
-        >
-          Add Staff Member
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button variant="outlined" startIcon={<Refresh />} onClick={fetchUsers} disabled={loading}>Refresh</Button>
+          <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setCreateDialog(true)}>Add Staff</Button>
+        </Box>
       </Box>
 
-      {/* Stats Row */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
+      {/* Summary strip */}
+      <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
         {[
-          { label: 'Total Users', value: stats.total, icon: <PeopleIcon />, color: '#1976d2' },
-          { label: 'Admins', value: stats.admins, icon: <AdminIcon />, color: '#d32f2f' },
-          { label: 'Staff', value: stats.staff, icon: <StaffIcon />, color: '#ed6c02' },
-          { label: 'Consumers', value: stats.consumers, icon: <ConsumerIcon />, color: '#2e7d32' },
-          { label: 'Active', value: stats.active, icon: <ActiveIcon />, color: '#0288d1' },
-        ].map((stat) => (
-          <Grid item xs={6} sm={4} md={2} key={stat.label}>
-            <Card elevation={0} sx={{ textAlign: 'center', border: `2px solid ${stat.color}20`, bgcolor: `${stat.color}08` }}>
-              <CardContent sx={{ py: 2 }}>
-                <Box sx={{ color: stat.color, mb: 0.5 }}>{stat.icon}</Box>
-                <Typography variant="h5" fontWeight={700} sx={{ color: stat.color }}>{stat.value}</Typography>
-                <Typography variant="caption" color="text.secondary">{stat.label}</Typography>
-              </CardContent>
-            </Card>
+          { label: 'Total',     value: users.length,                 color: '#1976d2', bg: '#e3f2fd' },
+          { label: 'Admins',    value: counts.admin || 0,            color: '#d32f2f', bg: '#ffebee' },
+          { label: 'Staff',     value: counts.staff || 0,            color: '#f57c00', bg: '#fff3e0' },
+          { label: 'Customers', value: counts.customer || 0,         color: '#2e7d32', bg: '#e8f5e9' },
+          { label: 'Active',    value: activeCount,                  color: '#0097a7', bg: '#e0f7fa' },
+        ].map(({ label, value, color, bg }) => (
+          <Grid item xs={6} sm={4} md key={label}>
+            <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: bg, textAlign: 'center', border: `1px solid ${color}33` }}>
+              <Typography variant="h5" fontWeight={700} sx={{ color }}>{value}</Typography>
+              <Typography variant="caption" color="text.secondary">{label}</Typography>
+            </Box>
           </Grid>
         ))}
       </Grid>
 
-      {/* Filters */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent sx={{ py: 2 }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={4}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Search by name, email, or phone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Grid>
-            <Grid item xs={6} sm={3} md={2}>
-              <TextField
-                fullWidth
-                size="small"
-                select
-                label="Role"
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-              >
-                <MenuItem value="">All Roles</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
-                <MenuItem value="staff">Staff</MenuItem>
-                <MenuItem value="consumer">Consumer</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={6} sm={3} md={2}>
-              <Button variant="outlined" onClick={() => { setSearchQuery(''); setRoleFilter(''); }}>
-                Clear
-              </Button>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-
-      {/* Table */}
       <Card>
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell><strong>User</strong></TableCell>
-                  <TableCell><strong>Contact</strong></TableCell>
-                  <TableCell><strong>Role</strong></TableCell>
-                  <TableCell><strong>Status</strong></TableCell>
-                  <TableCell><strong>Joined</strong></TableCell>
-                  <TableCell align="center"><strong>Actions</strong></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedUsers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                      <Typography color="text.secondary">No users found</Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedUsers.map((user) => (
-                    <TableRow key={user.id} hover>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Avatar sx={{ bgcolor: user.role === 'admin' ? 'error.main' : user.role === 'staff' ? 'warning.main' : 'primary.main', width: 36, height: 36, fontSize: 14 }}>
-                            {user.full_name?.charAt(0)?.toUpperCase()}
-                          </Avatar>
-                          <Box>
-                            <Typography variant="body2" fontWeight={600}>{user.full_name}</Typography>
-                            <Typography variant="caption" color="text.secondary">{user.email}</Typography>
-                          </Box>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{user.phone || '—'}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          icon={getRoleIcon(user.role)}
-                          label={user.role.toUpperCase()}
-                          size="small"
-                          color={getRoleColor(user.role)}
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={user.is_active ? 'Active' : 'Inactive'}
-                          size="small"
-                          color={user.is_active ? 'success' : 'default'}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {user.created_at ? new Date(user.created_at).toLocaleDateString('en-IN') : '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        {user.role !== 'admin' && (
-                          <Tooltip title={user.is_active ? 'Deactivate User' : 'Activate User'}>
-                            <IconButton
-                              size="small"
-                              onClick={() => toggleUserStatus(user.id, user.is_active)}
-                              color={user.is_active ? 'error' : 'success'}
-                            >
-                              {user.is_active ? <BlockIcon /> : <ActiveIcon />}
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-            <TablePagination
-              component="div"
-              count={filteredUsers.length}
-              page={page}
-              onPageChange={(_, newPage) => setPage(newPage)}
-              rowsPerPage={rowsPerPage}
-              onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
-              rowsPerPageOptions={[10, 25, 50]}
+        <CardContent sx={{ pb: 0 }}>
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
+            <TextField
+              size="small" placeholder="Search by name, email, phone..."
+              value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
+              sx={{ flex: '1 1 240px', maxWidth: 360 }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: 18 }} /></InputAdornment> }}
             />
-          </>
-        )}
+            <FormControl size="small" sx={{ minWidth: 130 }}>
+              <InputLabel>Role</InputLabel>
+              <Select label="Role" value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(0); }}>
+                <MenuItem value="">All Roles</MenuItem>
+                {Object.entries(ROLE_CONFIG).map(([k, v]) => (
+                  <MenuItem key={k} value={k}>{v.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
+          ) : filtered.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <ManageAccounts sx={{ fontSize: 56, color: '#e0e0e0', mb: 1 }} />
+              <Typography color="text.secondary">No users found</Typography>
+            </Box>
+          ) : (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f8f9fa' }}>
+                    <TableCell sx={{ fontWeight: 600 }}>User</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Phone</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Role</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Joined</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="center">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginated.map((u) => {
+                    const rc = ROLE_CONFIG[u.role] || { label: u.role, color: 'default' };
+                    return (
+                      <TableRow key={u.id} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Avatar sx={{ width: 30, height: 30, bgcolor: rc.color === 'error' ? '#ffebee' : rc.color === 'warning' ? '#fff3e0' : '#e3f2fd', fontSize: '0.75rem', color: rc.color === 'error' ? '#d32f2f' : rc.color === 'warning' ? '#f57c00' : '#1976d2' }}>
+                              {u.full_name?.[0]?.toUpperCase()}
+                            </Avatar>
+                            <Box>
+                              <Typography variant="body2" fontWeight={500}>{u.full_name}</Typography>
+                              <Typography variant="caption" color="text.secondary">{u.email}</Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{u.phone || '—'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={rc.label} color={rc.color} size="small" sx={{ fontSize: '0.7rem', height: 22 }} />
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={u.is_active ? 'Active' : 'Inactive'}
+                            color={u.is_active ? 'success' : 'default'}
+                            size="small" variant="outlined"
+                            sx={{ fontSize: '0.7rem', height: 22 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" color="text.secondary">
+                            {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          {u.role !== 'admin' && (
+                            <Tooltip title={u.is_active ? 'Deactivate User' : 'Activate User'}>
+                              <Switch
+                                size="small" checked={!!u.is_active}
+                                onChange={() => toggleStatus(u)}
+                                color="success"
+                              />
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
+        </CardContent>
+
+        <TablePagination
+          component="div" count={filtered.length} page={page}
+          onPageChange={(_, p) => setPage(p)} rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={e => { setRowsPerPage(+e.target.value); setPage(0); }}
+          rowsPerPageOptions={[10, 15, 25, 50]}
+        />
       </Card>
 
       {/* Create Staff Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PersonAddIcon />
-            <Typography variant="h6">Add New Staff Member</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
+      <Dialog open={createDialog} onClose={() => { setCreateDialog(false); setErrors({}); }} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Create Staff Member</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>Staff members can manage applications, complaints, and meter readings.</Alert>
           <Grid container spacing={2}>
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Full Name *"
-                value={newStaff.full_name}
-                onChange={(e) => setNewStaff({ ...newStaff, full_name: e.target.value })}
-                placeholder="Enter full name"
-              />
+              <TextField fullWidth size="small" label="Full Name *" value={form.full_name}
+                onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))}
+                error={!!errors.full_name} helperText={errors.full_name} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth size="small" label="Email *" type="email" value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                error={!!errors.email} helperText={errors.email} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth size="small" label="Phone (10 digits) *" value={form.phone}
+                onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                error={!!errors.phone} helperText={errors.phone} inputProps={{ maxLength: 10 }} />
             </Grid>
             <Grid item xs={12}>
               <TextField
-                fullWidth
-                label="Email Address *"
-                type="email"
-                value={newStaff.email}
-                onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                placeholder="staff@example.com"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Phone Number *"
-                value={newStaff.phone}
-                onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
-                placeholder="10-digit mobile number"
-                inputProps={{ maxLength: 10 }}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Password *"
-                type={showPassword ? 'text' : 'password'}
-                value={newStaff.password}
-                onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
-                placeholder="Minimum 8 characters"
+                fullWidth size="small" label="Password (min 8 chars) *"
+                type={showPass ? 'text' : 'password'} value={form.password}
+                onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                error={!!errors.password} helperText={errors.password}
                 InputProps={{
                   endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
-                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                      </IconButton>
-                    </InputAdornment>
+                    <IconButton size="small" onClick={() => setShowPass(!showPass)} edge="end">
+                      {showPass ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
+                    </IconButton>
                   ),
                 }}
               />
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={() => setCreateDialogOpen(false)} disabled={creating}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleCreateStaff}
-            disabled={creating}
-            startIcon={creating ? <CircularProgress size={16} /> : <PersonAddIcon />}
-          >
-            {creating ? 'Creating...' : 'Create Staff Member'}
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { setCreateDialog(false); setErrors({}); }}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreate} disabled={saving}>
+            {saving ? <CircularProgress size={18} color="inherit" /> : 'Create Staff Member'}
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
-};
-
-export default ManageUsers;
+}
