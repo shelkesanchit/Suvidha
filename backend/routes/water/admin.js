@@ -343,7 +343,7 @@ router.put('/complaints/:id', verifyWaterAdminToken, async (req, res) => {
 // ─── Consumers ────────────────────────────────────────────────────────────────
 router.get('/consumers', verifyWaterAdminToken, async (req, res) => {
   try {
-    const { status, category, search, page = 1, limit = 50 } = req.query;
+    const { status, category, search, consumer_number, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const conditions = [];
     const params = [];
@@ -351,6 +351,7 @@ router.get('/consumers', verifyWaterAdminToken, async (req, res) => {
 
     if (status) { conditions.push(`connection_status = $${idx++}`); params.push(status); }
     if (category) { conditions.push(`category = $${idx++}`); params.push(category); }
+    if (consumer_number) { conditions.push(`consumer_number = $${idx++}`); params.push(consumer_number); }
     if (search) {
       conditions.push(`(full_name ILIKE $${idx} OR consumer_number ILIKE $${idx} OR mobile ILIKE $${idx})`);
       params.push(`%${search}%`); idx++;

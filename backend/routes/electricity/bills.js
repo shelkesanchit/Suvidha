@@ -3,6 +3,50 @@ const router = express.Router();
 const { pool } = require('../../config/database');
 const { verifyToken } = require('../../middleware/auth');
 
+// ── Public fetch: GET /fetch/:consumerNumber (no auth — used by consumer kiosk) ──
+router.get('/fetch/:consumerNumber', async (req, res) => {
+  try {
+    const consumerNumber = req.params.consumerNumber.toUpperCase();
+
+    const accountResult = await pool.query(
+      `SELECT ca.id, ca.consumer_number, u.full_name AS consumer_name
+       FROM electricity_consumer_accounts ca
+       LEFT JOIN electricity_users u ON ca.user_id = u.id
+       WHERE ca.consumer_number = $1`,
+      [consumerNumber]
+    );
+
+    if (accountResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: `Consumer "${consumerNumber}" not found` });
+    }
+
+    const account = accountResult.rows[0];
+
+    const billsResult = await pool.query(
+      `SELECT id, bill_number, billing_month AS billing_period, created_at AS billing_date, due_date,
+              units_consumed AS consumption_units, energy_charges, fixed_charges,
+              tax_amount AS taxes, total_amount, status
+       FROM electricity_bills
+       WHERE consumer_account_id = $1
+       ORDER BY due_date DESC
+       LIMIT 10`,
+      [account.id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        consumer_number: account.consumer_number,
+        consumer_name: account.consumer_name || 'Registered Consumer',
+        bills: billsResult.rows,
+      },
+    });
+  } catch (error) {
+    console.error('Electricity bill fetch error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch bill' });
+  }
+});
+
 // Get all bills for a consumer
 router.get('/consumer/:consumerNumber', verifyToken, async (req, res) => {
   try {

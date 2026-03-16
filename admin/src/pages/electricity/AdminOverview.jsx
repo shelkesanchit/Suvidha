@@ -43,12 +43,10 @@ export default function AdminOverview() {
   const fetchAll = async (showToast = false) => {
     try {
       setRefreshing(true);
-      const [statsRes, appsRes, complaintsRes] = await Promise.all([
-        api.get('/admin/dashboard/stats'),
+      const [appsRes, complaintsRes] = await Promise.all([
         api.get('/admin/applications?status=submitted'),
         api.get('/admin/complaints?status=open'),
       ]);
-      setStats(statsRes.data.data || statsRes.data);
       const apps = Array.isArray(appsRes.data) ? appsRes.data : (appsRes.data.data || []);
       const complaints = Array.isArray(complaintsRes.data) ? complaintsRes.data : (complaintsRes.data.data || []);
       setRecentApps(apps.slice(0, 8));
@@ -76,17 +74,6 @@ export default function AdminOverview() {
       </Box>
     );
   }
-
-  const s = stats || {};
-  const monthRevenue = Number(s.month_revenue || 0);
-  const todayRevenue = Number(s.today_revenue || 0);
-
-  const quickActions = [
-    { label: 'Pending Applications', count: s.pending_applications || 0, color: '#f57c00', bg: '#fff3e0', path: '/electricity/applications', icon: PendingIcon },
-    { label: 'Open Complaints',       count: s.open_complaints || 0,      color: '#d32f2f', bg: '#ffebee', path: '/electricity/complaints',   icon: WarnIcon },
-    { label: 'Submit Meter Readings', count: null,                         color: '#1976d2', bg: '#e3f2fd', path: '/electricity/meter-readings', icon: BoltIcon },
-    { label: 'View All Consumers',    count: s.total_customers || 0,      color: '#2e7d32', bg: '#e8f5e9', path: '/electricity/consumers',    icon: PeopleIcon },
-  ];
 
   return (
     <Box>
@@ -243,64 +230,6 @@ export default function AdminOverview() {
         </Grid>
       </Grid>
 
-      {/* Revenue Summary + Quick Actions */}
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ height: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', borderTop: '3px solid #7b1fa2' }}>
-            <CardContent sx={{ p: 2.5 }}>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>Revenue Summary</Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                <Box sx={{ p: 2, bgcolor: '#f3e5f5', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>Today's Collections</Typography>
-                  <Typography variant="h5" fontWeight={700} color="#7b1fa2">₹{todayRevenue.toLocaleString()}</Typography>
-                </Box>
-                <Box sx={{ p: 2, bgcolor: '#e8f5e9', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>This Month's Collections</Typography>
-                  <Typography variant="h5" fontWeight={700} color="#2e7d32">₹{monthRevenue.toLocaleString()}</Typography>
-                </Box>
-                <Button variant="outlined" size="small" fullWidth onClick={() => navigate('/electricity/reports')} endIcon={<ArrowIcon />} sx={{ mt: 0.5, borderColor: DEPT_COLOR, color: DEPT_COLOR, '&:hover': { borderColor: '#1565c0', color: '#1565c0' } }}>
-                  View Full Reports
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={8}>
-          <Card sx={{ height: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-            <CardContent sx={{ p: 2.5 }}>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>Quick Actions</Typography>
-              <Grid container spacing={1.5}>
-                {quickActions.map((qa) => (
-                  <Grid item xs={12} sm={6} key={qa.label}>
-                    <Box
-                      onClick={() => navigate(qa.path)}
-                      sx={{
-                        p: 2, borderRadius: 2, bgcolor: qa.bg, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 1.5,
-                        border: `1px solid ${qa.color}22`,
-                        transition: 'all 0.15s',
-                        '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.12)', transform: 'translateY(-2px)' },
-                      }}
-                    >
-                      <Box sx={{ width: 38, height: 38, borderRadius: 2, bgcolor: `${qa.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <qa.icon sx={{ color: qa.color, fontSize: 20 }} />
-                      </Box>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={600} color={qa.color} noWrap>{qa.label}</Typography>
-                        {qa.count !== null && (
-                          <Typography variant="caption" color="text.secondary">{qa.count} records</Typography>
-                        )}
-                      </Box>
-                      <ArrowIcon sx={{ color: qa.color, fontSize: 16, flexShrink: 0 }} />
-                    </Box>
-                  </Grid>
-                ))}
-              </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
     </Box>
   );
 }

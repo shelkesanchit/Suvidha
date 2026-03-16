@@ -541,6 +541,7 @@ router.get('/consumers', requireAdminOrStaff, async (req, res) => {
       conds.push(`(consumer_number ILIKE $${idx} OR full_name ILIKE $${idx} OR mobile ILIKE $${idx})`);
       vals.push(`%${req.query.search}%`); idx++;
     }
+    if (req.query.consumer_number) { conds.push(`consumer_number = $${idx++}`); vals.push(req.query.consumer_number); }
     if (req.query.consumer_type) { conds.push(`consumer_type = $${idx++}`); vals.push(req.query.consumer_type); }
 
     const where    = conds.length ? 'WHERE ' + conds.join(' AND ') : '';

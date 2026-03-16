@@ -372,7 +372,7 @@ router.put('/complaints/:id/status', async (req, res) => {
 // Get all consumers
 router.get('/consumers', async (req, res) => {
   try {
-    const { status, connection_type, page = 1, limit = 20 } = req.query;
+    const { status, connection_type, consumer_number, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
     const conditions = ['1=1'];
@@ -385,6 +385,10 @@ router.get('/consumers', async (req, res) => {
     if (connection_type) {
       params.push(connection_type);
       conditions.push(`connection_type = $${params.length}`);
+    }
+    if (consumer_number) {
+      params.push(consumer_number);
+      conditions.push(`consumer_number = $${params.length}`);
     }
 
     const countResult = await pool.query(

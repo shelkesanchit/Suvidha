@@ -107,6 +107,9 @@ router.patch('/users/:id/toggle-status', verifyToken, isAdmin, userController.to
 // Consumer Routes
 router.get('/consumers', verifyToken, isAdminOrStaff, consumerController.getConsumerAccounts);
 
+// Payment Collection Routes (admin counter payments, Razorpay ₹1 demo)
+router.use('/payments', require('./payments'));
+
 // Report Routes
 router.get('/reports/payments', verifyToken, isAdminOrStaff, reportController.getPaymentReports);
 

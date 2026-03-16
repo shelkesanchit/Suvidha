@@ -32,6 +32,7 @@ import {
   WaterDrop,
   ReceiptLong,
   ChevronLeft,
+  AccountBalanceWallet as PaymentsIcon,
 } from '@mui/icons-material';
 import { useAuth } from "../../contexts/AuthContext";
 import toast from 'react-hot-toast';
@@ -46,6 +47,7 @@ const menuItems = [
   { text: 'Applications', icon: <Description />, path: '/water/applications' },
   { text: 'Complaints', icon: <Report />, path: '/water/complaints' },
   { text: 'Consumers', icon: <People />, path: '/water/consumers' },
+  { text: 'Payments', icon: <PaymentsIcon />, path: '/water/payments' },
   { text: 'Reports', icon: <Assessment />, path: '/water/reports' },
   { text: 'Tariff Management', icon: <ReceiptLong />, path: '/water/tariff' },
   { text: 'Settings', icon: <Settings />, path: '/water/settings' },

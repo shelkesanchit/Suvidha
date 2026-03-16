@@ -12,6 +12,11 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000
 });
 
+// Prevent unhandled pool errors from crashing the process
+pool.on('error', (err) => {
+  console.error('Unexpected idle client error:', err.message);
+});
+
 // Test connection on startup
 pool.connect((err, client, release) => {
   if (err) {

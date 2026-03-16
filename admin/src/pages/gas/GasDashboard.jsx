@@ -34,6 +34,7 @@ import {
   ChevronLeft,
   PropaneTank as CylinderIcon,
   Security as RegulatoryIcon,
+  AccountBalanceWallet as PaymentsIcon,
 } from '@mui/icons-material';
 import { useAuth } from "../../contexts/AuthContext";
 import toast from 'react-hot-toast';
@@ -48,6 +49,7 @@ const menuItems = [
   { text: 'Applications', icon: <Description />, path: '/gas/applications' },
   { text: 'Complaints', icon: <Report />, path: '/gas/complaints' },
   { text: 'Consumers', icon: <People />, path: '/gas/consumers' },
+  { text: 'Payments', icon: <PaymentsIcon />, path: '/gas/payments' },
   { text: 'Cylinder Bookings', icon: <CylinderIcon />, path: '/gas/cylinders' },
   { text: 'Regulatory Ops', icon: <RegulatoryIcon />, path: '/gas/regulatory' },
   { text: 'Reports', icon: <Assessment />, path: '/gas/reports' },

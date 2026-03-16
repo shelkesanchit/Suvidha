@@ -21,6 +21,7 @@ import SystemSettings from './pages/electricity/SystemSettings';
 import TariffManagement from './pages/electricity/TariffManagement';
 import MeterReadingManagement from './pages/electricity/MeterReadingManagement';
 import ConsumerAccounts from './pages/electricity/ConsumerAccounts';
+import ElectricityPayments from './pages/electricity/Payments';
 
 // Gas Pages
 import GasDashboard from './pages/gas/GasDashboard';
@@ -33,6 +34,7 @@ import RegulatoryOperations from './pages/gas/RegulatoryOperations';
 import GasReports from './pages/gas/Reports';
 import GasTariffManagement from './pages/gas/TariffManagement';
 import GasSettings from './pages/gas/Settings';
+import GasPayments from './pages/gas/Payments';
 
 // Water Pages
 import WaterDashboard from './pages/water/WaterDashboard';
@@ -43,6 +45,7 @@ import WaterManageConsumers from './pages/water/ManageConsumers';
 import WaterReports from './pages/water/Reports';
 import WaterTariffManagement from './pages/water/TariffManagement';
 import WaterSettings from './pages/water/Settings';
+import WaterPayments from './pages/water/Payments';
 
 // Municipal Pages
 import MunicipalDashboard from './pages/municipal/MunicipalDashboard';
@@ -240,6 +243,7 @@ function AppRoutes() {
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<SystemSettings />} />
         <Route path="tariff" element={<TariffManagement />} />
+        <Route path="payments" element={<ElectricityPayments />} />
       </Route>
 
       {/* ============ GAS ROUTES ============ */}
@@ -268,6 +272,7 @@ function AppRoutes() {
         <Route path="reports" element={<GasReports />} />
         <Route path="tariff" element={<GasTariffManagement />} />
         <Route path="settings" element={<GasSettings />} />
+        <Route path="payments" element={<GasPayments />} />
       </Route>
 
       {/* ============ WATER ROUTES ============ */}
@@ -294,6 +299,7 @@ function AppRoutes() {
         <Route path="reports" element={<WaterReports />} />
         <Route path="tariff" element={<WaterTariffManagement />} />
         <Route path="settings" element={<WaterSettings />} />
+        <Route path="payments" element={<WaterPayments />} />
       </Route>
 
       {/* ============ MUNICIPAL ROUTES ============ */}
