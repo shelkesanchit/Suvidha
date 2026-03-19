@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -41,6 +41,9 @@ import {
   GasConnectionManagementForm,
   GasSafetyInfoForm,
 } from '../../components/gas';
+
+import { useServiceAutoOpen } from '../../components/voice/useServiceAutoOpen';
+import { useAccessibilityServicePage } from '../../components/accessibility';
 
 // PNG Services (Piped Natural Gas)
 const pngServices = [
@@ -146,6 +149,84 @@ const GasServicesPage = () => {
   const [gasType, setGasType] = useState(null); // null, 'png', 'lpg'
   const [selectedService, setSelectedService] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Voice command support - auto-open service from URL parameter
+  const { autoOpenServiceId, clearAutoOpen } = useServiceAutoOpen();
+
+  // Accessibility mode support - register all services for voice navigation
+  const allGasServices = [...pngServices, ...lpgServices];
+  const accessibilityServices = allGasServices.map(service => ({
+    id: service.id,
+    name: service.title,
+    keywords: [service.title.toLowerCase(), service.id.replace(/_/g, ' ')],
+    onSelect: () => {
+      if (service.id.startsWith('png_')) {
+        setGasType('png');
+      } else if (service.id.startsWith('lpg_')) {
+        setGasType('lpg');
+      }
+      handleServiceClick(service.id);
+    }
+  }));
+
+  const { isActive: isAccessibilityActive, selectedService: accessibilitySelectedService } =
+    useAccessibilityServicePage({
+      departmentId: 'gas',
+      services: accessibilityServices
+    });
+
+  // Handle accessibility mode service selection
+  useEffect(() => {
+    if (isAccessibilityActive && accessibilitySelectedService) {
+      const service = allGasServices.find(s => s.id === accessibilitySelectedService.id);
+      if (service) {
+        if (service.id.startsWith('png_')) {
+          setGasType('png');
+        } else if (service.id.startsWith('lpg_')) {
+          setGasType('lpg');
+        }
+        setSelectedService(service.id);
+        setDialogOpen(true);
+      }
+    }
+  }, [isAccessibilityActive, accessibilitySelectedService]);
+
+  // Handle auto-opening service via voice command
+  useEffect(() => {
+    if (autoOpenServiceId) {
+      console.log('Auto-opening gas service:', autoOpenServiceId);
+
+      // For gas, we need to handle both PNG and LPG services
+      // Default to LPG for general commands like 'new_connection'
+      const serviceIdMap = {
+        'new_connection': 'lpg_new_connection',
+        'billing': 'lpg_bill',
+        'complaint': 'lpg_complaint',
+        'track': 'lpg_track',
+      };
+
+      const actualServiceId = serviceIdMap[autoOpenServiceId] || autoOpenServiceId;
+
+      // Check if it's a valid service
+      const allServices = [...pngServices, ...lpgServices];
+      const validService = allServices.find(s => s.id === actualServiceId);
+
+      if (validService) {
+        console.log('Opening gas service:', validService.title);
+
+        // Set the appropriate gas type based on service ID
+        if (actualServiceId.startsWith('png_')) {
+          setGasType('png');
+        } else if (actualServiceId.startsWith('lpg_')) {
+          setGasType('lpg');
+        }
+
+        setSelectedService(actualServiceId);
+        setDialogOpen(true);
+      }
+      clearAutoOpen();
+    }
+  }, [autoOpenServiceId, clearAutoOpen]);
 
   const handleGasTypeSelect = (type) => {
     setGasType(type);

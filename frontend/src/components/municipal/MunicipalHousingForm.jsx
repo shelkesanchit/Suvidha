@@ -237,7 +237,7 @@ export default function MunicipalHousingForm({ onClose }) {
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'housing_application',
+        application_type: 'municipal_housing_application',
         application_data: { ...housing },
         submitted_at: ts,
       }).catch(console.warn);
@@ -349,7 +349,7 @@ export default function MunicipalHousingForm({ onClose }) {
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'encroachment_report',
+        application_type: 'municipal_encroachment_report',
         application_data: { ...enc },
         submitted_at: ts,
       }).catch(console.warn);

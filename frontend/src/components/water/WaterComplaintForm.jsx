@@ -20,6 +20,7 @@ import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
 import {
   CheckCircle as SuccessIcon,
+  CheckCircle as CheckIcon,
   WaterDrop,
   Speed,
   Build,
@@ -168,7 +169,7 @@ const WaterComplaintForm = ({ onClose }) => {
       });
     } catch (error) {
       console.error('Complaint submission error:', error);
-      toast.error(error.response?.data?.error || 'Failed to submit complaint');
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Failed to submit complaint. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -259,17 +260,41 @@ const WaterComplaintForm = ({ onClose }) => {
                     onClick={() => handleCategorySelect(category.value)}
                     sx={{
                       cursor: 'pointer',
+                      position: 'relative',
                       border: selectedCategory === category.value ? `3px solid ${category.color}` : '1px solid #e0e0e0',
-                      bgcolor: selectedCategory === category.value ? `${category.color}15` : 'white',
-                      transition: 'all 0.2s',
-                      '&:hover': { transform: 'scale(1.02)', boxShadow: 3 },
+                      bgcolor: selectedCategory === category.value ? `${category.color}25` : 'white',
+                      boxShadow: selectedCategory === category.value ? `0 4px 12px ${category.color}40` : 1,
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        transform: 'scale(1.03)',
+                        boxShadow: selectedCategory === category.value ? `0 6px 16px ${category.color}50` : 4,
+                        bgcolor: selectedCategory === category.value ? `${category.color}30` : '#f5f5f5',
+                        borderColor: category.color,
+                      },
                     }}
                   >
+                    {selectedCategory === category.value && (
+                      <CheckIcon
+                        sx={{
+                          position: 'absolute',
+                          top: 6,
+                          right: 6,
+                          fontSize: 22,
+                          color: category.color,
+                          bgcolor: 'white',
+                          borderRadius: '50%',
+                        }}
+                      />
+                    )}
                     <CardContent sx={{ textAlign: 'center', py: 2 }}>
                       <Box sx={{ color: category.color, mb: 1 }}>
                         {React.cloneElement(category.icon, { sx: { fontSize: 36 } })}
                       </Box>
-                      <Typography variant="body2" fontWeight={selectedCategory === category.value ? 700 : 400}>
+                      <Typography
+                        variant="body2"
+                        fontWeight={selectedCategory === category.value ? 700 : 400}
+                        sx={{ color: selectedCategory === category.value ? category.color : 'text.primary' }}
+                      >
                         {category.label}
                       </Typography>
                     </CardContent>

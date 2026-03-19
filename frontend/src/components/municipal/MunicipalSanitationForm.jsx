@@ -260,7 +260,7 @@ export default function MunicipalSanitationForm({ onClose }) {
     setSaniSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'sanitation_services',
+        application_type: 'sanitation_services_request',
         application_data: saniData,
         documents: [],
       });
@@ -269,14 +269,14 @@ export default function MunicipalSanitationForm({ onClose }) {
       setSaniRef(appNum);
       setSaniSubmitted(true);
       setReceiptAppNum(appNum);
-      setReceiptAppType('sanitation_services');
+      setReceiptAppType('sanitation_services_request');
       setReceiptFormData({ ...saniData });
       setSubmittedAt(ts);
       setShowReceipt(true);
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'sanitation_services',
+        application_type: 'sanitation_services_request',
         application_data: { ...saniData },
         submitted_at: ts,
       }).catch(console.warn);

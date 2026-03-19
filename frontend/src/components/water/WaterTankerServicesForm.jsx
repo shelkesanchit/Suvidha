@@ -96,17 +96,35 @@ const WaterTankerServicesForm = ({ onClose }) => {
       toast.error('Enter valid 10-digit mobile number');
       return false;
     }
-    if (selectedService !== 'recycled_water' && (!formData.full_name || !formData.address || !formData.ward)) {
-      toast.error('Please fill Name, Address, and Ward');
+    if (!formData.full_name) {
+      toast.error('Please enter Full Name');
+      return false;
+    }
+    if (selectedService !== 'recycled_water' && (!formData.address || !formData.ward)) {
+      toast.error('Please fill Address and Ward');
       return false;
     }
     if (selectedService === 'bulk_supply' && !formData.volume_kl) {
       toast.error('Please enter volume required');
       return false;
     }
-    if (selectedService === 'recycled_water' && !formData.consumer_number) {
-      toast.error('Please enter Consumer Number');
-      return false;
+    if (selectedService === 'recycled_water') {
+      if (!formData.consumer_number) {
+        toast.error('Please enter Consumer Number');
+        return false;
+      }
+      if (!formData.recycled_volume_kl) {
+        toast.error('Please enter Volume Required');
+        return false;
+      }
+      if (!formData.recycled_purpose) {
+        toast.error('Please select Purpose');
+        return false;
+      }
+      if (!formData.delivery_address) {
+        toast.error('Please enter Delivery Address');
+        return false;
+      }
     }
 
     return true;
@@ -137,11 +155,8 @@ const WaterTankerServicesForm = ({ onClose }) => {
         toast.error('Booking saved, but receipt email could not be sent.');
       });
     } catch (error) {
-      const num = 'WTK' + Date.now();
-      setBookingNumber(num);
-      setVerifiedEmail(email);
-      setSubmitted(true);
-      toast.success('Tanker booking confirmed!');
+      console.error('Submit error:', error);
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Failed to book tanker. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -333,12 +348,16 @@ const WaterTankerServicesForm = ({ onClose }) => {
                   <Alert severity="success">Treated secondary water is available at subsidised rates of ₹150/KL. Suitable for irrigation, construction, and industrial washing — NOT for drinking.</Alert>
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <TextField fullWidth required label="Consumer Number (CCN) *" name="consumer_number"
-                    value={formData.consumer_number} onChange={handleChange} placeholder="WTR2024001234" />
+                  <TextField fullWidth required label="Full Name *" name="full_name"
+                    value={formData.full_name} onChange={handleChange} />
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <TextField fullWidth required label="Mobile Number *" name="mobile"
                     value={formData.mobile} onChange={handleChange} inputProps={{ maxLength: 10 }} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth required label="Consumer Number (CCN) *" name="consumer_number"
+                    value={formData.consumer_number} onChange={handleChange} placeholder="WTR2024001234" />
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField fullWidth required label="Volume Required (KL) *" name="recycled_volume_kl"

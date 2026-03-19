@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -38,6 +38,8 @@ import {
   WaterConnectionManagementForm,
   WaterTankerServicesForm,
 } from '../../components/water';
+import { useServiceAutoOpen } from '../../components/voice/useServiceAutoOpen';
+import { useAccessibilityServicePage } from '../../components/accessibility';
 
 const waterServices = [
   {
@@ -94,6 +96,47 @@ const WaterServicesPage = () => {
   const navigate = useNavigate();
   const [selectedService, setSelectedService] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Voice command support - auto-open service from URL parameter
+  const { autoOpenServiceId, clearAutoOpen } = useServiceAutoOpen();
+
+  // Accessibility mode support - register services for voice navigation
+  const accessibilityServices = waterServices.map(service => ({
+    id: service.id,
+    name: service.title,
+    keywords: [service.title.toLowerCase(), service.id.replace('_', ' ')],
+    onSelect: () => handleServiceClick(service.id)
+  }));
+
+  const { isActive: isAccessibilityActive, selectedService: accessibilitySelectedService } =
+    useAccessibilityServicePage({
+      departmentId: 'water',
+      services: accessibilityServices
+    });
+
+  // Handle accessibility mode service selection
+  useEffect(() => {
+    if (isAccessibilityActive && accessibilitySelectedService) {
+      const service = waterServices.find(s => s.id === accessibilitySelectedService.id);
+      if (service) {
+        setSelectedService(service.id);
+        setDialogOpen(true);
+      }
+    }
+  }, [isAccessibilityActive, accessibilitySelectedService]);
+
+  // Handle auto-opening service via voice command
+  useEffect(() => {
+    if (autoOpenServiceId) {
+      // Verify the service ID is valid
+      const validService = waterServices.find(s => s.id === autoOpenServiceId);
+      if (validService) {
+        setSelectedService(autoOpenServiceId);
+        setDialogOpen(true);
+      }
+      clearAutoOpen();
+    }
+  }, [autoOpenServiceId, clearAutoOpen]);
 
   const handleServiceClick = (serviceId) => {
     setSelectedService(serviceId);

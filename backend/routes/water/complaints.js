@@ -5,6 +5,31 @@ const supabase = require('../../config/supabase');
 
 const BUCKET = process.env.WATER_STORAGE_BUCKET || 'water-documents';
 
+// Map frontend complaint categories to database-valid values
+const categoryMap = {
+  'no-water': 'no_water_supply',
+  'low-pressure': 'low_pressure',
+  'contaminated': 'water_quality',
+  'pipeline-leak': 'pipeline_leakage',
+  'pipe-burst': 'pipeline_leakage',
+  'meter-stopped': 'meter_fault',
+  'meter-reading-dispute': 'billing_dispute',
+  'high-bill': 'billing_dispute',
+  'water-sampling': 'water_quality',
+  'other': 'other',
+};
+
+// Map frontend urgency values to database-valid values
+const urgencyMap = {
+  'normal': 'medium',
+  'urgent': 'high',
+  'emergency': 'critical',
+  'low': 'low',
+  'medium': 'medium',
+  'high': 'high',
+  'critical': 'critical',
+};
+
 async function uploadDocToSupabase(doc, folder) {
   if (!doc || !doc.data) return null;
   try {
@@ -59,6 +84,10 @@ router.post('/submit', async (req, res) => {
       }
     }
 
+    // Map frontend values to database-valid values
+    const dbCategory = categoryMap[complaint_data.complaint_category] || 'other';
+    const dbUrgency = urgencyMap[complaint_data.urgency] || 'medium';
+
     const insertResult = await pool.query(
       `INSERT INTO water_complaints
        (complaint_number, consumer_id, consumer_number, contact_name, mobile, email,
@@ -74,9 +103,9 @@ router.post('/submit', async (req, res) => {
         complaint_data.email || null,
         complaint_data.address || null,
         complaint_data.ward || null,
-        complaint_data.complaint_category,
+        dbCategory,
         complaint_data.description,
-        complaint_data.urgency || 'medium',
+        dbUrgency,
         JSON.stringify(processedDocs),
         JSON.stringify(stageHistory)
       ]

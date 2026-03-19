@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -36,6 +36,9 @@ import {
   ElectricityValueAddedForm,
   TrackingForm,
 } from '../../components/electricity';
+
+import { useServiceAutoOpen } from '../../components/voice/useServiceAutoOpen';
+import { useAccessibilityServicePage } from '../../components/accessibility';
 
 const services = [
   {
@@ -98,6 +101,62 @@ const ElectricityServicesPage = () => {
   const navigate = useNavigate();
   const [selectedService, setSelectedService] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Voice command support - auto-open service from URL parameter
+  const { autoOpenServiceId, clearAutoOpen } = useServiceAutoOpen();
+
+  // Accessibility mode support - register services for voice navigation
+  const accessibilityServices = services.map(service => ({
+    id: service.id,
+    name: service.title,
+    keywords: [service.title.toLowerCase(), service.id.replace('_', ' ')],
+    onSelect: () => handleServiceClick(service)
+  }));
+
+  const { isActive: isAccessibilityActive, selectedService: accessibilitySelectedService } =
+    useAccessibilityServicePage({
+      departmentId: 'electricity',
+      services: accessibilityServices
+    });
+
+  // Handle accessibility mode service selection
+  useEffect(() => {
+    if (isAccessibilityActive && accessibilitySelectedService) {
+      const service = services.find(s => s.id === accessibilitySelectedService.id);
+      if (service) {
+        setSelectedService(service);
+        setDialogOpen(true);
+      }
+    }
+  }, [isAccessibilityActive, accessibilitySelectedService]);
+
+  // Handle auto-opening service via voice command
+  useEffect(() => {
+    if (autoOpenServiceId) {
+      console.log('Auto-opening electricity service:', autoOpenServiceId);
+
+      // Map voice command service IDs to actual service IDs
+      const serviceIdMap = {
+        'new_connection': 'new_connections',
+        'billing': 'billing',
+        'complaint': 'complaints',  // Note: voice uses 'complaint', page uses 'complaints'
+        'complaints': 'complaints',
+        'track': 'track',
+        'connection_mgmt': 'connection_mgmt',
+        'value_added': 'value_added'
+      };
+
+      const actualServiceId = serviceIdMap[autoOpenServiceId] || autoOpenServiceId;
+      const validService = services.find(s => s.id === actualServiceId);
+
+      if (validService) {
+        console.log('Opening electricity service:', validService.title);
+        setSelectedService(validService);
+        setDialogOpen(true);
+      }
+      clearAutoOpen();
+    }
+  }, [autoOpenServiceId, clearAutoOpen]);
 
   const handleServiceClick = (service) => {
     setSelectedService(service);

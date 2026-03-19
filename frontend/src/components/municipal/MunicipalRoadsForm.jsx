@@ -262,7 +262,7 @@ export default function MunicipalRoadsForm({ onClose }) {
           }))
       );
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'road_damage_complaint',
+        application_type: 'road_damage_report',
         application_data: potData,
         documents: docsArray,
       });
@@ -271,14 +271,14 @@ export default function MunicipalRoadsForm({ onClose }) {
       setPotSubmitted(true);
       const ts = new Date().toISOString();
       setReceiptAppNum(appNum);
-      setReceiptAppType('pothole_complaint');
+      setReceiptAppType('road_damage_report');
       setReceiptFormData({ ...potData });
       setSubmittedAt(ts);
       setShowReceipt(true);
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'pothole_complaint',
+        application_type: 'road_damage_report',
         application_data: { ...potData },
         submitted_at: ts,
       }).catch(console.warn);
@@ -370,7 +370,7 @@ export default function MunicipalRoadsForm({ onClose }) {
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'drain_complaint',
+        application_type: 'drain_manhole_complaint',
         application_data: { ...drainData },
         submitted_at: ts,
       }).catch(console.warn);

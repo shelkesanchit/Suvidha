@@ -292,7 +292,22 @@ const ManageComplaints = () => {
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="subtitle2" color="text.secondary">Description</Typography>
-                <Typography variant="body1" gutterBottom>{selectedComplaint.description}</Typography>
+                <Typography variant="body1" gutterBottom sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {(() => {
+                    const desc = selectedComplaint.description || '';
+                    // Remove JSON data that may be appended after [Additional Info]
+                    const additionalInfoIndex = desc.indexOf('[Additional Info]');
+                    if (additionalInfoIndex !== -1) {
+                      return desc.substring(0, additionalInfoIndex).trim();
+                    }
+                    // Also check for raw JSON starting with {
+                    const jsonStartIndex = desc.indexOf('{"');
+                    if (jsonStartIndex !== -1) {
+                      return desc.substring(0, jsonStartIndex).trim();
+                    }
+                    return desc;
+                  })()}
+                </Typography>
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="subtitle2" color="text.secondary">Address</Typography>

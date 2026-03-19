@@ -235,7 +235,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
     return types[tab];
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (email) => {
     const err = validateStep();
     if (err) { toast.error(err); return; }
     setSubmitting(true);
@@ -255,7 +255,7 @@ const MunicipalHealthEnvForm = ({ onClose }) => {
       );
       const appType = getAppType();
       const emailMap = [formData.hl_email, formData.fe_proprietor_email, formData.fv_email, formData.ec_email];
-      const emailVal = verifiedEmail || emailMap[tab] || '';
+      const emailVal = email || emailMap[tab] || '';
       const res = await api.post('/municipal/applications/submit', {
         application_type: appType,
         application_data: formData,

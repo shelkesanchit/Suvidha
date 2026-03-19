@@ -67,7 +67,7 @@ const statusLabels = {
 };
 
 const categoryLabels = {
-  // Complaint categories
+  // Complaint categories (frontend values)
   'no-water': 'No Water Supply',
   'low-pressure': 'Low Pressure',
   contaminated: 'Contaminated Water',
@@ -77,6 +77,15 @@ const categoryLabels = {
   'illegal-connection': 'Illegal Connection',
   sewerage: 'Sewerage Issue',
   other: 'Other',
+  // Complaint categories (database mapped values)
+  no_water_supply: 'No Water Supply',
+  low_pressure: 'Low Pressure',
+  water_quality: 'Water Quality Issue',
+  pipeline_leakage: 'Pipeline Leak',
+  meter_fault: 'Meter Fault',
+  billing_dispute: 'Billing Dispute',
+  sewerage_blockage: 'Sewerage Blockage',
+  tanker_delay: 'Tanker Delay',
   // Application types
   new_connection: 'New Connection',
   reconnection: 'Reconnection',

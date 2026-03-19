@@ -19,6 +19,28 @@ import {
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
+const parseDescription = (raw) => {
+  if (!raw) return { text: '', extra: null };
+  const marker = '\n\n[Additional Info]\n';
+  const idx = raw.indexOf(marker);
+  if (idx === -1) return { text: raw.trim(), extra: null };
+  const text = raw.substring(0, idx).trim();
+  try {
+    const extra = JSON.parse(raw.substring(idx + marker.length));
+    return { text, extra };
+  } catch {
+    return { text: raw.trim(), extra: null };
+  }
+};
+
+const extraLabels = {
+  preferred_visit_date: 'Preferred Visit Date',
+  preferred_visit_slot: 'Preferred Slot',
+  address: 'Address',
+  landmark: 'Landmark',
+  additional_information: 'Additional Information',
+};
+
 const GasTrackingForm = ({ onClose, gasType = 'lpg' }) => {
   const isPNG = gasType === 'png';
   const [tab, setTab] = useState(0); // 0 application, 1 complaint
@@ -126,7 +148,36 @@ const GasTrackingForm = ({ onClose, gasType = 'lpg' }) => {
               <Grid item xs={12} sm={6}><Typography variant="body2" color="text.secondary">Status</Typography><Typography>{statusText}</Typography></Grid>
               <Grid item xs={12} sm={6}><Typography variant="body2" color="text.secondary">Name</Typography><Typography>{result.full_name || result.applicant_name || 'N/A'}</Typography></Grid>
               <Grid item xs={12} sm={6}><Typography variant="body2" color="text.secondary">Mobile</Typography><Typography>{result.mobile || result.applicant_phone || 'N/A'}</Typography></Grid>
-              <Grid item xs={12}><Typography variant="body2" color="text.secondary">Description</Typography><Typography>{result.description || 'N/A'}</Typography></Grid>
+              <Grid item xs={12}>
+                {(() => {
+                  const { text, extra } = parseDescription(result.description);
+                  return (
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Description</Typography>
+                      <Box sx={{ bgcolor: 'grey.50', border: '1px solid', borderColor: 'grey.200', borderRadius: 1, p: 1.5 }}>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7 }}>
+                          {text || 'N/A'}
+                        </Typography>
+                      </Box>
+                      {extra && (
+                        <Box sx={{ mt: 1.5 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Additional Details</Typography>
+                          <Box sx={{ bgcolor: 'grey.50', border: '1px solid', borderColor: 'grey.200', borderRadius: 1, p: 1.5 }}>
+                            {Object.entries(extraLabels).map(([key, label]) =>
+                              extra[key] ? (
+                                <Box key={key} sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
+                                  <Typography variant="body2" color="text.secondary" sx={{ minWidth: 140, flexShrink: 0 }}>{label}:</Typography>
+                                  <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>{extra[key]}</Typography>
+                                </Box>
+                              ) : null
+                            )}
+                          </Box>
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })()}
+              </Grid>
             </Grid>
           </Paper>
         )}

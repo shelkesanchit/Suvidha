@@ -29,6 +29,18 @@ const PROPERTY_TYPES = [
   'Agricultural (not taxable)', 'Government/public',
 ];
 
+// Load Razorpay script
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) { resolve(true); return; }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 function TabPanel({ value, index, children }) {
   return value === index ? <Box sx={{ pt: 2 }}>{children}</Box> : null;
 }
@@ -90,10 +102,13 @@ export default function MunicipalPropertyTaxForm({ onClose }) {
 
   /* ─── Tab 0 — Pay Property Tax ──────────────────────────────────────────── */
   const [billData, setBillData]     = useState(null);
-  const [t0, setT0]                 = useState({ property_id: '', payment_method: '' });
+  const [t0, setT0]                 = useState({ property_id: '', payment_method: '', email: '' });
   const [t0Submitting, setT0Submitting] = useState(false);
   const [t0Submitted, setT0Submitted]   = useState(false);
   const [t0Ref, setT0Ref]               = useState('');
+  const [paymentStep, setPaymentStep]   = useState('bill'); // 'bill' | 'otp' | 'success'
+  const [paymentOtp, setPaymentOtp]     = useState('');
+  const [receiptData, setReceiptData]   = useState(null);
 
   /* ─── Tab 1 — Self-Assessment ────────────────────────────────────────────── */
   const [t1, setT1] = useState({
@@ -296,8 +311,97 @@ export default function MunicipalPropertyTaxForm({ onClose }) {
 
   /* ─── Submit: Tab 0 ──────────────────────────────────────────────────────── */
   const handleT0Submit = async (email) => {
-    if (!billData)              return toast.error('Please fetch the bill first');
-    if (!t0.payment_method)     return toast.error('Please select a Payment Method');
+    if (!billData) return toast.error('Please fetch the bill first');
+    if (!t0.payment_method) return toast.error('Please select a Payment Method');
+    if (!t0.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t0.email)) {
+      return toast.error('Please enter a valid email address for payment');
+    }
+
+    // Only use Razorpay for online payment methods
+    if (['UPI', 'Net Banking', 'Credit/Debit Card'].includes(t0.payment_method)) {
+      await handleRazorpayPayment(email);
+    } else {
+      // For cash/counter payments, proceed directly
+      await handleDirectPayment(email);
+    }
+  };
+
+  const handleRazorpayPayment = async (email) => {
+    setT0Submitting(true);
+    try {
+      // 1. Create Razorpay order
+      const orderRes = await api.post('/municipal/payments/create-order', {
+        amount: billData.totalDue,
+        application_number: billData.property_id || t0.property_id,
+        payer_name: billData.owner,
+        mobile: billData.mobile || '9999999999',
+        payment_type: 'property_tax',
+      });
+
+      if (!orderRes.data?.success) {
+        toast.error(orderRes.data?.message || 'Could not create payment order');
+        return;
+      }
+
+      const { order_id, amount, currency, razorpay_key } = orderRes.data.data;
+
+      // 2. Load Razorpay script
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        toast.error('Failed to load payment gateway. Check your internet connection.');
+        return;
+      }
+
+      // 3. Open Razorpay checkout
+      const options = {
+        key: razorpay_key,
+        amount,
+        currency,
+        order_id,
+        name: 'Municipal Corporation',
+        description: `Property Tax Payment — ${t0.property_id}`,
+        prefill: {
+          name: billData.owner,
+          email: t0.email,
+        },
+        theme: { color: HEADER_COLOR },
+        handler: async (response) => {
+          // 4. Verify payment
+          try {
+            const verifyRes = await api.post('/municipal/payments/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              bill_number: billData.bill_number || '',
+              amount: billData.totalDue,
+              mobile: billData.mobile || '',
+            });
+
+            if (verifyRes.data?.success) {
+              setPaymentStep('otp');
+              toast.success('Payment successful! Check your email for OTP.');
+            } else {
+              toast.error(verifyRes.data?.message || 'Payment verification failed');
+            }
+          } catch (verifyErr) {
+            toast.error(verifyErr.response?.data?.message || 'Verification failed. Contact support.');
+          }
+        },
+        modal: {
+          ondismiss: () => toast('Payment cancelled.'),
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Payment initiation failed. Please try again.');
+    } finally {
+      setT0Submitting(false);
+    }
+  };
+
+  const handleDirectPayment = async (email) => {
     setT0Submitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
@@ -312,9 +416,10 @@ export default function MunicipalPropertyTaxForm({ onClose }) {
       setReceiptFormData({ ...t0 });
       setSubmittedAt(ts);
       setShowReceipt(true);
+      setPaymentStep('success');
       toast.success('Payment submitted successfully!');
       api.post('/municipal/otp/send-receipt', {
-        email: email || '',
+        email: email || t0.email || '',
         application_number: appNum,
         application_type: 'property_tax_payment',
         application_data: { ...t0 },
@@ -322,6 +427,33 @@ export default function MunicipalPropertyTaxForm({ onClose }) {
       }).catch(console.warn);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit. Please try again.');
+    } finally {
+      setT0Submitting(false);
+    }
+  };
+
+  const handleVerifyPaymentOtp = async () => {
+    if (!paymentOtp.trim()) {
+      toast.error('Please enter the OTP');
+      return;
+    }
+    setT0Submitting(true);
+    try {
+      const res = await api.post('/municipal/payments/verify-otp', {
+        otp: paymentOtp.trim(),
+        consumer_number: t0.property_id,
+      });
+
+      if (res.data?.success) {
+        setReceiptData(res.data.data);
+        setPaymentStep('success');
+        setT0Submitted(true);
+        toast.success('OTP verified! Payment complete.');
+      } else {
+        toast.error(res.data?.message || 'Invalid OTP');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid or expired OTP');
     } finally {
       setT0Submitting(false);
     }
@@ -487,7 +619,63 @@ export default function MunicipalPropertyTaxForm({ onClose }) {
             TAB 0 — Pay Property Tax  (no stepper)
         ════════════════════════════════════════════════════════════ */}
         <TabPanel value={tab} index={0}>
-          {t0Submitted ? (
+          {paymentStep === 'success' && receiptData ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
+              <Typography variant="h5" color="success.main" gutterBottom fontWeight={700}>
+                Payment Successful!
+              </Typography>
+              <Chip
+                label={receiptData.receipt_number || t0Ref}
+                sx={{ bgcolor: HEADER_COLOR, color: 'white', fontSize: '1.1rem', py: 2.5, px: 3, mb: 3 }}
+              />
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Property tax payment confirmed. Receipt has been sent to your email.
+              </Alert>
+              <Button
+                variant="contained"
+                onClick={onClose}
+                sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR }, px: 5 }}
+              >
+                Close
+              </Button>
+            </Box>
+          ) : paymentStep === 'otp' ? (
+            <Box sx={{ py: 3 }}>
+              <Box sx={{ textAlign: 'center', mb: 3 }}>
+                <SuccessIcon sx={{ fontSize: 60, color: 'success.main', mb: 1 }} />
+                <Typography variant="h6" gutterBottom>Payment Successful via Razorpay</Typography>
+                <Typography variant="body2" color="textSecondary">
+                  An OTP has been sent to <strong>{t0.email}</strong>
+                </Typography>
+              </Box>
+
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Enter the 6-digit OTP to confirm and complete your property tax payment.
+              </Alert>
+
+              <TextField
+                fullWidth
+                label="Enter OTP"
+                value={paymentOtp}
+                onChange={(e) => setPaymentOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputProps={{ maxLength: 6, inputMode: 'numeric' }}
+                placeholder="6-digit OTP"
+                sx={{ mb: 2 }}
+              />
+
+              <Button
+                variant="contained"
+                color="success"
+                fullWidth
+                onClick={handleVerifyPaymentOtp}
+                disabled={t0Submitting || paymentOtp.length !== 6}
+                sx={{ py: 1.5 }}
+              >
+                {t0Submitting ? <CircularProgress size={24} /> : 'Verify OTP & Complete'}
+              </Button>
+            </Box>
+          ) : t0Submitted ? (
             <SuccessView
               refNumber={t0Ref}
               message="Property tax paid online reflects in records within 24 hours. Keep payment receipt for future reference."
@@ -563,12 +751,32 @@ export default function MunicipalPropertyTaxForm({ onClose }) {
                     </FormControl>
                   </Grid>
 
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      label="Email Address for OTP & Receipt *"
+                      type="email"
+                      value={t0.email}
+                      onChange={e => setT0(p => ({ ...p, email: e.target.value }))}
+                      placeholder="your@email.com"
+                      helperText="Receipt will be sent to this email"
+                    />
+                  </Grid>
+
+                  {['UPI', 'Net Banking', 'Credit/Debit Card'].includes(t0.payment_method) && (
+                    <Grid item xs={12}>
+                      <Alert severity="warning">
+                        Demo mode — Razorpay will charge <strong>₹1</strong> (not the full bill amount)
+                      </Alert>
+                    </Grid>
+                  )}
+
                   <Grid item xs={12}>
                     <Button
                       fullWidth variant="contained"
                       sx={{ bgcolor: HEADER_COLOR, '&:hover': { bgcolor: HOVER_COLOR } }}
-                      onClick={() => setShowOtpDialog(true)}
-                      disabled={t0Submitting}
+                      onClick={() => handleT0Submit(t0.email)}
+                      disabled={t0Submitting || !t0.email}
                       startIcon={t0Submitting ? <CircularProgress size={18} color="inherit" /> : null}
                     >
                       {t0Submitting ? 'Processing...' : 'Pay Now'}

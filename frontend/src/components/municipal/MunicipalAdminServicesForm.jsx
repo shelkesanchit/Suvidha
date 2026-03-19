@@ -148,8 +148,9 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
   const handleBack = () => setActiveStep(s => s - 1);
 
   // ── Submit ───────────────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
+  const handleSubmit = async (email) => {
     const appTypes = ['noc_certificate', 'domicile_certificate', 'residence_certificate', 'annual_subscription', 'advertisement_permit'];
+    const emailVal = email || formData.email || '';
     setSubmitting(true);
     try {
       const docsArray = await Promise.all(
@@ -174,10 +175,10 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
       const appNum = res.data?.data?.application_number || res.data?.reference_number || `MAS${Date.now()}`;
       const ts = new Date().toISOString();
       setRefNumber(appNum);
-      setReceiptInfo({ appNum, type: appType, data: { ...formData }, ts, email: verifiedEmail });
+      setReceiptInfo({ appNum, type: appType, data: { ...formData }, ts, email: emailVal });
       setShowReceipt(true);
       api.post('/municipal/otp/send-receipt', {
-        email: verifiedEmail,
+        email: emailVal,
         application_number: appNum,
         application_type: appType,
         application_data: { ...formData },
@@ -195,7 +196,7 @@ const MunicipalAdminServicesForm = ({ onClose }) => {
   const handleOtpVerified = (email) => {
     setShowOtpDialog(false);
     setVerifiedEmail(email);
-    handleSubmit();
+    handleSubmit(email);
   };
 
   // ── Fee info for subscriptions ───────────────────────────────────────────────

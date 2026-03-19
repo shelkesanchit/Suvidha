@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TTS Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 50px;
+            text-align: center;
+        }
+        button {
+            font-size: 24px;
+            padding: 20px 40px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        #log {
+            margin-top: 20px;
+            text-align: left;
+            background: #f0f0f0;
+            padding: 20px;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Windows TTS Test</h1>
+    <p>Click button to test if Windows Text-to-Speech works</p>
+
+    <button onclick="testTTS()">🔊 TEST VOICE - Click Me!</button>
+    <button onclick="checkVolume()">🔍 Check System</button>
+
+    <div id="log"></div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML += message + '<br>';
+            console.log(message);
+        }
+
+        function checkVolume() {
+            log('=== System Check ===');
+            log('Browser: ' + navigator.userAgent);
+
+            const synthesis = window.speechSynthesis;
+            if (!synthesis) {
+                log('❌ ERROR: Speech synthesis not supported!');
+                return;
+            }
+
+            log('✅ Speech synthesis supported');
+
+            const voices = synthesis.getVoices();
+            log('Available voices: ' + voices.length);
+
+            voices.forEach((voice, i) => {
+                log(`${i}. ${voice.name} (${voice.lang}) ${voice.localService ? 'LOCAL' : 'ONLINE'}`);
+            });
+
+            log('=== End Check ===');
+        }
+
+        function testTTS() {
+            log('');
+            log('=== Starting TTS Test ===');
+
+            const synthesis = window.speechSynthesis;
+
+            if (!synthesis) {
+                log('❌ ERROR: Speech synthesis not supported in this browser!');
+                alert('Speech synthesis not supported!');
+                return;
+            }
+
+            // Cancel any ongoing speech
+            synthesis.cancel();
+
+            // Get voices
+            const voices = synthesis.getVoices();
+            log('Total voices available: ' + voices.length);
+
+            if (voices.length === 0) {
+                log('❌ ERROR: No voices available!');
+                alert('No voices available! Check Windows Speech settings.');
+                return;
+            }
+
+            // Find a good English voice (prefer local, not online)
+            let voice = voices.find(v => v.lang.startsWith('en') && v.localService);
+            if (!voice) {
+                voice = voices.find(v => v.lang.startsWith('en'));
+            }
+            if (!voice) {
+                voice = voices[0];
+            }
+
+            log('Selected voice: ' + voice.name + ' (' + voice.lang + ')');
+
+            // Create utterance
+            const text = 'Hello! This is a test. Can you hear me clearly? If yes, Windows text to speech is working properly.';
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.voice = voice;
+            utterance.volume = 1.0; // MAX volume
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            utterance.lang = voice.lang;
+
+            log('Utterance settings:');
+            log('- Text: ' + text.substring(0, 50) + '...');
+            log('- Volume: ' + utterance.volume);
+            log('- Rate: ' + utterance.rate);
+            log('- Voice: ' + utterance.voice.name);
+
+            // Event handlers
+            utterance.onstart = function() {
+                log('✅ Speech STARTED');
+            };
+
+            utterance.onend = function() {
+                log('✅ Speech COMPLETED');
+                log('=== Test Complete ===');
+                log('');
+                log('DID YOU HEAR THE VOICE?');
+                log('If NO sound: Check Windows volume mixer!');
+            };
+
+            utterance.onerror = function(event) {
+                log('❌ Speech ERROR: ' + event.error);
+                if (event.error === 'synthesis-failed') {
+                    log('This voice might be broken. Try another browser or check Windows Speech settings.');
+                }
+            };
+
+            // Speak!
+            log('🔊 Calling synthesis.speak()...');
+            synthesis.speak(utterance);
+            log('synthesis.speaking: ' + synthesis.speaking);
+            log('synthesis.pending: ' + synthesis.pending);
+        }
+
+        // Load voices on page load
+        window.onload = function() {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.onvoiceschanged = function() {
+                    log('Voices loaded');
+                    checkVolume();
+                };
+                // Trigger voice loading
+                window.speechSynthesis.getVoices();
+
+                setTimeout(checkVolume, 500);
+            }
+        };
+    </script>
+</body>
+</html>

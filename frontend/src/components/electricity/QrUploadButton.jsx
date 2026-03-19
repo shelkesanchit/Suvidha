@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Box, Typography, CircularProgress, Alert, Tooltip,
+  Button, Box, Typography, CircularProgress, Alert, Tooltip, Chip,
 } from '@mui/material';
-import { QrCode2, CheckCircle, PhoneAndroid } from '@mui/icons-material';
+import { QrCode2, CheckCircle, PhoneAndroid, Wifi, Public } from '@mui/icons-material';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../../utils/api';
 
@@ -21,6 +21,7 @@ export default function QrUploadButton({ docKey, docLabel, onFileReceived }) {
   const [phase, setPhase] = useState('idle'); // idle | creating | waiting | received | error
   const [qrUrl, setQrUrl] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [externalAccess, setExternalAccess] = useState(false);
   const pollRef = useRef(null);
   const tokenRef = useRef('');
 
@@ -44,6 +45,7 @@ export default function QrUploadButton({ docKey, docLabel, onFileReceived }) {
       tokenRef.current = t;
       const url = r.data.qrUrl;
       setQrUrl(url);
+      setExternalAccess(r.data.externalAccess || false);
       setPhase('waiting');
 
       // Poll every 2 seconds
@@ -76,6 +78,7 @@ export default function QrUploadButton({ docKey, docLabel, onFileReceived }) {
       setPhase('idle');
       setQrUrl('');
       setErrorMsg('');
+      setExternalAccess(false);
     }, 300);
   };
 
@@ -122,6 +125,15 @@ export default function QrUploadButton({ docKey, docLabel, onFileReceived }) {
                 Scan with your phone to upload <strong>{docLabel}</strong>
               </Alert>
 
+              {/* Network access indicator */}
+              <Chip
+                icon={externalAccess ? <Public /> : <Wifi />}
+                label={externalAccess ? "Works from any network" : "Same WiFi required"}
+                color={externalAccess ? "success" : "warning"}
+                size="small"
+                sx={{ mb: 2 }}
+              />
+
               {/* QR Code */}
               <Box
                 sx={{
@@ -152,6 +164,14 @@ export default function QrUploadButton({ docKey, docLabel, onFileReceived }) {
                   Waiting for upload… (expires in 10 min)
                 </Typography>
               </Box>
+
+              {!externalAccess && (
+                <Alert severity="warning" sx={{ mt: 2, textAlign: 'left' }}>
+                  <Typography variant="caption">
+                    Your phone must be connected to the <strong>same WiFi network</strong> as this device.
+                  </Typography>
+                </Alert>
+              )}
             </Box>
           )}
 

@@ -14,11 +14,13 @@ const TYPE_META = {
   death_certificate:               { department: 'vital_records',  prefix: 'MDEATH' },
   cert_correction:                 { department: 'vital_records',  prefix: 'MCORR'  },
   marriage_registration:           { department: 'vital_records',  prefix: 'MMARR'  },
+  marriage_certificate_reprint:    { department: 'vital_records',  prefix: 'MMCRP'  },
   // Building
   building_plan_approval:          { department: 'building',       prefix: 'MBPA'   },
   construction_commencement_notice:{ department: 'building',       prefix: 'MCCN'   },
   occupancy_certificate:           { department: 'building',       prefix: 'MOCC'   },
   // Grievance
+  grievance:                       { department: 'grievance',      prefix: 'MGRV'   },
   grievance_lodge:                 { department: 'grievance',      prefix: 'MGRV'   },
   rti_application:                 { department: 'grievance',      prefix: 'MRTI'   },
   appointment_booking:             { department: 'grievance',      prefix: 'MAPPT'  },
@@ -49,6 +51,14 @@ const TYPE_META = {
   advertisement_permit:            { department: 'admin_services', prefix: 'MADVP'  },
   // Trade license
   new_trade_license:               { department: 'trade_license',  prefix: 'MNTL'   },
+  trade_license_renewal:           { department: 'trade_license',  prefix: 'MTLR'   },
+  // Property Tax
+  property_tax_payment:            { department: 'property_tax',   prefix: 'MPTXP'  },
+  property_self_assessment:        { department: 'property_tax',   prefix: 'MPSA'   },
+  self_assessment:                 { department: 'property_tax',   prefix: 'MPSA'   },
+  property_assessment_revision:    { department: 'property_tax',   prefix: 'MPAR'   },
+  tax_revision:                    { department: 'property_tax',   prefix: 'MPAR'   },
+  property_mutation:               { department: 'property_tax',   prefix: 'MPMUT'  },
 };
 
 async function ensureBucket() {

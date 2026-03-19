@@ -17,6 +17,7 @@ import {
   Grid,
   IconButton,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { Visibility, Refresh, Search } from '@mui/icons-material';
@@ -34,40 +35,61 @@ const DEPT_LABELS = {
   sanitation: 'Sanitation',
   trade_license: 'Trade License',
   admin_services: 'Admin Services',
+  property_tax: 'Property Tax',
   general: 'General',
 };
 
 const APP_TYPE_LABELS = {
+  // Vital Records
   birth_certificate: 'Birth Certificate',
   death_certificate: 'Death Certificate',
-  marriage_certificate: 'Marriage Certificate',
-  domicile_certificate: 'Domicile Certificate',
+  cert_correction: 'Certificate Correction',
+  marriage_registration: 'Marriage Registration',
+  marriage_certificate_reprint: 'Marriage Certificate Reprint',
+  // Building
   building_plan_approval: 'Building Plan Approval',
-  completion_certificate: 'Completion Certificate',
+  construction_commencement_notice: 'Construction Commencement',
   occupancy_certificate: 'Occupancy Certificate',
-  demolition_permission: 'Demolition Permission',
-  public_grievance: 'Public Grievance',
-  rtl_application: 'RTI Application',
-  health_license: 'Health License',
+  // Grievance / RTI
+  grievance: 'Grievance',
+  grievance_lodge: 'Grievance Lodge',
+  rti_application: 'RTI Application',
+  appointment_booking: 'Appointment Booking',
+  // Health & Environment
+  health_hygiene_license: 'Health/Hygiene License',
   food_establishment_license: 'Food Establishment License',
-  environmental_noc: 'Environmental NOC',
-  housing_scheme_application: 'Housing Scheme Application',
-  tenement_registration: 'Tenement Registration',
-  road_repair_request: 'Road Repair Request',
-  road_cutting_permission: 'Road Cutting Permission',
-  street_light_complaint: 'Street Light Complaint',
-  garbage_collection_complaint: 'Garbage Collection',
-  drainage_repair: 'Drainage Repair',
+  fogging_vector_control: 'Fogging/Vector Control',
+  environmental_clearance: 'Environmental Clearance',
+  // Housing
+  municipal_housing_application: 'Housing Application',
+  municipal_quarter_rent_payment: 'Quarter Rent Payment',
+  municipal_encroachment_report: 'Encroachment Report',
+  // Roads & Infrastructure
+  road_damage_report: 'Road Damage Report',
+  streetlight_complaint: 'Streetlight Complaint',
+  drain_manhole_complaint: 'Drain/Manhole Complaint',
+  road_cutting_permit: 'Road Cutting Permit',
+  // Sanitation
+  garbage_complaint: 'Garbage Complaint',
+  bulk_waste_pickup: 'Bulk Waste Pickup',
+  solid_waste_payment: 'Solid Waste Payment',
+  sanitation_services_request: 'Sanitation Services',
+  // Admin / Certificates
+  noc_certificate: 'NOC Certificate',
+  domicile_certificate: 'Domicile Certificate',
+  residence_certificate: 'Residence Certificate',
+  annual_subscription: 'Annual Subscription',
+  advertisement_permit: 'Advertisement Permit',
+  // Trade License
   new_trade_license: 'New Trade License',
   trade_license_renewal: 'Trade License Renewal',
-  trade_license_amendment: 'Trade License Amendment',
-  shop_establishment: 'Shop Establishment',
-  name_change: 'Name Change',
-  address_proof: 'Address Proof',
-  income_certificate: 'Income Certificate',
-  caste_certificate: 'Caste Certificate',
-  residence_certificate: 'Residence Certificate',
-  noc_certificate: 'NOC Certificate',
+  // Property Tax
+  property_tax_payment: 'Property Tax Payment',
+  property_self_assessment: 'Property Self Assessment',
+  self_assessment: 'Self Assessment',
+  property_assessment_revision: 'Assessment Revision',
+  tax_revision: 'Tax Revision',
+  property_mutation: 'Property Mutation',
 };
 
 const STATUS_OPTIONS = [
@@ -99,6 +121,7 @@ const ManageApplications = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [updateForm, setUpdateForm] = useState({ status: '', remarks: '', current_stage: '' });
   const [processing, setProcessing] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     fetchApplications();
@@ -125,10 +148,23 @@ const ManageApplications = () => {
     fetchApplications();
   };
 
-  const handleViewDetails = (app) => {
-    setSelectedApp(app);
-    setUpdateForm({ status: app.status || '', remarks: '', current_stage: app.current_stage || '' });
-    setDetailsOpen(true);
+  const handleViewDetails = async (app) => {
+    try {
+      setLoadingDetails(true);
+      setDetailsOpen(true);
+      // Fetch full application details including documents and application_data
+      const response = await api.get(`/municipal/admin/applications/${app.id}`);
+      const fullApp = response.data.data || app;
+      setSelectedApp(fullApp);
+      setUpdateForm({ status: fullApp.status || '', remarks: '', current_stage: fullApp.current_stage || '' });
+    } catch (error) {
+      console.error('Failed to fetch application details:', error);
+      toast.error('Failed to load application details');
+      setSelectedApp(app);
+      setUpdateForm({ status: app.status || '', remarks: '', current_stage: app.current_stage || '' });
+    } finally {
+      setLoadingDetails(false);
+    }
   };
 
   const handleStatusUpdate = async () => {
@@ -270,7 +306,11 @@ const ManageApplications = () => {
       <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Application Details & Status Update</DialogTitle>
         <DialogContent dividers>
-          {selectedApp && (
+          {loadingDetails ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+              <CircularProgress />
+            </Box>
+          ) : selectedApp && (
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Application Number</Typography>
@@ -357,6 +397,77 @@ const ManageApplications = () => {
                   placeholder="Add remarks or notes..."
                 />
               </Grid>
+
+              {/* Documents Section */}
+              {selectedApp.documents && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2, mb: 1 }}>
+                    Uploaded Documents
+                  </Typography>
+                  {(() => {
+                    try {
+                      const docs = typeof selectedApp.documents === 'string'
+                        ? JSON.parse(selectedApp.documents)
+                        : selectedApp.documents;
+                      if (Array.isArray(docs) && docs.length > 0) {
+                        return docs.map((doc, idx) => (
+                          <Box key={idx} sx={{ mb: 1, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                            <Grid container spacing={1} alignItems="center">
+                              <Grid item xs={12} md={4}>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {doc.documentType || doc.document_type || 'Document'}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} md={4}>
+                                <Typography variant="caption" color="text.secondary">
+                                  {doc.name || doc.file_name || 'file'} ({doc.size ? `${(doc.size / 1024).toFixed(1)} KB` : 'N/A'})
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} md={4}>
+                                {doc.url && (
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    href={doc.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    View/Download
+                                  </Button>
+                                )}
+                              </Grid>
+                            </Grid>
+                          </Box>
+                        ));
+                      } else {
+                        return <Typography variant="body2" color="text.secondary">No documents uploaded</Typography>;
+                      }
+                    } catch (e) {
+                      return <Typography variant="body2" color="error">Error loading documents</Typography>;
+                    }
+                  })()}
+                </Grid>
+              )}
+
+              {/* Application Data Section */}
+              {selectedApp.application_data && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2, mb: 1 }}>
+                    Application Data
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2, maxHeight: 300, overflow: 'auto' }}>
+                    <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                      {JSON.stringify(
+                        typeof selectedApp.application_data === 'string'
+                          ? JSON.parse(selectedApp.application_data)
+                          : selectedApp.application_data,
+                        null,
+                        2
+                      )}
+                    </pre>
+                  </Paper>
+                </Grid>
+              )}
             </Grid>
           )}
         </DialogContent>

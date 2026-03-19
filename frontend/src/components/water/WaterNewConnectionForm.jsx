@@ -300,7 +300,19 @@ const WaterNewConnectionForm = ({ onClose }) => {
       }).catch(console.warn);
     } catch (error) {
       console.error('Submit error:', error);
-      toast.error(error.response?.data?.error || 'Failed to submit application. Please try again.');
+      // Handle different error types
+      let errorMessage = 'Failed to submit application. Please try again.';
+      if (error.response) {
+        // Server responded with error
+        errorMessage = error.response.data?.message || error.response.data?.error || errorMessage;
+      } else if (error.request) {
+        // Request was made but no response (network error)
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else {
+        // Error in request setup
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }

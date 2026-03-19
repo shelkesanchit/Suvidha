@@ -234,7 +234,7 @@ export default function MunicipalBirthDeathCertForm({ onClose }) {
     setBirthSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'municipal_birth_certificate',
+        application_type: 'birth_certificate',
         application_data: { ...birth },
       });
       const appNum = res.data?.reference_number || `MBC-${Date.now()}`;
@@ -323,7 +323,7 @@ export default function MunicipalBirthDeathCertForm({ onClose }) {
     setDeathSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'municipal_death_certificate',
+        application_type: 'death_certificate',
         application_data: { ...death },
       });
       const appNum = res.data?.reference_number || `MDC-${Date.now()}`;
@@ -425,21 +425,21 @@ export default function MunicipalBirthDeathCertForm({ onClose }) {
     setCorrSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'municipal_birth_death_correction',
+        application_type: 'cert_correction',
         application_data: { ...corr },
       });
       const appNum = res.data?.reference_number || `MBDC-${Date.now()}`;
       const ts = new Date().toISOString();
       setCorrRefNumber(appNum);
       setReceiptAppNum(appNum);
-      setReceiptAppType('certificate_correction');
+      setReceiptAppType('cert_correction');
       setReceiptFormData({ ...corr });
       setSubmittedAt(ts);
       setShowReceipt(true);
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'certificate_correction',
+        application_type: 'cert_correction',
         application_data: { ...corr },
         submitted_at: ts,
       }).catch(console.warn);
@@ -448,7 +448,7 @@ export default function MunicipalBirthDeathCertForm({ onClose }) {
       const ts = new Date().toISOString();
       setCorrRefNumber(appNum);
       setReceiptAppNum(appNum);
-      setReceiptAppType('certificate_correction');
+      setReceiptAppType('cert_correction');
       setReceiptFormData({ ...corr });
       setSubmittedAt(ts);
       setShowReceipt(true);

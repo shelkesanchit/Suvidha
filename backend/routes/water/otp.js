@@ -130,6 +130,7 @@ router.post('/send-receipt', async (req, res) => {
     meter_reading: 'Water Meter Reading',
     disconnection: 'Water Disconnection Request',
     reconnection: 'Water Reconnection Request',
+    tanker_service: 'Water Tanker Service Booking',
   };
 
   const typeLabel = typeLabels[application_type] || application_type?.replace(/_/g, ' ') || 'Application';

@@ -46,3 +46,6 @@ backend/uploads/gas-documents/*
 *.pid
 *.seed
 *.pid.lock
+
+# VS Code Local History
+.history/

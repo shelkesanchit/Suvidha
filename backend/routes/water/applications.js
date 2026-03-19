@@ -54,6 +54,26 @@ router.post('/submit', async (req, res) => {
 
     const { application_type, application_data, documents } = req.body;
 
+    // Validation
+    if (!application_type || !application_data) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'application_type and application_data are required' });
+    }
+
+    const appData = application_data || {};
+    const fullName = appData.full_name || appData.applicant_name || '';
+    const mobile = appData.mobile || appData.contact_number || '';
+
+    if (!fullName || !mobile) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Full name and mobile number are required' });
+    }
+
+    if (!/^\d{10}$/.test(String(mobile))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Mobile number must be 10 digits' });
+    }
+
     const year = new Date().getFullYear();
     const typePrefix = {
       'new_connection': 'WNC', 'reconnection': 'WRC', 'disconnection': 'WDC',
@@ -66,11 +86,20 @@ router.post('/submit', async (req, res) => {
       timestamp: new Date().toISOString(), remarks: 'Application submitted successfully'
     }];
 
-    const appData = application_data || {};
-    const fullName = appData.full_name || appData.applicant_name || '';
-    const mobile = appData.mobile || appData.contact_number || '';
     const email = appData.email || null;
-    const address = appData.address || appData.property_address || '';
+
+    // Construct address from property details if not directly provided
+    let address = appData.address || appData.property_address || appData.delivery_address || '';
+    if (!address && (appData.house_flat_no || appData.building_name || appData.landmark)) {
+      const addressParts = [
+        appData.house_flat_no,
+        appData.building_name,
+        appData.landmark,
+        appData.ward ? `Ward ${appData.ward}` : ''
+      ].filter(Boolean);
+      address = addressParts.join(', ');
+    }
+
     const ward = appData.ward || null;
 
     const insertResult = await client.query(

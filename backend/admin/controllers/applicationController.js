@@ -27,10 +27,29 @@ const getAllApplications = async (req, res) => {
 
     const result = await pool.query(query, params);
 
+    // Process each row to extract full_name and email from application_data if not available from user
+    const processedRows = result.rows.map(row => {
+      let appData = {};
+      try {
+        appData = typeof row.application_data === 'string'
+          ? JSON.parse(row.application_data)
+          : (row.application_data || {});
+      } catch (e) {
+        appData = {};
+      }
+
+      return {
+        ...row,
+        full_name: row.user_name || appData.full_name || appData.name || 'Unknown',
+        email: row.user_email || appData.email || '',
+        phone: row.user_phone || appData.mobile || appData.phone || ''
+      };
+    });
+
     res.json({
       success: true,
-      data: result.rows,
-      pagination: { page: parseInt(page), limit: parseInt(limit), total: result.rows.length }
+      data: processedRows,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total: processedRows.length }
     });
   } catch (error) {
     console.error('Get applications error:', error);

@@ -89,6 +89,7 @@ const GasConnectionManagementForm = ({ onClose, gasType = 'lpg' }) => {
         application_data: {
           gas_type: gasType,
           consumer_number: formData.consumer_number,
+          applicant_name: formData.contact_name,
           contact_name: formData.contact_name,
           mobile: formData.mobile,
           email,

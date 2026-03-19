@@ -4,6 +4,10 @@ import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { Toaster } from 'react-hot-toast';
 import App from './App';
+import { TranslationProvider, FloatingLanguageSelector, AutoTranslator } from './i18n';
+import { VirtualKeyboardProvider, VirtualKeyboard, KeyboardGlobalListener, KeyboardToggle } from './components/keyboard';
+import { VoiceInputProvider, VoiceInput, VoiceCommandButton } from './components/voice';
+import { AccessibilityModeProvider, AccessibilityModeToggle, AccessibilityOverlay } from './components/accessibility';
 import './index.css';
 
 const theme = createTheme({
@@ -98,8 +102,26 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <App />
-        <Toaster 
+        <TranslationProvider>
+          <AutoTranslator>
+            <VirtualKeyboardProvider>
+              <VoiceInputProvider>
+                <AccessibilityModeProvider>
+                  <KeyboardGlobalListener />
+                  <KeyboardToggle />
+                  <FloatingLanguageSelector position="top-right" />
+                  <App />
+                  <VirtualKeyboard />
+                  <VoiceInput position="top-right" showLanguageSelector={true} />
+                  {/* <VoiceCommandButton position="bottom-left" /> */}
+                  <AccessibilityModeToggle position="bottom-right" showLabel={true} />
+                  <AccessibilityOverlay />
+                </AccessibilityModeProvider>
+              </VoiceInputProvider>
+            </VirtualKeyboardProvider>
+          </AutoTranslator>
+        </TranslationProvider>
+        <Toaster
           position="top-right"
           toastOptions={{
             duration: 4000,

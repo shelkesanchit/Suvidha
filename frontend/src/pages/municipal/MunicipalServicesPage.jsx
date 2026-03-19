@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Container, Typography, Card, CardContent, CardActionArea,
@@ -33,6 +33,9 @@ import {
   MunicipalGrievanceForm,
   MunicipalAdminServicesForm,
 } from '../../components/municipal';
+
+import { useServiceAutoOpen } from '../../components/voice/useServiceAutoOpen';
+import { useAccessibilityServicePage } from '../../components/accessibility';
 
 const municipalServices = [
   {
@@ -145,6 +148,64 @@ const renderFormComponent = (serviceId, onClose) => {
 const MunicipalServicesPage = () => {
   const navigate = useNavigate();
   const [openService, setOpenService] = useState(null);
+
+  // Voice command support - auto-open service from URL parameter
+  const { autoOpenServiceId, clearAutoOpen } = useServiceAutoOpen();
+
+  // Accessibility mode support - register services for voice navigation
+  const accessibilityServices = municipalServices.map(service => ({
+    id: service.id,
+    name: service.title,
+    keywords: [service.title.toLowerCase(), service.id.replace(/_/g, ' ')],
+    onSelect: () => setOpenService(service.id)
+  }));
+
+  const { isActive: isAccessibilityActive, selectedService: accessibilitySelectedService } =
+    useAccessibilityServicePage({
+      departmentId: 'municipal',
+      services: accessibilityServices
+    });
+
+  // Handle accessibility mode service selection
+  useEffect(() => {
+    if (isAccessibilityActive && accessibilitySelectedService) {
+      const service = municipalServices.find(s => s.id === accessibilitySelectedService.id);
+      if (service) {
+        setOpenService(service.id);
+      }
+    }
+  }, [isAccessibilityActive, accessibilitySelectedService]);
+
+  // Handle auto-opening service via voice command
+  useEffect(() => {
+    if (autoOpenServiceId) {
+      console.log('Auto-opening municipal service:', autoOpenServiceId);
+
+      // Map voice command service IDs to actual service IDs
+      const serviceIdMap = {
+        'property_tax': 'property_tax',
+        'birth_death': 'birth_death_cert',
+        'trade_license': 'trade_license',
+        'building_permit': 'building_permit',
+        'sanitation': 'sanitation',
+        'roads': 'roads',
+        'health_env': 'health_env',
+        'housing': 'housing',
+        'marriage': 'marriage',
+        'grievance': 'grievance_rti',
+        'admin_services': 'admin_services'
+      };
+
+      const actualServiceId = serviceIdMap[autoOpenServiceId] || autoOpenServiceId;
+      const validService = municipalServices.find(s => s.id === actualServiceId);
+
+      if (validService) {
+        console.log('Opening municipal service:', validService.title);
+        setOpenService(actualServiceId);
+      }
+      clearAutoOpen();
+    }
+  }, [autoOpenServiceId, clearAutoOpen]);
 
   const handleOpen = (serviceId) => setOpenService(serviceId);
   const handleClose = () => setOpenService(null);

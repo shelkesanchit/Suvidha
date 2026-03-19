@@ -1,5 +1,9 @@
 const { Pool } = require('pg');
+const dns = require('dns');
 require('dotenv').config();
+
+// Force IPv4 resolution on Windows (fixes ENOTFOUND errors)
+dns.setDefaultResultOrder('ipv4first');
 
 const connectionString = process.env.DATABASE_URL_POOLER || process.env.DATABASE_URL;
 

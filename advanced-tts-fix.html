@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ADVANCED TTS AUDIO FIX</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 30px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        button {
+            font-size: 20px;
+            padding: 15px 30px;
+            margin: 10px 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+        }
+        button:hover { background: #0056b3; }
+        .success { background: #28a745 !important; }
+        .danger { background: #dc3545 !important; }
+        #log {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .voice-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #e9ecef;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .voice-item:hover { background: #dee2e6; }
+        .voice-selected { background: #007bff !important; color: white; }
+        .big-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #dc3545;
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            border: 3px solid #dc3545;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 ADVANCED TTS AUDIO FIX</h1>
+        <div class="big-text">CLICK BUTTONS IN ORDER 1→2→3→4</div>
+
+        <button onclick="step1_checkSystem()">1️⃣ CHECK SYSTEM</button>
+        <button onclick="step2_enableAudio()">2️⃣ ENABLE AUDIO</button>
+        <button onclick="step3_testAllVoices()">3️⃣ TEST ALL VOICES</button>
+        <button onclick="step4_speak()">4️⃣ FINAL TEST</button>
+
+        <div id="voiceList"></div>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let audioContext = null;
+        let selectedVoice = null;
+        let allVoices = [];
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += '<div>' + time + ': ' + message + '</div>';
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function step1_checkSystem() {
+            log('<strong>=== STEP 1: SYSTEM CHECK ===</strong>');
+
+            // Check speech synthesis
+            if (!window.speechSynthesis) {
+                log('❌ ERROR: Speech synthesis NOT supported!');
+                return;
+            }
+            log('✅ Speech synthesis supported');
+
+            // Check audio context
+            try {
+                window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (window.AudioContext) {
+                    log('✅ Web Audio API supported');
+                } else {
+                    log('⚠️ Web Audio API not supported');
+                }
+            } catch (e) {
+                log('⚠️ Audio context error: ' + e.message);
+            }
+
+            // Check user agent
+            log('Browser: ' + navigator.userAgent.split(' ').slice(-2).join(' '));
+
+            // Load voices
+            setTimeout(() => {
+                allVoices = window.speechSynthesis.getVoices();
+                log('Total voices found: ' + allVoices.length);
+                if (allVoices.length === 0) {
+                    log('❌ NO VOICES! Windows TTS not installed properly!');
+                } else {
+                    log('✅ Voices loaded successfully');
+                    displayVoices();
+                }
+            }, 500);
+        }
+
+        function step2_enableAudio() {
+            log('<strong>=== STEP 2: ENABLE AUDIO ===</strong>');
+
+            try {
+                // Create audio context with user gesture
+                window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioContext = new AudioContext();
+
+                if (audioContext.state === 'suspended') {
+                    log('Resuming suspended audio context...');
+                    audioContext.resume().then(() => {
+                        log('✅ Audio context resumed');
+                    });
+                } else {
+                    log('✅ Audio context active: ' + audioContext.state);
+                }
+
+                // Test a beep sound
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.2);
+                log('🔊 Playing test beep...');
+
+            } catch (error) {
+                log('❌ Audio context error: ' + error.message);
+            }
+        }
+
+        function displayVoices() {
+            const voiceDiv = document.getElementById('voiceList');
+            voiceDiv.innerHTML = '<h3>Available Voices (Click to select):</h3>';
+
+            allVoices.forEach((voice, index) => {
+                const div = document.createElement('div');
+                div.className = 'voice-item';
+                div.innerHTML = `<strong>${voice.name}</strong> (${voice.lang}) ${voice.localService ? '[LOCAL]' : '[ONLINE]'}`;
+                div.onclick = () => selectVoice(voice, div);
+                voiceDiv.appendChild(div);
+            });
+        }
+
+        function selectVoice(voice, element) {
+            selectedVoice = voice;
+            document.querySelectorAll('.voice-item').forEach(el => el.classList.remove('voice-selected'));
+            element.classList.add('voice-selected');
+            log('Selected voice: ' + voice.name);
+        }
+
+        function step3_testAllVoices() {
+            log('<strong>=== STEP 3: TESTING ALL VOICES ===</strong>');
+
+            if (allVoices.length === 0) {
+                log('❌ No voices to test! Run step 1 first.');
+                return;
+            }
+
+            let voiceIndex = 0;
+
+            function testNextVoice() {
+                if (voiceIndex >= Math.min(allVoices.length, 5)) { // Test max 5 voices
+                    log('✅ Voice testing complete');
+                    return;
+                }
+
+                const voice = allVoices[voiceIndex];
+                log(`Testing voice ${voiceIndex + 1}: ${voice.name}`);
+
+                const utterance = new SpeechSynthesisUtterance(`Testing voice ${voice.name.split(' ')[1] || voice.name}`);
+                utterance.voice = voice;
+                utterance.volume = 1.0;
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+
+                utterance.onstart = () => {
+                    log(`✅ ${voice.name} - Started speaking`);
+                };
+
+                utterance.onend = () => {
+                    log(`✅ ${voice.name} - Finished speaking`);
+                    setTimeout(() => {
+                        voiceIndex++;
+                        testNextVoice();
+                    }, 1000);
+                };
+
+                utterance.onerror = (e) => {
+                    log(`❌ ${voice.name} - Error: ${e.error}`);
+                    setTimeout(() => {
+                        voiceIndex++;
+                        testNextVoice();
+                    }, 500);
+                };
+
+                window.speechSynthesis.speak(utterance);
+            }
+
+            testNextVoice();
+        }
+
+        function step4_speak() {
+            log('<strong>=== STEP 4: FINAL TEST ===</strong>');
+
+            const voice = selectedVoice || allVoices.find(v => v.lang.startsWith('en') && v.localService) || allVoices[0];
+
+            if (!voice) {
+                log('❌ No voice selected! Run previous steps first.');
+                return;
+            }
+
+            log('Using voice: ' + voice.name);
+
+            const messages = [
+                'Hello! Can you hear me clearly?',
+                'This is the accessibility test for blind users.',
+                'If you hear this, the voice system is working perfectly!'
+            ];
+
+            let messageIndex = 0;
+
+            function speakNext() {
+                if (messageIndex >= messages.length) {
+                    log('🎉 FINAL TEST COMPLETE! If you heard all messages, TTS is working!');
+                    return;
+                }
+
+                const text = messages[messageIndex];
+                log(`Speaking: "${text}"`);
+
+                window.speechSynthesis.cancel(); // Clear queue
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.voice = voice;
+                utterance.volume = 1.0;
+                utterance.rate = 0.9;
+                utterance.pitch = 1.0;
+
+                utterance.onstart = () => log('🔊 Speech started');
+                utterance.onend = () => {
+                    log('✅ Speech completed');
+                    messageIndex++;
+                    setTimeout(speakNext, 1500);
+                };
+                utterance.onerror = (e) => {
+                    log('❌ Speech error: ' + e.error);
+                    messageIndex++;
+                    setTimeout(speakNext, 1000);
+                };
+
+                window.speechSynthesis.speak(utterance);
+            }
+
+            speakNext();
+        }
+
+        // Auto-start when page loads
+        window.onload = function() {
+            setTimeout(() => {
+                log('🚀 AUTO-STARTING SYSTEM CHECK...');
+                step1_checkSystem();
+            }, 500);
+
+            // Setup voice loading
+            if (window.speechSynthesis) {
+                window.speechSynthesis.onvoiceschanged = function() {
+                    allVoices = window.speechSynthesis.getVoices();
+                    if (allVoices.length > 0) {
+                        log('Voices reloaded: ' + allVoices.length);
+                        displayVoices();
+                    }
+                };
+            }
+        };
+    </script>
+</body>
+</html>

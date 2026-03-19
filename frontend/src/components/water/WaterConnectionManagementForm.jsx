@@ -173,12 +173,8 @@ const WaterConnectionManagementForm = ({ onClose }) => {
         toast.error('Request saved, but receipt email could not be sent.');
       });
     } catch (error) {
-      // Fallback to local success for demo
-      const reqNo = 'WCM' + Date.now();
-      setRequestNumber(reqNo);
-      setVerifiedEmail(email);
-      setSubmitted(true);
-      toast.success('Request submitted successfully!');
+      console.error('Submit error:', error);
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Failed to submit request. Please try again.');
     } finally {
       setSubmitting(false);
     }

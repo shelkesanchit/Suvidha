@@ -171,9 +171,11 @@ export default function MunicipalGrievanceForm({ onClose }) {
   const handleBack   = () => setActiveStep(s => s - 1);
 
   /* ── Submit handlers ───────────────────────────────────────────── */
-  const handleLodgeSubmit = async () => {
+  const handleLodgeSubmit = async (email) => {
+    if (!validateStep()) return;
     setLodgeSubmitting(true);
     try {
+      const emailVal = email || lodgeData.email || '';
       const docsArray = await Promise.all(
         Object.entries(lodgeDocs)
           .filter(([, file]) => file)
@@ -196,10 +198,10 @@ export default function MunicipalGrievanceForm({ onClose }) {
       const ts = new Date().toISOString();
       setLodgeRef(appNum);
       setLodgeSubmitted(true);
-      setReceiptInfo({ appNum, type: 'grievance', data: { ...lodgeData }, ts, email: verifiedEmail || lodgeData.email || '' });
+      setReceiptInfo({ appNum, type: 'grievance', data: { ...lodgeData }, ts, email: emailVal });
       setShowReceipt(true);
       api.post('/municipal/otp/send-receipt', {
-        email: verifiedEmail || lodgeData.email || '',
+        email: emailVal,
         application_number: appNum,
         application_type: 'grievance',
         application_data: { ...lodgeData },
@@ -213,10 +215,11 @@ export default function MunicipalGrievanceForm({ onClose }) {
     }
   };
 
-  const handleRtiSubmit = async () => {
+  const handleRtiSubmit = async (email) => {
     if (!validateStep()) return;
     setRtiSubmitting(true);
     try {
+      const emailVal = email || rtiData.email || '';
       const docsArray = await Promise.all(
         Object.entries(rtiDocs)
           .filter(([, file]) => file)
@@ -239,10 +242,10 @@ export default function MunicipalGrievanceForm({ onClose }) {
       const ts = new Date().toISOString();
       setRtiRef(appNum);
       setRtiSubmitted(true);
-      setReceiptInfo({ appNum, type: 'rti_application', data: { ...rtiData }, ts, email: verifiedEmail || rtiData.email || '' });
+      setReceiptInfo({ appNum, type: 'rti_application', data: { ...rtiData }, ts, email: emailVal });
       setShowReceipt(true);
       api.post('/municipal/otp/send-receipt', {
-        email: verifiedEmail || rtiData.email || '',
+        email: emailVal,
         application_number: appNum,
         application_type: 'rti_application',
         application_data: { ...rtiData },
@@ -256,10 +259,11 @@ export default function MunicipalGrievanceForm({ onClose }) {
     }
   };
 
-  const handleApptSubmit = async () => {
+  const handleApptSubmit = async (email) => {
     if (!validateStep()) return;
     setApptSubmitting(true);
     try {
+      const emailVal = email || apptData.email || '';
       const res = await api.post('/municipal/applications/submit', {
         application_type: 'appointment_booking',
         application_data: apptData,
@@ -269,10 +273,10 @@ export default function MunicipalGrievanceForm({ onClose }) {
       const ts = new Date().toISOString();
       setApptRef(appNum);
       setApptSubmitted(true);
-      setReceiptInfo({ appNum, type: 'appointment_booking', data: { ...apptData }, ts, email: verifiedEmail || apptData.email || '' });
+      setReceiptInfo({ appNum, type: 'appointment_booking', data: { ...apptData }, ts, email: emailVal });
       setShowReceipt(true);
       api.post('/municipal/otp/send-receipt', {
-        email: verifiedEmail || apptData.email || '',
+        email: emailVal,
         application_number: appNum,
         application_type: 'appointment_booking',
         application_data: { ...apptData },
@@ -286,10 +290,10 @@ export default function MunicipalGrievanceForm({ onClose }) {
     }
   };
 
-  const handleSubmit = () => {
-    if (activeTab === 0)      handleLodgeSubmit();
-    else if (activeTab === 2) handleRtiSubmit();
-    else if (activeTab === 3) handleApptSubmit();
+  const handleSubmit = (email) => {
+    if (activeTab === 0)      handleLodgeSubmit(email);
+    else if (activeTab === 2) handleRtiSubmit(email);
+    else if (activeTab === 3) handleApptSubmit(email);
   };
 
   const handleTrack = async () => {

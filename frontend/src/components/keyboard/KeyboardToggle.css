@@ -1,0 +1,66 @@
+/* Keyboard Toggle Button - Top Right Corner (below language selector) */
+.keyboard-toggle-btn {
+  position: fixed;
+  top: 60px;
+  right: 10px;
+  z-index: 9998;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.keyboard-toggle-btn.enabled {
+  background: #1976d2;
+  color: white;
+}
+
+.keyboard-toggle-btn.disabled {
+  background: #9e9e9e;
+  color: white;
+  position: relative;
+}
+
+.keyboard-toggle-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+}
+
+.keyboard-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+/* Diagonal line for disabled state */
+.toggle-off-line {
+  position: absolute;
+  width: 24px;
+  height: 2px;
+  background: #f44336;
+  transform: rotate(-45deg);
+  border-radius: 1px;
+}
+
+/* Make button smaller on mobile */
+@media (max-width: 600px) {
+  .keyboard-toggle-btn {
+    width: 28px;
+    height: 28px;
+    top: 8px;
+    right: 8px;
+  }
+
+  .keyboard-toggle-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .toggle-off-line {
+    width: 20px;
+  }
+}

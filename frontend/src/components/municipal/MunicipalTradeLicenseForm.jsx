@@ -210,7 +210,7 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'trade_license_new',
+        application_type: 'new_trade_license',
         application_data: { ...formData },
         submitted_at: ts,
       }).catch(console.warn);
@@ -235,10 +235,27 @@ const MunicipalTradeLicenseForm = ({ onClose }) => {
 
   const handleRenew = async () => {
     if (!renewData) return toast.error('Fetch license details first');
-    const ref = 'RNW' + Date.now();
-    setRenewRef(ref);
-    setRenewPaid(true);
-    toast.success('Renewal successful!');
+    try {
+      const res = await api.post('/municipal/applications/submit', {
+        application_type: 'trade_license_renewal',
+        application_data: {
+          license_no: renewData.licenseNo,
+          business_name: renewData.businessName,
+          owner_name: renewData.owner,
+          ward: renewData.ward,
+          valid_till: renewData.validTill,
+          renewal_fee: renewData.renewalFee,
+          payment_method: formData.renew_payment_method,
+        },
+      });
+      const ref = res.data?.data?.application_number || 'RNW' + Date.now();
+      setRenewRef(ref);
+      setRenewPaid(true);
+      toast.success('Renewal application submitted successfully!');
+    } catch (err) {
+      console.error('Renewal error:', err);
+      toast.error('Renewal submission failed');
+    }
   };
 
   const fetchPayFeeDetails = () => {

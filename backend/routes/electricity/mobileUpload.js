@@ -14,7 +14,31 @@ function getLanIp() {
   return 'localhost'; // fallback
 }
 
-// In-memory session store: token -> { docKey, docLabel, expiresAt, file }
+/**
+ * Get the base URL for QR code generation.
+ * Priority:
+ *   1. EXTERNAL_URL env var (for Ngrok/Cloudflare tunnels - works from any network)
+ *   2. LAN IP (for same-network access)
+ *
+ * When using tunneling services like Ngrok:
+ *   - Run: ngrok http 3000 (for frontend)
+ *   - Set EXTERNAL_URL=https://abc123.ngrok.io in your .env file
+ *   - The QR code will then contain a publicly accessible URL
+ */
+function getQrBaseUrl() {
+  // If an external tunnel URL is configured, use it (works from any network/mobile data)
+  if (process.env.EXTERNAL_URL) {
+    // Remove trailing slash if present
+    return process.env.EXTERNAL_URL.replace(/\/$/, '');
+  }
+
+  // Fallback to LAN IP (only works on same network)
+  const frontendPort = process.env.FRONTEND_PORT || 3000;
+  const lanIp = getLanIp();
+  return `http://${lanIp}:${frontendPort}`;
+}
+
+// In-memory session store: token -> { docKey, docLabel, expiresAt, file, applicationId }
 const sessions = new Map();
 
 // Cleanup expired sessions every 5 minutes
@@ -25,24 +49,32 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-// POST /create-session  { docKey, docLabel }
+// POST /create-session  { docKey, docLabel, applicationId }
 router.post('/create-session', (req, res) => {
-  const { docKey, docLabel } = req.body;
+  const { docKey, docLabel, applicationId } = req.body;
   if (!docKey) return res.status(400).json({ error: 'docKey is required' });
 
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(token, {
     docKey,
     docLabel: docLabel || 'Document',
+    applicationId: applicationId || null, // Optional: link to specific application
     expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
     file: null,
   });
 
-  const frontendPort = process.env.FRONTEND_PORT || 3000;
-  const lanIp = getLanIp();
-  const qrUrl = `http://${lanIp}:${frontendPort}/mobile-upload/${token}`;
+  const baseUrl = getQrBaseUrl();
+  const qrUrl = `${baseUrl}/mobile-upload/${token}`;
 
-  res.json({ token, qrUrl });
+  // Log for debugging tunnel setup
+  if (process.env.EXTERNAL_URL) {
+    console.log(`📱 QR Session created with tunnel URL: ${qrUrl}`);
+  } else {
+    console.log(`📱 QR Session created with LAN URL: ${qrUrl}`);
+    console.log(`   💡 Tip: Set EXTERNAL_URL env var for access from any network`);
+  }
+
+  res.json({ token, qrUrl, externalAccess: !!process.env.EXTERNAL_URL });
 });
 
 // GET /info/:token  — used by mobile page to display document name

@@ -306,14 +306,14 @@ export default function MunicipalMarriageRegForm({ onClose }) {
     setMarriageSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'municipal_marriage_registration',
+        application_type: 'marriage_registration',
         application_data: { groom, bride, marriage, witness1, witness2 },
       });
       const appNum = res.data?.data?.application_number || res.data?.reference_number || `MMR-${Date.now()}`;
       setMarriageRefNumber(appNum);
       const ts = new Date().toISOString();
       setReceiptAppNum(appNum);
-      setReceiptAppType('marriage_certificate');
+      setReceiptAppType('marriage_registration');
       setReceiptFormData({ groom, bride, marriage, witness1, witness2 });
       setSubmittedAt(ts);
       setShowReceipt(true);
@@ -321,7 +321,7 @@ export default function MunicipalMarriageRegForm({ onClose }) {
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'marriage_certificate',
+        application_type: 'marriage_registration',
         application_data: { groom, bride, marriage, witness1, witness2 },
         submitted_at: ts,
       }).catch(console.warn);
@@ -403,14 +403,14 @@ export default function MunicipalMarriageRegForm({ onClose }) {
     setCorrSubmitting(true);
     try {
       const res = await api.post('/municipal/applications/submit', {
-        application_type: 'municipal_marriage_correction',
+        application_type: 'cert_correction',
         application_data: { ...corr },
       });
       const appNum = res.data?.data?.application_number || res.data?.reference_number || `MMRC-${Date.now()}`;
       setCorrRefNumber(appNum);
       const ts = new Date().toISOString();
       setReceiptAppNum(appNum);
-      setReceiptAppType('certificate_correction');
+      setReceiptAppType('cert_correction');
       setReceiptFormData({ ...corr });
       setSubmittedAt(ts);
       setShowReceipt(true);
@@ -418,7 +418,7 @@ export default function MunicipalMarriageRegForm({ onClose }) {
       api.post('/municipal/otp/send-receipt', {
         email: email || '',
         application_number: appNum,
-        application_type: 'certificate_correction',
+        application_type: 'cert_correction',
         application_data: { ...corr },
         submitted_at: ts,
       }).catch(console.warn);

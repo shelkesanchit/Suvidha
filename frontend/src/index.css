@@ -395,3 +395,66 @@ code {
     margin-right: 8px;
   }
 }
+
+/* Language Selector Styles */
+.language-selector-container {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1300;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.language-selector-container:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Ensure language selector doesn't overlap with kiosk headers */
+.kiosk-header ~ .language-selector-container,
+.MuiAppBar-root ~ .language-selector-container {
+  top: 70px;
+}
+
+/* Smooth transition for translated text */
+[data-translating="true"] {
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+}
+
+/* Prevent layout shift during translation */
+.notranslate,
+[data-no-translate] {
+  transform: translateZ(0);
+}
+
+/* Language menu styling */
+.MuiMenu-paper .language-option {
+  transition: background-color 0.15s ease;
+}
+
+.MuiMenu-paper .language-option:hover {
+  background-color: rgba(25, 118, 210, 0.08);
+}
+
+.MuiMenu-paper .language-option.selected {
+  background-color: rgba(25, 118, 210, 0.12);
+}
+
+/* Mobile responsive language selector */
+@media (max-width: 600px) {
+  .language-selector-container {
+    top: 8px;
+    right: 8px;
+  }
+}
+
+/* Print - hide language selector */
+@media print {
+  .language-selector-container {
+    display: none !important;
+  }
+}

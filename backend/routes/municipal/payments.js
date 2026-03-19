@@ -87,10 +87,10 @@ router.post('/create-order', async (req, res) => {
     if (!amount) return res.status(400).json({ success: false, message: 'amount is required' });
 
     const order = await razorpay.orders.create({
-      amount:   100,    // always ₹1 (100 paise) for demo
+      amount:   Math.round(parseFloat(amount) * 100), // Convert rupees to paise
       currency: 'INR',
       receipt:  `muni_${Date.now()}`,
-      notes:    { application_number: application_number || '', payer: payer_name || '', demo: true }
+      notes:    { application_number: application_number || '', payer: payer_name || '' }
     });
 
     const txnId = `MPAY${Date.now()}`;
