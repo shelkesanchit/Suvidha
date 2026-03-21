@@ -71,7 +71,8 @@ const LandingPage = () => {
     <Box
       sx={{
         height: '100vh',
-        width: '100vw',
+        width: '100%',
+        maxWidth: '100%',
         overflow: 'hidden',
         background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
         display: 'flex',

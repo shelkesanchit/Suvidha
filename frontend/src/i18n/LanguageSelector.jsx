@@ -81,23 +81,31 @@ export function LanguageSelector({
             <CircularProgress size={16} color="inherit" />
           ) : (
             <>
-              {showFlag && languageDetails?.flag && (
-                <span style={{ fontSize: '1.1rem' }}>{languageDetails.flag}</span>
-              )}
-              <span>{languageDetails?.code?.toUpperCase()}</span>
-              <ArrowDownIcon sx={{ fontSize: 18, ml: 0.25 }} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', flex: 1, overflow: 'hidden' }}>
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.2, color: 'text.secondary', textTransform: 'none', whiteSpace: 'nowrap' }}>
+                  Choose Language
+                </Typography>
+                <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, lineHeight: 1.3, textTransform: 'none', whiteSpace: 'nowrap' }}>
+                  अपनी भाषा चुनें
+                </Typography>
+              </Box>
+              <ArrowDownIcon sx={{ fontSize: 24, color: 'inherit' }} />
             </>
           )}
-        </Button>    <Menu
+        </Button>
+
+        <Menu
           anchorEl={anchorEl}
           open={open}
           onClose={handleClose}
+          sx={{ zIndex: 1405 }}
           TransitionComponent={Fade}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           PaperProps={{
             elevation: 8,
             sx: {
+              zIndex: 1406,
               minWidth: 200,
               maxHeight: 400,
               borderRadius: 2,
@@ -169,12 +177,14 @@ export function LanguageSelector({
         anchorEl={anchorEl}
         open={open}
         onClose={handleClose}
+        sx={{ zIndex: 1405 }}
         TransitionComponent={Fade}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         PaperProps={{
           elevation: 8,
           sx: {
+            zIndex: 1406,
             minWidth: 220,
             maxHeight: 450,
             borderRadius: 2,
@@ -216,7 +226,7 @@ export function LanguageSelector({
  */
 export function FloatingLanguageSelector({ position = 'top-right' }) {
   const positions = {
-    'top-right': { top: 16, right: 16 },
+    'top-right': { top: 20, right: 16 },
     'top-left': { top: 16, left: 16 },
     'bottom-right': { bottom: 16, right: 16 },
     'bottom-left': { bottom: 16, left: 16 },
@@ -227,15 +237,17 @@ export function FloatingLanguageSelector({ position = 'top-right' }) {
       sx={{
         position: 'fixed',
         ...positions[position],
-        zIndex: 9999,
-        backgroundColor: 'rgba(255, 255, 255, 0.97)',
-        borderRadius: 2,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-        backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(0, 0, 0, 0.08)',
+        zIndex: 1302,
+        width: '184px',
+        height: '68px',
+        backgroundColor: 'rgba(255, 255, 255, 0.96)',
+        borderRadius: 3,
+        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.18)',
+        backdropFilter: 'blur(8px)',
+        border: '1px solid rgba(25, 118, 210, 0.18)',
         transition: 'all 0.2s ease',
         '&:hover': {
-          boxShadow: '0 6px 24px rgba(0, 0, 0, 0.2)',
+          boxShadow: '0 10px 28px rgba(15, 23, 42, 0.24)',
           transform: 'translateY(-1px)',
         },
       }}
@@ -243,7 +255,17 @@ export function FloatingLanguageSelector({ position = 'top-right' }) {
       <LanguageSelector
         variant="compact"
         color="primary"
-        sx={{ color: 'primary.main' }}
+        sx={{
+          color: 'primary.main',
+          width: '100%',
+          minHeight: '100%',
+          px: 1.6,
+          py: 0.8,
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 0.4,
+          borderRadius: 2.5,
+        }}
       />
     </Box>
   );

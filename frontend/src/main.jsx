@@ -6,8 +6,9 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import { TranslationProvider, FloatingLanguageSelector, AutoTranslator } from './i18n';
 import { VirtualKeyboardProvider, VirtualKeyboard, KeyboardGlobalListener, KeyboardToggle } from './components/keyboard';
-import { VoiceInputProvider, VoiceInput, VoiceCommandButton } from './components/voice';
+import { VoiceInputProvider, VoiceInput } from './components/voice';
 import { AccessibilityModeProvider, AccessibilityModeToggle, AccessibilityOverlay } from './components/accessibility';
+import { GlobalNavigationButtons } from './components/navigation/GlobalNavigationButtons';
 import './index.css';
 
 const theme = createTheme({
@@ -62,17 +63,68 @@ const theme = createTheme({
   },
   components: {
     MuiButton: {
+      defaultProps: {
+        disableElevation: true,
+      },
       styleOverrides: {
         root: {
           textTransform: 'none',
-          borderRadius: 8,
-          padding: '10px 24px',
-          fontSize: '1rem',
+          borderRadius: 12,
+          padding: '12px 22px',
+          fontSize: '0.98rem',
+          fontWeight: 700,
+          minHeight: 52,
+          letterSpacing: '0.01em',
+          borderWidth: 2,
         },
         contained: {
-          boxShadow: 'none',
+          background: 'linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)',
+          color: '#ffffff',
+          border: '1px solid rgba(13, 71, 161, 0.3)',
           '&:hover': {
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            background: 'linear-gradient(135deg, #0f55ad 0%, #083a85 100%)',
+            boxShadow: '0 8px 20px rgba(13, 71, 161, 0.25)',
+          },
+        },
+        containedSecondary: {
+          background: 'linear-gradient(135deg, #ef6c00 0%, #e65100 100%)',
+          border: '1px solid rgba(230, 81, 0, 0.35)',
+          '&:hover': {
+            background: 'linear-gradient(135deg, #df6400 0%, #cf4900 100%)',
+            boxShadow: '0 8px 20px rgba(230, 81, 0, 0.22)',
+          },
+        },
+        containedError: {
+          background: 'linear-gradient(135deg, #e53935 0%, #c62828 100%)',
+          border: '1px solid rgba(198, 40, 40, 0.35)',
+          '&:hover': {
+            background: 'linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)',
+            boxShadow: '0 8px 20px rgba(198, 40, 40, 0.24)',
+          },
+        },
+        outlined: {
+          background: 'linear-gradient(135deg, #f8fbff 0%, #edf4ff 100%)',
+          borderColor: '#8faedd',
+          color: '#123a72',
+          '&:hover': {
+            borderColor: '#6f94d0',
+            background: 'linear-gradient(135deg, #f1f7ff 0%, #e2eeff 100%)',
+          },
+        },
+        outlinedError: {
+          background: '#fff5f5',
+          borderColor: '#ef9a9a',
+          color: '#b71c1c',
+          '&:hover': {
+            background: '#ffecec',
+            borderColor: '#e57373',
+          },
+        },
+        text: {
+          color: '#123a72',
+          background: 'rgba(18, 58, 114, 0.06)',
+          '&:hover': {
+            background: 'rgba(18, 58, 114, 0.12)',
           },
         },
       },
@@ -80,8 +132,11 @@ const theme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          borderRadius: 16,
+          background: '#ffffff',
+          border: '1px solid rgba(0, 0, 0, 0.08)',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.04)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         },
       },
     },
@@ -107,14 +162,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <VirtualKeyboardProvider>
               <VoiceInputProvider>
                 <AccessibilityModeProvider>
+                  <div className="kiosk-control-rail" aria-hidden="true" />
                   <KeyboardGlobalListener />
-                  <KeyboardToggle />
                   <FloatingLanguageSelector position="top-right" />
-                  <App />
-                  <VirtualKeyboard />
                   <VoiceInput position="top-right" showLanguageSelector={true} />
-                  {/* <VoiceCommandButton position="bottom-left" /> */}
-                  <AccessibilityModeToggle position="bottom-right" showLabel={true} />
+                  <KeyboardToggle />
+                  <AccessibilityModeToggle position="top-right" showLabel={false} size="medium" />
+                  <GlobalNavigationButtons />
+                  <div className="kiosk-content-safe-area">
+                    <App />
+                  </div>
+                  <VirtualKeyboard />
                   <AccessibilityOverlay />
                 </AccessibilityModeProvider>
               </VoiceInputProvider>
