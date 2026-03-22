@@ -14,6 +14,7 @@ const KeyboardToggle = () => {
       className={`keyboard-toggle-btn ${isEnabled ? 'enabled' : 'disabled'}`}
       onClick={toggleEnabled}
       title={isEnabled ? 'Disable virtual keyboard' : 'Enable virtual keyboard'}
+      aria-label={isEnabled ? 'Disable virtual keyboard' : 'Enable virtual keyboard'}
       type="button"
       data-no-translate="true"
     >
@@ -28,6 +29,9 @@ const KeyboardToggle = () => {
       {!isEnabled && (
         <span className="toggle-off-line"></span>
       )}
+      <span className="keyboard-toggle-label">
+        {isEnabled ? 'Keyboard On' : 'Keyboard Off'}
+      </span>
     </button>
   );
 };

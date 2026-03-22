@@ -8,6 +8,7 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   Box,
+  Button,
   IconButton,
   Typography,
   Paper,
@@ -61,10 +62,12 @@ export function VoiceInput({ position = 'bottom-left', showLanguageSelector = tr
   // Position styles
   const positions = {
     'top-left': { top: 16, left: 16 },
-    'top-right': { top: 16, right: 160 }, // Positioned to the left of language selector, exactly aligned
+    'top-right': { top: 'clamp(104px, 16vh, 170px)', right: 16 },
     'bottom-left': { bottom: 100, left: 16 },
     'bottom-right': { bottom: 100, right: 16 },
   };
+
+  const isKioskTopRight = position === 'top-right';
 
   // Track focused input
   useEffect(() => {
@@ -171,7 +174,7 @@ export function VoiceInput({ position = 'bottom-left', showLanguageSelector = tr
         sx={{
           position: 'fixed',
           ...positions[position],
-          zIndex: 9998,
+          zIndex: 1302,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -184,16 +187,16 @@ export function VoiceInput({ position = 'bottom-left', showLanguageSelector = tr
             className={`voice-status-indicator ${isListening ? 'listening' : ''} ${error ? 'error' : ''}`}
             elevation={4}
             sx={{
-              px: 1.5,
-              py: 0.75,
-              borderRadius: 2,
+              px: 1,
+              py: 0.6,
+              borderRadius: 1.5,
               backgroundColor: error
                 ? 'error.main'
                 : isListening
                   ? 'primary.main'
                   : 'grey.800',
               color: 'white',
-              minWidth: 120,
+              minWidth: isKioskTopRight ? 166 : 120,
               textAlign: 'center',
             }}
           >
@@ -210,27 +213,30 @@ export function VoiceInput({ position = 'bottom-left', showLanguageSelector = tr
         </Fade>
 
         {/* Main mic button */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
           {/* Language selector button */}
           {showLanguageSelector && (
             <Tooltip title="Change voice language">
-              <IconButton
+              <Button
                 onClick={handleLanguageClick}
                 className="voice-lang-button"
                 sx={{
-                  backgroundColor: 'background.paper',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  width: 38,
-                  height: 38,
+                  minWidth: isKioskTopRight ? 84 : 38,
+                  width: isKioskTopRight ? 84 : 38,
+                  height: isKioskTopRight ? 84 : 44,
+                  borderRadius: isKioskTopRight ? 3.5 : 2.5,
+                  backgroundColor: 'rgba(255,255,255,0.96)',
+                  border: '1px solid rgba(25, 118, 210, 0.25)',
+                  boxShadow: '0 6px 20px rgba(15, 23, 42, 0.16)',
                   '&:hover': {
-                    backgroundColor: 'grey.100',
+                    backgroundColor: '#f2f7ff',
                   },
                 }}
               >
                 <Typography variant="caption" sx={{ fontWeight: 700, fontSize: '0.65rem' }}>
                   {currentLang.flag}
                 </Typography>
-              </IconButton>
+              </Button>
             </Tooltip>
           )}
 
@@ -241,15 +247,16 @@ export function VoiceInput({ position = 'bottom-left', showLanguageSelector = tr
               className={`voice-mic-button ${isListening ? 'listening' : ''}`}
               disabled={isProcessing}
               sx={{
-                width: 50,
-                height: 50,
+                width: isKioskTopRight ? 84 : 50,
+                height: isKioskTopRight ? 84 : 44,
+                borderRadius: isKioskTopRight ? 3.5 : 2.5,
                 backgroundColor: isListening ? 'error.main' : 'primary.main',
                 color: 'white',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                boxShadow: '0 6px 20px rgba(15, 23, 42, 0.24)',
                 transition: 'all 0.2s ease',
                 '&:hover': {
                   backgroundColor: isListening ? 'error.dark' : 'primary.dark',
-                  transform: 'scale(1.05)',
+                  transform: 'translateY(-1px)',
                 },
                 '&:disabled': {
                   backgroundColor: 'grey.400',
@@ -293,9 +300,10 @@ export function VoiceInput({ position = 'bottom-left', showLanguageSelector = tr
         onClose={() => setAnchorEl(null)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ zIndex: 1500 }}
         PaperProps={{
           elevation: 8,
-          sx: { borderRadius: 2, minWidth: 160 },
+          sx: { borderRadius: 2, minWidth: 160, zIndex: 1501 },
         }}
       >
         {VOICE_LANGUAGE_OPTIONS.map((lang) => (

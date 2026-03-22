@@ -1,5 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+require('./loadEnv');
 
 // Use service role key on the backend so storage uploads and bucket operations work
 const supabase = createClient(

@@ -96,7 +96,7 @@ export {
 } from './VoiceInputContext';
 
 // Main floating voice input component (speech-to-text)
-export { VoiceInput } from './VoiceInput';
+export { default as VoiceInput } from './VoiceInput';
 
 // Voice command button (speech-to-action)
 export { VoiceCommandButton } from './VoiceCommandButton';

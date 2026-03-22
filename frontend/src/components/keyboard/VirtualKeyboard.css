@@ -14,13 +14,19 @@
   position: fixed;
   bottom: 0;
   left: 0;
-  right: 0;
+  right: var(--kiosk-rail-space, 208px);
   z-index: 99999;
   transform: translateY(100%);
   opacity: 0;
   transition: transform 0.3s ease, opacity 0.25s ease;
   pointer-events: none;
   visibility: hidden;
+}
+
+@media (max-width: 768px) {
+  .virtual-keyboard-wrapper {
+    right: 0;
+  }
 }
 
 .virtual-keyboard-wrapper.visible {

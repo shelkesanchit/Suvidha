@@ -1,6 +1,6 @@
 const { Pool } = require('pg');
 const dns = require('dns');
-require('dotenv').config();
+require('./loadEnv');
 
 // Force IPv4 resolution on Windows (fixes ENOTFOUND errors)
 dns.setDefaultResultOrder('ipv4first');

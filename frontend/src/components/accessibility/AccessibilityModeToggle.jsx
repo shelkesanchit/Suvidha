@@ -12,7 +12,7 @@ import { useAccessibilityModeContext } from './AccessibilityModeContext';
 const POSITIONS = {
   'bottom-right': { bottom: 100, right: 20 },
   'bottom-left': { bottom: 100, left: 20 },
-  'top-right': { top: 100, right: 20 },
+  'top-right': { top: 'clamp(280px, 52vh, 580px)', right: 16 },
   'top-left': { top: 100, left: 20 }
 };
 
@@ -47,6 +47,7 @@ export function AccessibilityModeToggle({
 
   const config = sizeConfig[size] || sizeConfig.large;
   const positionStyle = POSITIONS[position] || POSITIONS['bottom-right'];
+  const isTopRightStack = position === 'top-right';
 
   return (
     <Fade in={true}>
@@ -54,7 +55,7 @@ export function AccessibilityModeToggle({
         sx={{
           position: 'fixed',
           ...positionStyle,
-          zIndex: 9999,
+          zIndex: 1302,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -74,18 +75,21 @@ export function AccessibilityModeToggle({
               width: config.button,
               height: config.button,
               minWidth: config.button,
-              borderRadius: '50%',
+              ...(isTopRightStack
+                ? { width: 'var(--kiosk-control-width)', height: 'var(--kiosk-control-height)', minWidth: 'var(--kiosk-control-width)' }
+                : {}),
+              borderRadius: isTopRightStack ? '14px' : '50%',
               backgroundColor: isAccessibilityMode ? '#ff5722' : '#1976d2',
               color: '#ffffff',
               boxShadow: isAccessibilityMode
                 ? '0 0 20px rgba(255, 87, 34, 0.6)'
                 : '0 4px 20px rgba(25, 118, 210, 0.4)',
-              border: '3px solid #ffffff',
+              border: position === 'top-right' ? '1px solid rgba(255,255,255,0.55)' : '3px solid #ffffff',
               transition: 'all 0.3s ease',
-              animation: isAccessibilityMode ? 'pulse 2s infinite' : 'none',
+              animation: isAccessibilityMode && position !== 'top-right' ? 'pulse 2s infinite' : 'none',
               '&:hover': {
                 backgroundColor: isAccessibilityMode ? '#e64a19' : '#1565c0',
-                transform: 'scale(1.1)',
+                transform: position === 'top-right' ? 'translateY(-1px)' : 'scale(1.1)',
                 boxShadow: isAccessibilityMode
                   ? '0 0 30px rgba(255, 87, 34, 0.8)'
                   : '0 6px 25px rgba(25, 118, 210, 0.6)'
@@ -102,9 +106,9 @@ export function AccessibilityModeToggle({
             }}
           >
             {isAccessibilityMode ? (
-              <CloseIcon sx={{ fontSize: config.icon }} />
+              <CloseIcon sx={{ fontSize: isTopRightStack ? 30 : config.icon }} />
             ) : (
-              <AccessibilityNewIcon sx={{ fontSize: config.icon }} />
+              <AccessibilityNewIcon sx={{ fontSize: isTopRightStack ? 30 : config.icon }} />
             )}
           </Button>
         </Tooltip>
