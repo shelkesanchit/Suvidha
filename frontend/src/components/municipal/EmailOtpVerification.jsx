@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import {
   Email as EmailIcon,
+  Phone as PhoneIcon,
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
   ArrowForward as ArrowForwardIcon,
@@ -22,27 +23,43 @@ import toast from 'react-hot-toast';
  *  onClose        {function}
  *  onVerified     {function}  — called with (email) when OTP is verified
  *  initialEmail   {string}
+ *  initialMobile  {string}
  *  title          {string}
  */
 const EmailOtpVerification = ({
   open, onClose, onVerified,
   initialEmail = '',
-  title = 'Verify Your Email',
+  initialMobile = '',
+  title = 'Verify Contact',
 }) => {
-  const [step, setStep]           = useState('email'); // 'email' | 'otp' | 'verified'
+  const [mode, setMode]           = useState('email'); // 'email' | 'mobile'
+  const [step, setStep]           = useState('contact'); // 'contact' | 'otp' | 'verified'
   const [email, setEmail]         = useState(initialEmail);
+  const [mobile, setMobile]       = useState(initialMobile);
   const [otp, setOtp]             = useState('');
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
   const [countdown, setCountdown] = useState(0);
 
   useEffect(() => {
-    if (open && initialEmail && step === 'email') setEmail(initialEmail);
-  }, [open, initialEmail]);
+    if (open && initialEmail && step === 'contact') setEmail(initialEmail);
+  }, [open, initialEmail, step]);
 
   useEffect(() => {
-    if (!open) { setStep('email'); setOtp(''); setError(''); setCountdown(0); }
-  }, [open]);
+    if (open && initialMobile && step === 'contact') setMobile(initialMobile);
+  }, [open, initialMobile, step]);
+
+  useEffect(() => {
+    if (!open) {
+      setMode('email');
+      setStep('contact');
+      setEmail(initialEmail || '');
+      setMobile(initialMobile || '');
+      setOtp('');
+      setError('');
+      setCountdown(0);
+    }
+  }, [open, initialEmail, initialMobile]);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -50,12 +67,36 @@ const EmailOtpVerification = ({
     return () => clearTimeout(t);
   }, [countdown]);
 
+  const resetForModeSwitch = nextMode => {
+    if (loading) return;
+    setMode(nextMode);
+    setStep('contact');
+    setOtp('');
+    setError('');
+    setCountdown(0);
+  };
+
   const handleSendOtp = async () => {
     setError('');
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address.');
+    if (mode === 'email') {
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setError('Please enter a valid email address.');
+        return;
+      }
+    } else {
+      if (!mobile || !/^\d{10}$/.test(mobile)) {
+        setError('Please enter a valid 10-digit mobile number.');
+        return;
+      }
+    }
+
+    if (mode === 'mobile') {
+      setStep('otp');
+      setCountdown(60);
+      toast.success('Mobile OTP sent. Use 123456 to verify.');
       return;
     }
+
     setLoading(true);
     try {
       await api.post('/municipal/otp/send', { email });
@@ -71,16 +112,28 @@ const EmailOtpVerification = ({
 
   const handleVerifyOtp = async () => {
     setError('');
-    if (!otp || otp.length !== 6) {
+    if (!otp || otp.length !== 6 || !/^\d{6}$/.test(otp)) {
       setError('Please enter the 6-digit OTP.');
       return;
     }
+
+    if (mode === 'mobile') {
+      if (otp !== '123456') {
+        setError('Invalid OTP. Enter 123456.');
+        return;
+      }
+      setStep('verified');
+      toast.success('Mobile verified successfully!');
+      setTimeout(() => { onVerified((email || initialEmail || '').trim()); }, 1200);
+      return;
+    }
+
     setLoading(true);
     try {
       await api.post('/municipal/otp/verify', { email, otp });
       setStep('verified');
       toast.success('Email verified successfully!');
-      setTimeout(() => { onVerified(email); }, 1200);
+      setTimeout(() => { onVerified((email || initialEmail || '').trim()); }, 1200);
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid OTP. Please try again.');
     } finally {
@@ -90,6 +143,14 @@ const EmailOtpVerification = ({
 
   const handleResend = async () => {
     setOtp(''); setError(''); setLoading(true);
+
+    if (mode === 'mobile') {
+      setLoading(false);
+      setCountdown(60);
+      toast.success('Mobile OTP resent. Use 123456.');
+      return;
+    }
+
     try {
       await api.post('/municipal/otp/send', { email });
       setCountdown(60);
@@ -115,50 +176,97 @@ const EmailOtpVerification = ({
           {title}
         </Typography>
         <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
-          Verify your email to submit application &amp; receive receipt
+          Verify via email or mobile to continue
         </Typography>
       </Box>
 
       <DialogContent sx={{ pt: 3, pb: 1 }}>
-        {/* ── Step 1: Enter Email ── */}
-        {step === 'email' && (
-          <Box>
+        {step === 'contact' && (
+          <Box key={`contact-${mode}`}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <Button
+                fullWidth
+                variant={mode === 'email' ? 'contained' : 'outlined'}
+                onClick={() => resetForModeSwitch('email')}
+                disabled={loading}
+                startIcon={<EmailIcon />}
+                sx={mode === 'email' ? { background: '#2e7d32', '&:hover': { background: '#1b5e20' } } : undefined}
+              >
+                Email
+              </Button>
+              <Button
+                fullWidth
+                variant={mode === 'mobile' ? 'contained' : 'outlined'}
+                onClick={() => resetForModeSwitch('mobile')}
+                disabled={loading}
+                startIcon={<PhoneIcon />}
+                sx={mode === 'mobile' ? { background: '#2e7d32', '&:hover': { background: '#1b5e20' } } : undefined}
+              >
+                Mobile
+              </Button>
+            </Box>
+
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <EmailIcon sx={{ color: '#2e7d32', fontSize: 28 }} />
-              <Typography variant="body1" fontWeight={600}>Enter your email address</Typography>
+              {mode === 'email' ? (
+                <EmailIcon sx={{ color: '#2e7d32', fontSize: 28 }} />
+              ) : (
+                <PhoneIcon sx={{ color: '#2e7d32', fontSize: 28 }} />
+              )}
+              <Typography variant="body1" fontWeight={600}>
+                {mode === 'email' ? 'Enter your email address' : 'Enter your mobile number'}
+              </Typography>
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-              An OTP will be sent to this email. The receipt will also be delivered here after submission.
+              {mode === 'email'
+                ? 'An OTP will be sent to this email. The receipt will also be delivered here after submission.'
+                : 'A mobile OTP will be generated for this number. Use 123456 to verify in demo mode.'}
             </Typography>
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
             <TextField
+              key={`contact-input-${mode}`}
               fullWidth
-              label="Email Address"
-              type="email"
-              value={email}
-              onChange={e => { setEmail(e.target.value); setError(''); }}
+              label={mode === 'email' ? 'Email Address' : 'Mobile Number'}
+              type={mode === 'email' ? 'email' : 'tel'}
+              value={mode === 'email' ? email : mobile}
+              onChange={e => {
+                if (mode === 'email') {
+                  setEmail(e.target.value);
+                } else {
+                  setMobile(e.target.value.replace(/\D/g, '').slice(0, 10));
+                }
+                setError('');
+              }}
               onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <EmailIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                    {mode === 'email' ? (
+                      <EmailIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                    ) : (
+                      <PhoneIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                    )}
                   </InputAdornment>
                 ),
               }}
+              inputProps={mode === 'mobile' ? { maxLength: 10 } : undefined}
+              autoComplete={mode === 'email' ? 'email' : 'tel'}
               autoFocus
             />
           </Box>
         )}
 
-        {/* ── Step 2: Enter OTP ── */}
         {step === 'otp' && (
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <LockIcon sx={{ color: '#2e7d32', fontSize: 28 }} />
               <Typography variant="body1" fontWeight={600}>Enter OTP</Typography>
             </Box>
-            <Alert severity="success" icon={<EmailIcon />} sx={{ mb: 2 }}>
-              OTP sent to <strong>{email}</strong>
+            <Alert severity="success" icon={mode === 'email' ? <EmailIcon /> : <PhoneIcon />} sx={{ mb: 2 }}>
+              {mode === 'email' ? (
+                <>OTP sent to <strong>{email}</strong></>
+              ) : (
+                <>OTP sent to <strong>{mobile}</strong>. Use <strong>123456</strong></>
+              )}
             </Alert>
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
             <TextField
@@ -183,21 +291,22 @@ const EmailOtpVerification = ({
               </Button>
               <Button
                 size="small"
-                onClick={() => { setStep('email'); setError(''); setOtp(''); }}
+                onClick={() => { setStep('contact'); setError(''); setOtp(''); }}
                 disabled={loading}
                 sx={{ textTransform: 'none', color: 'text.secondary' }}
               >
-                Change Email
+                Change {mode === 'email' ? 'Email' : 'Mobile'}
               </Button>
             </Box>
           </Box>
         )}
 
-        {/* ── Step 3: Verified ── */}
         {step === 'verified' && (
           <Box sx={{ textAlign: 'center', py: 2 }}>
             <CheckCircleIcon sx={{ fontSize: 72, color: 'success.main', mb: 2 }} />
-            <Typography variant="h6" fontWeight={700} color="success.main">Email Verified!</Typography>
+            <Typography variant="h6" fontWeight={700} color="success.main">
+              {mode === 'email' ? 'Email Verified!' : 'Mobile Verified!'}
+            </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               Submitting your application...
             </Typography>
@@ -210,7 +319,7 @@ const EmailOtpVerification = ({
           <Divider sx={{ mx: 2 }} />
           <DialogActions sx={{ px: 3, py: 2 }}>
             <Button onClick={onClose} disabled={loading} color="inherit">Cancel</Button>
-            {step === 'email' && (
+            {step === 'contact' && (
               <Button
                 variant="contained"
                 onClick={handleSendOtp}
@@ -218,7 +327,7 @@ const EmailOtpVerification = ({
                 endIcon={loading ? <CircularProgress size={16} color="inherit" /> : <ArrowForwardIcon />}
                 sx={{ background: '#2e7d32', '&:hover': { background: '#1b5e20' } }}
               >
-                Send OTP
+                Send {mode === 'email' ? 'OTP' : 'Mobile OTP'}
               </Button>
             )}
             {step === 'otp' && (

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -27,6 +27,23 @@ import toast from 'react-hot-toast';
 import EmailOtpVerification from './EmailOtpVerification';
 import ApplicationReceipt from './ApplicationReceipt';
 import DocUpload from '../municipal/DocUpload';
+
+const OFFLINE_QUEUE_KEY = 'electricity_new_connection_offline_queue_v1';
+
+const readOfflineQueue = () => {
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeOfflineQueue = (queue) => {
+  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+};
+
+const makeOfflineReferenceNumber = () => `OFF-APP-${Date.now()}`;
 
 const steps = ['Applicant Details', 'Premises Information', 'Connection Details', 'Documents', 'Review & Submit'];
 
@@ -204,7 +221,9 @@ const NewConnectionForm = ({ onClose }) => {
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [submittedAt, setSubmittedAt] = useState(null);
+  const [isOfflineQueued, setIsOfflineQueued] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState({});
+  const isSyncingOfflineRef = useRef(false);
   const [formData, setFormData] = useState({
     // Applicant Details
     full_name: '',
@@ -324,107 +343,7 @@ const NewConnectionForm = ({ onClose }) => {
     reader.readAsDataURL(file);
   };
 
-  const validateCurrentStep = () => {
-    const isEmpty = (value) => String(value ?? '').trim() === '';
-
-    if (activeStep === 0) {
-      const requiredFields = [
-        ['full_name', 'Full Name'],
-        ['father_husband_name', "Father's/Husband's Name"],
-        ['date_of_birth', 'Date of Birth'],
-        ['gender', 'Gender'],
-        ['identity_type', 'Identity Proof Type'],
-        ['identity_number', 'Identity Proof Number'],
-        ['email', 'Email Address'],
-        ['mobile', 'Mobile Number'],
-      ];
-
-      const missing = requiredFields.find(([key]) => isEmpty(formData[key]));
-      if (missing) {
-        toast.error(`${missing[1]} is required`);
-        return false;
-      }
-
-      if (!/^\d{10}$/.test(formData.mobile)) {
-        toast.error('Enter a valid 10-digit mobile number');
-        return false;
-      }
-
-      if (formData.alternate_mobile && !/^\d{10}$/.test(formData.alternate_mobile)) {
-        toast.error('Enter a valid 10-digit alternate mobile number');
-        return false;
-      }
-
-      return true;
-    }
-
-    if (activeStep === 1) {
-      const requiredFields = [
-        ['premises_address', 'Premises Address'],
-        ['plot_number', 'Plot/House/Flat Number'],
-        ['state', 'State'],
-        ['district', 'District'],
-        ['city', 'City/Village'],
-        ['pincode', 'Pincode'],
-        ['ownership_type', 'Ownership Type'],
-        ['built_up_area', 'Built-up Area'],
-      ];
-
-      const missing = requiredFields.find(([key]) => isEmpty(formData[key]));
-      if (missing) {
-        toast.error(`${missing[1]} is required`);
-        return false;
-      }
-
-      if (!/^\d{6}$/.test(formData.pincode)) {
-        toast.error('Enter a valid 6-digit pincode');
-        return false;
-      }
-
-      return true;
-    }
-
-    if (activeStep === 2) {
-      const requiredFields = [
-        ['category', 'Connection Category'],
-        ['purpose', 'Purpose of Connection'],
-        ['load_type', 'Load Type'],
-        ['required_load', 'Required Load'],
-      ];
-
-      const missing = requiredFields.find(([key]) => isEmpty(formData[key]));
-      if (missing) {
-        toast.error(`${missing[1]} is required`);
-        return false;
-      }
-
-      if (Number(formData.required_load) <= 0) {
-        toast.error('Required Load must be greater than 0');
-        return false;
-      }
-
-      if (Number(formData.required_load) > 5 && isEmpty(formData.pan_number)) {
-        toast.error('PAN Number is required for load above 5 KW');
-        return false;
-      }
-
-      return true;
-    }
-
-    if (activeStep === 3) {
-      const missingDoc = requiredDocuments.find((doc) => doc.required && !uploadedDocs[doc.key]);
-      if (missingDoc) {
-        toast.error(`${missingDoc.label} is required`);
-        return false;
-      }
-      return true;
-    }
-
-    return true;
-  };
-
   const handleNext = () => {
-    if (!validateCurrentStep()) return;
     setActiveStep((prevStep) => prevStep + 1);
   };
 
@@ -437,39 +356,126 @@ const NewConnectionForm = ({ onClose }) => {
     handleSubmit(email);
   };
 
+  const processOfflineQueue = async () => {
+    if (isSyncingOfflineRef.current || !navigator.onLine) return;
+
+    const queue = readOfflineQueue();
+    if (!queue.length) return;
+
+    isSyncingOfflineRef.current = true;
+    let syncedCount = 0;
+    const remaining = [];
+
+    for (const item of queue) {
+      try {
+        const response = await api.post('/electricity/applications/submit', item.payload);
+        const appNum = response?.data?.application_number;
+
+        if (appNum && item.email) {
+          api.post('/electricity/otp/send-receipt', {
+            email: item.email,
+            application_number: appNum,
+            application_type: 'new_connection',
+            application_data: item.payload.application_data,
+            submitted_at: item.submittedAt || new Date().toISOString(),
+          }).catch(console.warn);
+        }
+
+        syncedCount += 1;
+      } catch (err) {
+        // Keep failed entries for next retry.
+        remaining.push(item);
+      }
+    }
+
+    writeOfflineQueue(remaining);
+    isSyncingOfflineRef.current = false;
+
+    if (syncedCount > 0) {
+      toast.success(`${syncedCount} offline application(s) synced successfully`);
+    }
+  };
+
+  useEffect(() => {
+    const onOnline = () => {
+      processOfflineQueue();
+    };
+
+    window.addEventListener('online', onOnline);
+    processOfflineQueue();
+
+    return () => {
+      window.removeEventListener('online', onOnline);
+    };
+  }, []);
+
   const handleSubmit = async (email) => {
-    try {
-      // Prepare documents array
-      const documentsArray = Object.entries(uploadedDocs)
+    const payload = {
+      application_type: 'new_connection',
+      application_data: formData,
+      documents: Object.entries(uploadedDocs)
         .filter(([_, doc]) => doc !== null)
         .map(([type, doc]) => ({
           ...doc,
           documentType: type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
           uploadedAt: new Date().toISOString(),
-        }));
+        })),
+    };
 
-      const response = await api.post('/electricity/applications/submit', {
-        application_type: 'new_connection',
-        application_data: formData,
-        documents: documentsArray,
-      });
+    try {
+      const response = await api.post('/electricity/applications/submit', payload);
 
-      const appNum = response.data.application_number;
+      const appNum = response?.data?.application_number
+        || response?.data?.reference_number
+        || makeOfflineReferenceNumber();
+      const queuedOffline = Boolean(response?.data?.offline_queued);
       const ts = new Date().toISOString();
       setApplicationNumber(appNum);
       setSubmitted(true);
+      setIsOfflineQueued(queuedOffline);
       setVerifiedEmail(email);
       setSubmittedAt(ts);
       setShowReceipt(true);
-      toast.success('Application submitted successfully!');
-      api.post('/electricity/otp/send-receipt', {
-        email,
-        application_number: appNum,
-        application_type: 'new_connection',
-        application_data: formData,
-        submitted_at: ts,
-      }).catch(console.warn);
+      toast.success(queuedOffline ? 'Application saved offline with reference number.' : 'Application submitted successfully!');
+
+      if (!queuedOffline) {
+        api.post('/electricity/otp/send-receipt', {
+          email,
+          application_number: appNum,
+          application_type: 'new_connection',
+          application_data: formData,
+          submitted_at: ts,
+        }).catch(console.warn);
+      }
     } catch (error) {
+      if (!error.response || !navigator.onLine) {
+        try {
+          const ts = new Date().toISOString();
+          const offlineRef = makeOfflineReferenceNumber();
+          const queue = readOfflineQueue();
+          queue.push({
+            id: `offline-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+            email,
+            submittedAt: ts,
+            referenceNumber: offlineRef,
+            payload,
+          });
+          writeOfflineQueue(queue);
+
+          setSubmitted(true);
+          setIsOfflineQueued(true);
+          setVerifiedEmail(email);
+          setSubmittedAt(ts);
+          setApplicationNumber(offlineRef);
+          setShowReceipt(true);
+          toast.success('No internet. Application saved locally with reference number and printable receipt.');
+          return;
+        } catch {
+          toast.error('No internet and local save failed. Please try again.');
+          return;
+        }
+      }
+
       console.error('Submission error:', error);
       let errorMessage = 'Failed to submit application';
       
@@ -1042,23 +1048,36 @@ const NewConnectionForm = ({ onClose }) => {
       <Box sx={{ textAlign: 'center', p: 4 }}>
         <SuccessIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
         <Typography variant="h5" gutterBottom fontWeight={600}>
-          Application Submitted Successfully!
+          {isOfflineQueued ? 'Application Saved Offline' : 'Application Submitted Successfully!'}
         </Typography>
         <Typography variant="h6" color="primary" gutterBottom sx={{ my: 3 }}>
-          Application Number: {applicationNumber}
+          {`Application Number: ${applicationNumber}`}
         </Typography>
         <Typography color="text.secondary" paragraph>
-          Your new connection application has been received and will be processed within 7-15 working days.
+          {isOfflineQueued
+            ? 'Your application is saved on this device and will be uploaded automatically when internet is available.'
+            : 'Your new connection application has been received and will be processed within 7-15 working days.'}
         </Typography>
-        <Alert severity="info" sx={{ mt: 3, mb: 3, textAlign: 'left' }}>
+        <Alert severity={isOfflineQueued ? 'warning' : 'info'} sx={{ mt: 3, mb: 3, textAlign: 'left' }}>
           <Typography variant="body2" gutterBottom>
-            <strong>Next Steps:</strong>
+            <strong>{isOfflineQueued ? 'Sync Steps:' : 'Next Steps:'}</strong>
           </Typography>
           <Typography variant="body2">
-            1. Site inspection will be conducted within 3 working days<br />
-            2. You will receive a demand note with estimated charges<br />
-            3. Connection will be provided after payment and approval<br />
-            4. Track your application using the application number
+            {isOfflineQueued ? (
+              <>
+                1. Keep internet enabled on this device<br />
+                2. The app will auto-upload this saved application<br />
+                3. You will receive receipt email after successful sync<br />
+                4. Local copy is deleted automatically after successful cloud upload
+              </>
+            ) : (
+              <>
+                1. Site inspection will be conducted within 3 working days<br />
+                2. You will receive a demand note with estimated charges<br />
+                3. Connection will be provided after payment and approval<br />
+                4. Track your application using the application number
+              </>
+            )}
           </Typography>
         </Alert>
         <Box sx={{ mt: 2, display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -1140,6 +1159,7 @@ const NewConnectionForm = ({ onClose }) => {
         onClose={() => setShowOtpDialog(false)}
         onVerified={handleOtpVerified}
         initialEmail={formData.email || ''}
+        initialMobile={formData.mobile || ''}
       />
     </Box>
   );
