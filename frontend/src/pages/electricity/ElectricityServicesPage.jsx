@@ -290,7 +290,11 @@ const ElectricityServicesPage = () => {
                 </Box>
               </Toolbar>
             </AppBar>
-            <Box className="kiosk-form-shell" sx={{ flexGrow: 1, overflow: 'auto' }}>
+            <Box
+              className="kiosk-form-shell notranslate"
+              data-no-translate
+              sx={{ flexGrow: 1, overflow: 'auto' }}
+            >
               <ServiceComponent onClose={handleCloseDialog} />
             </Box>
           </Box>

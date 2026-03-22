@@ -324,7 +324,107 @@ const NewConnectionForm = ({ onClose }) => {
     reader.readAsDataURL(file);
   };
 
+  const validateCurrentStep = () => {
+    const isEmpty = (value) => String(value ?? '').trim() === '';
+
+    if (activeStep === 0) {
+      const requiredFields = [
+        ['full_name', 'Full Name'],
+        ['father_husband_name', "Father's/Husband's Name"],
+        ['date_of_birth', 'Date of Birth'],
+        ['gender', 'Gender'],
+        ['identity_type', 'Identity Proof Type'],
+        ['identity_number', 'Identity Proof Number'],
+        ['email', 'Email Address'],
+        ['mobile', 'Mobile Number'],
+      ];
+
+      const missing = requiredFields.find(([key]) => isEmpty(formData[key]));
+      if (missing) {
+        toast.error(`${missing[1]} is required`);
+        return false;
+      }
+
+      if (!/^\d{10}$/.test(formData.mobile)) {
+        toast.error('Enter a valid 10-digit mobile number');
+        return false;
+      }
+
+      if (formData.alternate_mobile && !/^\d{10}$/.test(formData.alternate_mobile)) {
+        toast.error('Enter a valid 10-digit alternate mobile number');
+        return false;
+      }
+
+      return true;
+    }
+
+    if (activeStep === 1) {
+      const requiredFields = [
+        ['premises_address', 'Premises Address'],
+        ['plot_number', 'Plot/House/Flat Number'],
+        ['state', 'State'],
+        ['district', 'District'],
+        ['city', 'City/Village'],
+        ['pincode', 'Pincode'],
+        ['ownership_type', 'Ownership Type'],
+        ['built_up_area', 'Built-up Area'],
+      ];
+
+      const missing = requiredFields.find(([key]) => isEmpty(formData[key]));
+      if (missing) {
+        toast.error(`${missing[1]} is required`);
+        return false;
+      }
+
+      if (!/^\d{6}$/.test(formData.pincode)) {
+        toast.error('Enter a valid 6-digit pincode');
+        return false;
+      }
+
+      return true;
+    }
+
+    if (activeStep === 2) {
+      const requiredFields = [
+        ['category', 'Connection Category'],
+        ['purpose', 'Purpose of Connection'],
+        ['load_type', 'Load Type'],
+        ['required_load', 'Required Load'],
+      ];
+
+      const missing = requiredFields.find(([key]) => isEmpty(formData[key]));
+      if (missing) {
+        toast.error(`${missing[1]} is required`);
+        return false;
+      }
+
+      if (Number(formData.required_load) <= 0) {
+        toast.error('Required Load must be greater than 0');
+        return false;
+      }
+
+      if (Number(formData.required_load) > 5 && isEmpty(formData.pan_number)) {
+        toast.error('PAN Number is required for load above 5 KW');
+        return false;
+      }
+
+      return true;
+    }
+
+    if (activeStep === 3) {
+      const missingDoc = requiredDocuments.find((doc) => doc.required && !uploadedDocs[doc.key]);
+      if (missingDoc) {
+        toast.error(`${missingDoc.label} is required`);
+        return false;
+      }
+      return true;
+    }
+
+    return true;
+  };
+
   const handleNext = () => {
+    if (!validateCurrentStep()) return;
     setActiveStep((prevStep) => prevStep + 1);
   };
 
