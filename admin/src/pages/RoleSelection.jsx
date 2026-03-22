@@ -72,7 +72,7 @@ const RoleSelection = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)',
+        bgcolor: '#e8eaed',
         display: 'flex',
         alignItems: 'center',
         py: { xs: 3, md: 5 },
@@ -84,18 +84,18 @@ const RoleSelection = () => {
           <Typography
             variant="h3"
             sx={{
-              fontWeight: 800,
-              color: 'white',
+              fontWeight: 700,
+              color: '#1a1a1a',
               mb: 1.5,
               fontSize: { xs: '1.8rem', sm: '2.4rem', md: '2.8rem' },
-              letterSpacing: '-1px',
+              letterSpacing: '-0.5px',
             }}
           >
             SUVIDHA Admin Portal
           </Typography>
           <Typography
             variant="h6"
-            sx={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400, fontSize: { xs: '0.95rem', md: '1.1rem' } }}
+            sx={{ color: '#5f6368', fontWeight: 400, fontSize: { xs: '0.95rem', md: '1.1rem' } }}
           >
             Unified Municipal Services Management System
           </Typography>
@@ -107,14 +107,14 @@ const RoleSelection = () => {
           sx={{
             p: { xs: 2.5, md: 4 },
             borderRadius: 4,
-            bgcolor: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            backdropFilter: 'blur(12px)',
+            bgcolor: '#ffffff',
+            border: '1px solid rgba(0, 0, 0, 0.08)',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
           }}
         >
           <Typography
             variant="overline"
-            sx={{ color: 'rgba(255,255,255,0.5)', letterSpacing: '2px', mb: 3, display: 'block', textAlign: 'center' }}
+            sx={{ color: '#5f6368', letterSpacing: '2px', mb: 3, display: 'block', textAlign: 'center', fontWeight: 600 }}
           >
             Select Your Department
           </Typography>
@@ -129,14 +129,13 @@ const RoleSelection = () => {
                     sx={{
                       borderRadius: 3,
                       overflow: 'hidden',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      bgcolor: 'rgba(255,255,255,0.06)',
-                      transition: 'all 0.25s ease',
+                      border: '1px solid rgba(0, 0, 0, 0.08)',
+                      bgcolor: '#ffffff',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                       '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: `0 12px 40px ${dept.color}30`,
-                        border: `1px solid ${dept.color}60`,
-                        bgcolor: 'rgba(255,255,255,0.09)',
+                        transform: 'translateY(-6px)',
+                        boxShadow: `0 14px 32px rgba(0, 0, 0, 0.12)`,
+                        border: `1px solid ${dept.color}`,
                       },
                     }}
                   >
@@ -154,45 +153,45 @@ const RoleSelection = () => {
                           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                             <Box
                               sx={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 2,
-                                background: `${dept.color}20`,
-                                border: `1px solid ${dept.color}40`,
+                                width: 56,
+                                height: 56,
+                                borderRadius: '50%',
+                                background: dept.gradient,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 flexShrink: 0,
+                                boxShadow: `0 4px 12px ${dept.color}40`,
                               }}
                             >
-                              <Icon sx={{ color: dept.color, fontSize: 26 }} />
+                              <Icon sx={{ color: 'white', fontSize: 28 }} />
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                <Typography variant="h6" sx={{ color: 'white', fontWeight: 700, lineHeight: 1 }}>
+                                <Typography variant="h6" sx={{ color: '#1a1a1a', fontWeight: 700, lineHeight: 1 }}>
                                   {dept.title}
                                 </Typography>
                                 <Chip
                                   label={dept.badge}
                                   size="small"
                                   sx={{
-                                    bgcolor: `${dept.color}25`,
+                                    bgcolor: `${dept.color}15`,
                                     color: dept.color,
                                     fontWeight: 600,
                                     fontSize: '0.65rem',
                                     height: 18,
-                                    border: `1px solid ${dept.color}40`,
+                                    border: `1px solid ${dept.color}30`,
                                   }}
                                 />
                               </Box>
-                              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', mb: 1 }}>
+                              <Typography variant="caption" sx={{ color: '#5f6368', display: 'block', mb: 1 }}>
                                 {dept.subtitle}
                               </Typography>
-                              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                              <Typography variant="body2" sx={{ color: '#5f6368', fontSize: '0.8rem', lineHeight: 1.4 }}>
                                 {dept.description}
                               </Typography>
                             </Box>
-                            <ArrowForward sx={{ color: dept.color, fontSize: 18, mt: 0.5, opacity: 0.7 }} />
+                            <ArrowForward sx={{ color: dept.color, fontSize: 18, mt: 0.5 }} />
                           </Box>
                         </Box>
                       </Box>
@@ -204,7 +203,7 @@ const RoleSelection = () => {
           </Grid>
         </Paper>
 
-        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.3)', display: 'block', textAlign: 'center', mt: 3 }}>
+        <Typography variant="caption" sx={{ color: '#5f6368', display: 'block', textAlign: 'center', mt: 3 }}>
           Authorized personnel only — all access is logged
         </Typography>
       </Container>

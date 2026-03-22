@@ -359,7 +359,8 @@ export function AccessibilityModeProvider({ children }) {
       await new Promise(resolve => setTimeout(resolve, 1000)); // Extra wait
     }
 
-    // STEP 4: Continue with normal flow
+    // STEP 4: Enable TTS service and continue with normal flow
+    ttsService.enable(); // Enable TTS service now
     setIsAccessibilityMode(true);
     setCurrentFlow(FLOW_STATES.WELCOME);
 
@@ -394,7 +395,12 @@ export function AccessibilityModeProvider({ children }) {
   const disableAccessibilityMode = useCallback(() => {
     console.log('[A11y] Disabling accessibility mode');
 
-    // FIRST: Stop everything immediately
+    // STEP 1: IMMEDIATELY disable TTS service so NOTHING can speak anymore
+    // This prevents any new speech from starting (UDID prompts, etc.)
+    console.log('[A11y] IMMEDIATELY disabling TTS service to block all future speech');
+    ttsService.disable();
+
+    // STEP 2: Stop everything immediately
     ttsService.stop();
 
     // Stop any ongoing listening
@@ -411,7 +417,7 @@ export function AccessibilityModeProvider({ children }) {
     // Clear callback
     voiceCallbackRef.current = null;
 
-    // Reset all state FIRST
+    // Reset all state
     setIsListening(false);
     setIsSpeaking(false);
     setCurrentFlow(FLOW_STATES.IDLE);
@@ -424,10 +430,13 @@ export function AccessibilityModeProvider({ children }) {
     setCurrentFieldIndex(0);
     setLastPrompt('');
 
-    // THEN speak exit message and disable
-    ttsService.speak(getMessage('exitMode', language)).then(() => {
+    // STEP 3: Speak ONLY the exit message using force: true (bypasses disabled check)
+    // This is the ONLY thing allowed to speak after disabling
+    ttsService.speak(getMessage('exitMode', language), { force: true }).then(() => {
+      console.log('[A11y] Exit message completed, TTS already disabled');
       setIsAccessibilityMode(false);
     }).catch(() => {
+      console.log('[A11y] Exit message failed, TTS already disabled');
       setIsAccessibilityMode(false);
     });
   }, [language, voiceInput]);

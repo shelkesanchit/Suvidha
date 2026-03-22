@@ -38,6 +38,7 @@ class TTSService {
     this.voicesLoaded = false;
     this.retryCount = 0;
     this.maxRetries = 3;
+    this.enabled = false; // TTS is disabled by default until accessibility mode is enabled
 
     if (this.synthesis) {
       this.loadVoices();
@@ -182,9 +183,40 @@ class TTSService {
   }
 
   /**
+   * Enable TTS service - call this when accessibility mode is enabled
+   */
+  enable() {
+    console.log('[TTS] Service ENABLED');
+    this.enabled = true;
+  }
+
+  /**
+   * Disable TTS service - call this after exit message to completely stop all speech
+   */
+  disable() {
+    console.log('[TTS] Service DISABLED - no more speech will be allowed');
+    this.enabled = false;
+    this.stop(); // Stop any ongoing speech
+  }
+
+  /**
+   * Check if TTS service is enabled
+   */
+  isEnabled() {
+    return this.enabled;
+  }
+
+  /**
    * Main speak method with retry logic for failed voices
+   * @param {string} text - Text to speak
+   * @param {object} options - Options including force: true to bypass enabled check
    */
   speak(text, options = {}) {
+    // If service is disabled and not forced, silently return
+    if (!this.enabled && !options.force) {
+      console.log('[TTS] Service disabled, ignoring speech request:', text.substring(0, 30));
+      return Promise.resolve();
+    }
     this.retryCount = 0;
     return this._speakWithRetry(text, options);
   }
@@ -313,6 +345,12 @@ class TTSService {
   }
 
   enqueue(text, priority = 'normal') {
+    // If service is disabled, ignore enqueue requests
+    if (!this.enabled) {
+      console.log('[TTS] Service disabled, ignoring enqueue request');
+      return;
+    }
+
     const item = { text, priority, timestamp: Date.now() };
 
     if (priority === 'high') {

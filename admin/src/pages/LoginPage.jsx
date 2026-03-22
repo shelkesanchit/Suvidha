@@ -101,7 +101,7 @@ const LoginPage = ({ department = 'electricity' }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: config.gradient,
+        bgcolor: '#e8eaed',
         py: 3,
       }}
     >
@@ -111,9 +111,11 @@ const LoginPage = ({ department = 'electricity' }) => {
           sx={{
             p: { xs: 3, sm: 4 },
             borderRadius: 4,
-            boxShadow: '0 24px 80px rgba(0,0,0,0.18)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
             position: 'relative',
             overflow: 'hidden',
+            border: '1px solid rgba(0,0,0,0.08)',
+            bgcolor: '#ffffff',
           }}
         >
           {/* Top color accent */}
@@ -227,19 +229,25 @@ const LoginPage = ({ department = 'electricity' }) => {
               sx={{
                 mt: 3,
                 mb: 2,
-                py: 1.4,
+                py: 1.5,
                 background: config.gradient,
-                '&:hover': { background: config.gradient, filter: 'brightness(1.08)' },
+                '&:hover': {
+                  background: config.gradient,
+                  filter: 'brightness(1.08)',
+                  boxShadow: `0 8px 20px ${config.color}35`,
+                },
                 '&:disabled': { opacity: 0.7 },
-                borderRadius: 2,
+                borderRadius: 3,
                 fontWeight: 600,
-                fontSize: '0.95rem',
+                fontSize: '1rem',
+                textTransform: 'none',
+                minHeight: 48,
               }}
             >
               {isSubmitting ? 'Signing In...' : 'Sign In'}
             </Button>
 
-            <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 2, border: '1px solid rgba(0,0,0,0.08)' }}>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 600, mb: 0.5 }}>
                 Default Credentials
               </Typography>
